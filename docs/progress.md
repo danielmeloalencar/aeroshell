@@ -196,6 +196,39 @@ fixa do Smithay git será avaliado em ADR próprio no fim do F0/início do F1.
 - `--size` + `Transform::Flipped180` desloca/espelha o painel no framebuffer 1280x800; removido dos
   testes S3 (limitação documentada em `docs/nested-dev.md`).
 
+### Testes de protocolo migrados para `cargo test` (sem display/env/exec)
+O script `tests/integration/aero_frame_protocol.py`/`.sh` foi removido. Os 5 casos viraram
+testes Rust em `crates/aeroshell-compositor/src/main.rs::protocol_tests`, com `UnixStream::pair()`
+no mesmo processo (supervisor embutido): `AeroState::new` empresta o `&'static Display` e
+`Harness::pump` chama `display.dispatch_clients` diretamente. O `aero_frame_manager_v1` é exposto
+somente ao cliente cujo `ClientState` foi marcado `is_shell=true` no `insert_client`.
+
+Saída:
+```text
+running 5 tests
+test protocol_tests::a_public_client_never_sees_the_manager ... ok
+test protocol_tests::move_with_fake_serial_is_ignored ... ok
+test protocol_tests::privileged_client_completes_roundtrip ... ok
+test protocol_tests::second_get_frame_is_already_constructed ... aero_frame_manager_v1#5: error 1: janela 0 já tem frame
+ok
+test protocol_tests::surface_with_toplevel_role_is_rejected ... aero_frame_manager_v1#5: error 0: a wl_surface já possui outro role
+ok
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out
+```
+Observação: `already_constructed`/`role` são erros fatais de protocolo; a biblioteca cliente
+encerra a conexão. Os testes verificam o erro no log e o estado do compositor (`frames.len`).
+
+### CI
+`.github/workflows/ci.yml`: doctor + fmt (`cargo fmt --all -- --check`) + `cargo clippy --workspace
+--all-targets -- -D warnings` + `cargo test --workspace` + `bun test`. **Exigem display** (não
+rodam no CI): `s1_nested.sh`, `s2_panel.sh`, `s3_input.sh`, `run_s5_bench.sh` (usam backend winit
+e/ou WebView). Os testes `protocol_tests` e `bun test` rodam headless.
+
+### Documentação e licença
+`LICENSE` (MIT) na raiz; `Cargo.toml` e `package.json` com `license: MIT`; `README.md` com
+estado pré-alfa e comandos nested (avisa que `aero dev` ainda não existe); `plan.md` reduzido a
+resumo com link para este arquivo como fonte única de status.
+
 ### ADR 0001 aceito provisoriamente (2026-11-18)
 - `related-view` padrão com âncora oculta viva; teste real: destruir a âncora **não** matou o
   WebProcess compartilhado (pid 84087 antes e 5 s depois); a propriedade é construct-only, então

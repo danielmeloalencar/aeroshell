@@ -18,11 +18,15 @@ fn main() {
             .with_env_filter(filter)
             .init();
     } else {
-        tracing_subscriber::fmt().with_writer(std::io::stderr).init();
+        tracing_subscriber::fmt()
+            .with_writer(std::io::stderr)
+            .init();
     }
 
     // GApplication rejeita opções desconhecidas antes do nosso código; use env vars.
-    let benchmark_n = std::env::var("AERO_BENCH").ok().and_then(|v| v.parse().ok());
+    let benchmark_n = std::env::var("AERO_BENCH")
+        .ok()
+        .and_then(|v| v.parse().ok());
     let benchmark_related = std::env::var_os("AERO_BENCH_RELATED").is_some();
     let benchmark_atlas = std::env::var_os("AERO_BENCH_ATLAS").is_some();
     let benchmark_anchor = std::env::var("AERO_BENCH_ANCHOR")
@@ -44,7 +48,9 @@ fn main() {
                 .default_width(1280)
                 .default_height(800)
                 .build();
-            let label = gtk4::Label::new(Some("BACKDROP — clique aqui pela área transparente do painel"));
+            let label = gtk4::Label::new(Some(
+                "BACKDROP — clique aqui pela área transparente do painel",
+            ));
             window.set_child(Some(&label));
             window.present();
             tracing::info!("BACKDROP apresentado");
@@ -55,7 +61,11 @@ fn main() {
             return;
         }
         if let Some(n) = benchmark_n {
-            tracing::info!(n, related = benchmark_related, "modo benchmark A (sem aero_frame_v1)");
+            tracing::info!(
+                n,
+                related = benchmark_related,
+                "modo benchmark A (sem aero_frame_v1)"
+            );
             benchmark::run_webviews(app, n, benchmark_related);
             return;
         }
@@ -94,17 +104,22 @@ fn main() {
         });
         webview.connect_load_changed(|view, event| {
             if event == webkit6::LoadEvent::Finished {
-                let js = "JSON.stringify({overflow:getComputedStyle(document.documentElement).overflow,\
+                let js =
+                    "JSON.stringify({overflow:getComputedStyle(document.documentElement).overflow,\
                     scrollHeight:document.documentElement.scrollHeight,\
                     clientHeight:document.documentElement.clientHeight,\
                     scrollWidth:document.documentElement.scrollWidth,\
                     clientWidth:document.documentElement.clientWidth})";
-                view.evaluate_javascript(js, None, None, None::<&webkit6::gio::Cancellable>, |result| {
-                    match result {
+                view.evaluate_javascript(
+                    js,
+                    None,
+                    None,
+                    None::<&webkit6::gio::Cancellable>,
+                    |result| match result {
                         Ok(value) => tracing::info!(json = ?value.to_json(0), "METRICS do painel"),
                         Err(err) => tracing::warn!(%err, "evaluate_javascript falhou"),
-                    }
-                });
+                    },
+                );
             }
         });
         webview.load_uri(&uri);

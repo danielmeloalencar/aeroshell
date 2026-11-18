@@ -31,10 +31,18 @@ decidimos o que está disponível; duas rotas significam dois códigos para test
 - Para o F0 isso continua **adiado**, mas a justificativa correta é: "o blur depende de pipeline
   de render offscreen/shader e de damage tracking; é esforço **médio**, com prior art no niri,
   não 'implementar protocolo do zero'".
-- **Dependência**: considerar trocar `smithay = 0.7.0` por uma revisão fixa do repositório
-  oficial (https://github.com/Smithay/smithay) ao final do F0/início do F1, para usar o handler
-  pronto. Isso será registrado como ADR separado com a rev exata; não alterar o workspace agora,
-  durante a validação do protótipo do frame.
+- **Dependência**: **decisão adiada após o protótipo do frame**. Hoje o workspace usa
+  `smithay = 0.7.0` (crate publicado, sem o handler). Quando a troca for feita, registrar em ADR
+  próprio a **rev exata** do git (commit SHA) de https://github.com/Smithay/smithay — não usar
+  `master` solto. A rev ainda não foi escolhida; não alterar o workspace durante o protótipo.
+- **Cobertura confirmada do handler no master**: anúncio do global
+  (`BackgroundEffectState::new`), `ExtBackgroundEffectHandler::capabilities()` →
+  `Capability::Blur`, callback `set_blur_region(wl_surface, RegionAttributes)` com estado
+  double-buffered em `BackgroundEffectSurfaceCachedState`, e `delegate_dispatch2!`. Ele cobre
+  apenas **protocolo/estado**: não faz blur no render, não resolve damage tracking. Fora disso,
+  a integração de shader fica por nossa conta.
+- **Ordem**: blur entra **depois** do protótipo do frame (decisão do usuário); o protótipo usa
+  apenas `aero_frame_v1` + `configure`/`ack_configure` + drag/resize em Rust.
 
 ## Risco
 `ext-background-effect-v1` está em **staging** e pode mudar. Com uma única implementação

@@ -46,7 +46,12 @@ pub fn init_headless(
         },
     );
     let _global = output.create_global::<crate::state::AeroState>(&data.display_handle);
-    output.change_current_state(Some(mode), Some(Transform::Flipped180), None, Some((0, 0).into()));
+    output.change_current_state(
+        Some(mode),
+        Some(Transform::Flipped180),
+        None,
+        Some((0, 0).into()),
+    );
     output.set_preferred(mode);
     data.state.space.map_output(&output, (0, 0));
     data.state.outputs = vec![output];

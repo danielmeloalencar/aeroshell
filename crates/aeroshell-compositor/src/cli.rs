@@ -67,7 +67,9 @@ pub fn parse() -> Options {
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--backend" => {
-                let value = args.next().unwrap_or_else(|| die("--backend requer um valor"));
+                let value = args
+                    .next()
+                    .unwrap_or_else(|| die("--backend requer um valor"));
                 opts.backend = match value.as_str() {
                     "winit" | "nested" => BackendKind::Winit,
                     "headless" => BackendKind::Headless,
@@ -75,7 +77,11 @@ pub fn parse() -> Options {
                     other => die(&format!("backend desconhecido: {other}")),
                 };
             }
-            "--socket" => opts.socket = args.next().unwrap_or_else(|| die("--socket requer um valor")),
+            "--socket" => {
+                opts.socket = args
+                    .next()
+                    .unwrap_or_else(|| die("--socket requer um valor"))
+            }
             "--size" => {
                 let value = args.next().unwrap_or_else(|| die("--size requer WxH"));
                 let mut parts = value.split('x');
@@ -87,12 +93,20 @@ pub fn parse() -> Options {
                 }
             }
             "--outputs" => {
-                let value = args.next().unwrap_or_else(|| die("--outputs requer um valor"));
-                opts.outputs = value.parse().unwrap_or_else(|_| die("--outputs deve ser inteiro"));
+                let value = args
+                    .next()
+                    .unwrap_or_else(|| die("--outputs requer um valor"));
+                opts.outputs = value
+                    .parse()
+                    .unwrap_or_else(|_| die("--outputs deve ser inteiro"));
             }
             "--scale" => {
-                let value = args.next().unwrap_or_else(|| die("--scale requer um valor"));
-                opts.scale = value.parse().unwrap_or_else(|_| die("--scale deve ser numérico"));
+                let value = args
+                    .next()
+                    .unwrap_or_else(|| die("--scale requer um valor"));
+                opts.scale = value
+                    .parse()
+                    .unwrap_or_else(|_| die("--scale deve ser numérico"));
             }
             "--mod" => {
                 let value = args.next().unwrap_or_else(|| die("--mod requer um valor"));
@@ -103,7 +117,10 @@ pub fn parse() -> Options {
                 };
             }
             "--command" | "-c" => {
-                opts.command = Some(args.next().unwrap_or_else(|| die("--command requer um valor")));
+                opts.command = Some(
+                    args.next()
+                        .unwrap_or_else(|| die("--command requer um valor")),
+                );
             }
             "--help" | "-h" => {
                 println!("{}", usage());
@@ -158,7 +175,14 @@ mod tests {
     #[test]
     fn usage_documents_nested_flags() {
         let usage = usage();
-        for flag in ["--backend", "--socket", "--size", "--outputs", "--scale", "--mod"] {
+        for flag in [
+            "--backend",
+            "--socket",
+            "--size",
+            "--outputs",
+            "--scale",
+            "--mod",
+        ] {
             assert!(usage.contains(flag), "falta documentar {flag}");
         }
     }

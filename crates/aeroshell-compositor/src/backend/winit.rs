@@ -5,7 +5,8 @@ use std::time::Duration;
 use smithay::{
     backend::{
         renderer::{
-            damage::OutputDamageTracker, element::surface::WaylandSurfaceRenderElement, gles::GlesRenderer,
+            damage::OutputDamageTracker, element::surface::WaylandSurfaceRenderElement,
+            gles::GlesRenderer,
         },
         winit::{self, WinitEvent},
     },
@@ -80,128 +81,127 @@ pub fn init_winit(
             Some((i as i32 * size.w, 0).into()),
         );
         output.set_preferred(mode);
-        data.state
-            .space
-            .map_output(&output, (i as i32 * size.w, 0));
+        data.state.space.map_output(&output, (i as i32 * size.w, 0));
         outputs.push(output);
     }
     data.state.outputs = outputs.clone();
 
-    let mut damage_trackers: Vec<_> = outputs.iter().map(OutputDamageTracker::from_output).collect();
+    let mut damage_trackers: Vec<_> = outputs
+        .iter()
+        .map(OutputDamageTracker::from_output)
+        .collect();
     let forced_size = opts.size;
 
-    event_loop.handle().insert_source(winit_source, move |event, _, data| {
-        let state = &mut data.state;
-        match event {
-            WinitEvent::Resized { size, .. } => {
-                // Sem `--size`, a janela host é a fonte da verdade. Com `--size`,
-                // mantemos o modo pedido: winit 0.30 não permite redimensionar a janela.
-                if forced_size.is_none() {
-                    if let Some(output) = state.outputs.first() {
-                        let new_mode = Mode {
-                            size,
-                            refresh: 60_000,
-                        };
-                        output.change_current_state(Some(new_mode), None, None, None);
-                        output.set_preferred(new_mode);
+    event_loop
+        .handle()
+        .insert_source(winit_source, move |event, _, data| {
+            let state = &mut data.state;
+            match event {
+                WinitEvent::Resized { size, .. } => {
+                    // Sem `--size`, a janela host é a fonte da verdade. Com `--size`,
+                    // mantemos o modo pedido: winit 0.30 não permite redimensionar a janela.
+                    if forced_size.is_none() {
+                        if let Some(output) = state.outputs.first() {
+                            let new_mode = Mode {
+                                size,
+                                refresh: 60_000,
+                            };
+                            output.change_current_state(Some(new_mode), None, None, None);
+                            output.set_preferred(new_mode);
+                        }
                     }
+                    backend.window().request_redraw();
                 }
-                backend.window().request_redraw();
-            }
-            WinitEvent::Input(event) => state.process_input_event(event),
-            WinitEvent::Redraw => {
-                // F0/S1: renderizamos o primeiro output; multi-output real entra em F1.
-                let Some(output) = state.outputs.first() else {
-                    return;
-                };
-                let Some(tracker) = damage_trackers.first_mut() else {
-                    return;
-                };
-                let rendered = match backend.bind() {
-                    Ok((renderer, mut framebuffer)) => {
-                        // `render_output` consulta o LayerMap do output: não desenhamos
-                        // layer surfaces manualmente (isso causava o painel invisível).
-                        match smithay::desktop::space::render_output::<
-                            _,
-                            WaylandSurfaceRenderElement<GlesRenderer>,
-                            _,
-                            _,
-                        >(
-                            output,
-                            renderer,
-                            &mut framebuffer,
-                            1.0,
-                            0,
-                            [&state.space],
-                            &[],
-                            tracker,
-                            if std::env::var_os("AERO_DEBUG_CLEAR_LIGHT").is_some() {
-                                [0.95, 0.95, 0.95, 1.0]
-                            } else {
-                                [0.08, 0.08, 0.10, 1.0]
-                            },
-                        ) {
-                            Ok(rendered) => Some(rendered),
-                            Err(err) => {
-                                tracing::warn!("render_output falhou: {err}");
-                                None
+                WinitEvent::Input(event) => state.process_input_event(event),
+                WinitEvent::Redraw => {
+                    // F0/S1: renderizamos o primeiro output; multi-output real entra em F1.
+                    let Some(output) = state.outputs.first() else {
+                        return;
+                    };
+                    let Some(tracker) = damage_trackers.first_mut() else {
+                        return;
+                    };
+                    let rendered = match backend.bind() {
+                        Ok((renderer, mut framebuffer)) => {
+                            // `render_output` consulta o LayerMap do output: não desenhamos
+                            // layer surfaces manualmente (isso causava o painel invisível).
+                            match smithay::desktop::space::render_output::<
+                                _,
+                                WaylandSurfaceRenderElement<GlesRenderer>,
+                                _,
+                                _,
+                            >(
+                                output,
+                                renderer,
+                                &mut framebuffer,
+                                1.0,
+                                0,
+                                [&state.space],
+                                &[],
+                                tracker,
+                                if std::env::var_os("AERO_DEBUG_CLEAR_LIGHT").is_some() {
+                                    [0.95, 0.95, 0.95, 1.0]
+                                } else {
+                                    [0.08, 0.08, 0.10, 1.0]
+                                },
+                            ) {
+                                Ok(rendered) => Some(rendered),
+                                Err(err) => {
+                                    tracing::warn!("render_output falhou: {err}");
+                                    None
+                                }
                             }
                         }
-                    }
-                    Err(err) => {
-                        tracing::warn!("bind falhou: {err}");
-                        None
-                    }
-                };
-
-                if let Some(rendered) = rendered {
-                    if let Some(damage) = rendered.damage {
-                        if let Err(err) = backend.submit(Some(damage)) {
-                            tracing::warn!("submit falhou: {err}");
+                        Err(err) => {
+                            tracing::warn!("bind falhou: {err}");
+                            None
                         }
-                    }
-                    let now = state.start_time.elapsed();
-                    state.space.elements().for_each(|window| {
-                        window.send_frame(
-                            output,
-                            now,
-                            Some(Duration::ZERO),
-                            |_, _| Some(output.clone()),
-                        )
-                    });
-                    for layer in &state.layer_surfaces {
-                        if layer.alive() {
-                            layer.send_frame(
-                                output,
-                                now,
-                                Some(Duration::ZERO),
-                                |_, _| Some(output.clone()),
+                    };
+
+                    if let Some(rendered) = rendered {
+                        if let Some(damage) = rendered.damage {
+                            if let Err(err) = backend.submit(Some(damage)) {
+                                tracing::warn!("submit falhou: {err}");
+                            }
+                        }
+                        let now = state.start_time.elapsed();
+                        state.space.elements().for_each(|window| {
+                            window.send_frame(output, now, Some(Duration::ZERO), |_, _| {
+                                Some(output.clone())
+                            })
+                        });
+                        for layer in &state.layer_surfaces {
+                            if layer.alive() {
+                                layer.send_frame(output, now, Some(Duration::ZERO), |_, _| {
+                                    Some(output.clone())
+                                });
+                            }
+                        }
+                        if let Some((action, started)) = state.last_geometry_action.take() {
+                            tracing::info!(
+                                action = %action,
+                                latency_ms = started.elapsed().as_secs_f64() * 1000.0,
+                                "S5: resize/move → frame atualizado"
                             );
                         }
+                        state.space.refresh();
+                        state.popups.cleanup();
+                        let _ = data.display_handle.flush_clients();
                     }
-                    if let Some((action, started)) = state.last_geometry_action.take() {
-                        tracing::info!(
-                            action = %action,
-                            latency_ms = started.elapsed().as_secs_f64() * 1000.0,
-                            "S5: resize/move → frame atualizado"
-                        );
-                    }
-                    state.space.refresh();
-                    state.popups.cleanup();
-                    let _ = data.display_handle.flush_clients();
-                }
 
-                backend.window().set_cursor(if state.cursor_over_interactive {
-                    CursorIcon::Pointer
-                } else {
-                    CursorIcon::Default
-                });
-                backend.window().request_redraw();
+                    backend
+                        .window()
+                        .set_cursor(if state.cursor_over_interactive {
+                            CursorIcon::Pointer
+                        } else {
+                            CursorIcon::Default
+                        });
+                    backend.window().request_redraw();
+                }
+                WinitEvent::CloseRequested => state.loop_signal.stop(),
+                _ => {}
             }
-            WinitEvent::CloseRequested => state.loop_signal.stop(),
-            _ => {}
-        }
-    })?;
+        })?;
 
     Ok(())
 }

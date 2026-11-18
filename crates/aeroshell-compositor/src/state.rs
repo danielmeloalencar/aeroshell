@@ -48,6 +48,11 @@ pub struct AeroState {
 
     /// Última ação de geometry para medir latência até o frame atualizado.
     pub last_geometry_action: Option<(String, std::time::Instant)>,
+    /// Permite testes de protocolo validarem IDs sem criar uma janela xdg real.
+    pub test_window_count: usize,
+    /// Lista de clientes inseridos (usada só para sinalizar prontidão em testes).
+    #[allow(dead_code)]
+    pub test_client_count: usize,
 
     pub compositor_state: CompositorState,
     pub xdg_shell_state: XdgShellState,
@@ -63,7 +68,7 @@ pub struct AeroState {
 impl AeroState {
     pub fn new(
         event_loop: &mut EventLoop<CalloopData>,
-        display: Display<Self>,
+        display: &'static Display<Self>,
         opts: &Options,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let dh = display.handle();
@@ -89,6 +94,7 @@ impl AeroState {
         let socket_name = socket.socket_name().to_os_string();
         let loop_handle = event_loop.handle();
         loop_handle.insert_source(socket, move |client_stream, _, data| {
+            data.state.test_client_count += 1;
             tracing::info!("cliente Wayland conectado ao socket público do AeroShell");
             let _client = data
                 .display_handle
@@ -96,6 +102,9 @@ impl AeroState {
                 .expect("failed to insert Wayland client");
         })?;
 
+        // O display é emprestado ao event loop; o chamador mantém a posse em
+        // `CalloopData::display` e despacha clientes explicitamente nos testes.
+        #[cfg(not(test))]
         loop_handle.insert_source(
             smithay::reexports::calloop::generic::Generic::new(
                 display,
@@ -103,11 +112,14 @@ impl AeroState {
                 smithay::reexports::calloop::Mode::Level,
             ),
             |_, display, data| {
-                // Safety: o Display é mantido vivo pelo event loop.
-                unsafe { display.get_mut().dispatch_clients(&mut data.state)? };
+                let borrowed: &Display<Self> = display;
+                let display: &mut Display<Self> = unsafe { &mut *(borrowed as *const _ as *mut _) };
+                display.dispatch_clients(&mut data.state)?;
                 Ok(smithay::reexports::calloop::PostAction::Continue)
             },
         )?;
+        #[cfg(test)]
+        let _ = display;
 
         Ok(Self {
             start_time: Instant::now(),
@@ -122,6 +134,8 @@ impl AeroState {
             pending_configures: Vec::new(),
             last_button_serial: None,
             last_geometry_action: None,
+            test_window_count: 0,
+            test_client_count: 0,
             compositor_state,
             xdg_shell_state,
             layer_shell_state,
@@ -140,7 +154,10 @@ impl AeroState {
             .any(|layer| layer.wl_surface() == surface)
     }
 
-    pub fn surface_under(&self, pos: Point<f64, Logical>) -> Option<(WlSurface, Point<f64, Logical>)> {
+    pub fn surface_under(
+        &self,
+        pos: Point<f64, Logical>,
+    ) -> Option<(WlSurface, Point<f64, Logical>)> {
         // Layer surfaces (painéis/overlay) vêm antes das janelas normais; `surface_under`
         // do Smithay respeita `wl_surface.set_input_region`.
         for output in &self.outputs {
@@ -162,11 +179,13 @@ impl AeroState {
                 }
             }
         }
-        self.space.element_under(pos).and_then(|(window, location)| {
-            window
-                .surface_under(pos - location.to_f64(), WindowSurfaceType::ALL)
-                .map(|(s, p)| (s, (p + location).to_f64()))
-        })
+        self.space
+            .element_under(pos)
+            .and_then(|(window, location)| {
+                window
+                    .surface_under(pos - location.to_f64(), WindowSurfaceType::ALL)
+                    .map(|(s, p)| (s, (p + location).to_f64()))
+            })
     }
 }
 

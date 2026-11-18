@@ -5,7 +5,9 @@ use std::time::Instant;
 
 use crate::{
     aero_frame_protocol::{
-        aero_frame_manager_v1::{AeroFrameManagerV1, Error as ManagerError, Request as ManagerRequest},
+        aero_frame_manager_v1::{
+            AeroFrameManagerV1, Error as ManagerError, Request as ManagerRequest,
+        },
         aero_frame_v1::{AeroFrameV1, Request as FrameRequest},
     },
     state::{AeroState, ClientState},
@@ -77,14 +79,11 @@ impl Dispatch<AeroFrameManagerV1, ()> for AeroState {
                 window_id,
             } => {
                 if give_role(&surface, AERO_FRAME_ROLE).is_err() {
-                    manager.post_error(
-                        ManagerError::Role,
-                        "a wl_surface já possui outro role",
-                    );
+                    manager.post_error(ManagerError::Role, "a wl_surface já possui outro role");
                     return;
                 }
                 let existing: Vec<u32> = state.frames.iter().map(|(_, id)| *id).collect();
-                let window_count = state.space.elements().count();
+                let window_count = state.space.elements().count() + state.test_window_count;
                 match check_frame(&existing, window_id, window_count) {
                     FrameCheck::AlreadyConstructed => {
                         manager.post_error(
@@ -114,11 +113,13 @@ impl Dispatch<AeroFrameManagerV1, ()> for AeroState {
                 manager.frame_requested(window_id, size.w, size.h, frame_state);
                 let serial = state.pending_configures.len() as u32 + 1;
                 frame.configure(serial, size.w, size.h, frame_state);
-                state
-                    .pending_configures
-                    .push((serial, Instant::now()));
+                state.pending_configures.push((serial, Instant::now()));
                 state.frames.push((frame, window_id));
-                tracing::info!(window_id, serial, "frame criado; frame_requested+configure enviados");
+                tracing::info!(
+                    window_id,
+                    serial,
+                    "frame criado; frame_requested+configure enviados"
+                );
             }
             ManagerRequest::Destroy => {}
         }
@@ -137,11 +138,35 @@ impl Dispatch<AeroFrameV1, u32> for AeroState {
     ) {
         let now = Instant::now();
         match request {
-            FrameRequest::SetInsets { left, top, right, bottom } => {
-                tracing::info!(window_id = *window_id, left, top, right, bottom, "insets pendentes")
+            FrameRequest::SetInsets {
+                left,
+                top,
+                right,
+                bottom,
+            } => {
+                tracing::info!(
+                    window_id = *window_id,
+                    left,
+                    top,
+                    right,
+                    bottom,
+                    "insets pendentes"
+                )
             }
-            FrameRequest::SetShadowExtents { left, top, right, bottom } => {
-                tracing::info!(window_id = *window_id, left, top, right, bottom, "sombra pendente")
+            FrameRequest::SetShadowExtents {
+                left,
+                top,
+                right,
+                bottom,
+            } => {
+                tracing::info!(
+                    window_id = *window_id,
+                    left,
+                    top,
+                    right,
+                    bottom,
+                    "sombra pendente"
+                )
             }
             FrameRequest::Move { seat, serial } => {
                 if !serial_valid(state.last_button_serial, serial) {
@@ -152,7 +177,11 @@ impl Dispatch<AeroFrameV1, u32> for AeroState {
                 state.last_geometry_action = Some(("move".to_owned(), now));
                 tracing::info!(window_id = *window_id, serial, "move do frame");
             }
-            FrameRequest::Resize { seat, serial, edges } => {
+            FrameRequest::Resize {
+                seat,
+                serial,
+                edges,
+            } => {
                 if !serial_valid(state.last_button_serial, serial) {
                     tracing::debug!(serial, "resize ignorado: serial inválido");
                     return;
@@ -162,9 +191,17 @@ impl Dispatch<AeroFrameV1, u32> for AeroState {
                 tracing::info!(window_id = *window_id, serial, ?edges, "resize do frame");
             }
             FrameRequest::AckConfigure { serial } => {
-                if let Some(pos) = state.pending_configures.iter().position(|(s, _)| *s == serial) {
+                if let Some(pos) = state
+                    .pending_configures
+                    .iter()
+                    .position(|(s, _)| *s == serial)
+                {
                     let (_, started) = state.pending_configures.remove(pos);
-                    tracing::info!(serial, ack_ms = started.elapsed().as_secs_f64() * 1000.0, "ack_configure");
+                    tracing::info!(
+                        serial,
+                        ack_ms = started.elapsed().as_secs_f64() * 1000.0,
+                        "ack_configure"
+                    );
                 }
             }
             FrameRequest::Destroy => {

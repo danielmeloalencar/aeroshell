@@ -5,9 +5,9 @@ mod core_interfaces {
 }
 
 mod generated {
-    use crate::wayland_server;
     #[allow(unused_imports)]
     use super::core_interfaces::*;
+    use crate::wayland_server;
     pub use wayland_server::protocol::{wl_seat, wl_surface};
 
     wayland_scanner::generate_interfaces!("../../protocols/aero_frame_v1.xml");

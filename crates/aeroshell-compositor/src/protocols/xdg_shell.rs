@@ -2,7 +2,9 @@
 
 use smithay::{
     delegate_xdg_shell,
-    desktop::{find_popup_root_surface, get_popup_toplevel_coords, PopupKind, PopupManager, Space, Window},
+    desktop::{
+        find_popup_root_surface, get_popup_toplevel_coords, PopupKind, PopupManager, Space, Window,
+    },
     reexports::wayland_server::protocol::{wl_seat, wl_surface::WlSurface},
     utils::Serial,
     wayland::{
@@ -32,7 +34,12 @@ impl XdgShellHandler for AeroState {
         let _ = self.popups.track_popup(PopupKind::Xdg(surface));
     }
 
-    fn reposition_request(&mut self, surface: PopupSurface, positioner: PositionerState, token: u32) {
+    fn reposition_request(
+        &mut self,
+        surface: PopupSurface,
+        positioner: PositionerState,
+        token: u32,
+    ) {
         surface.with_pending_state(|state| {
             state.geometry = positioner.get_geometry();
             state.positioner = positioner;
@@ -42,7 +49,8 @@ impl XdgShellHandler for AeroState {
     }
 
     // S1: grabs de move/resize entram em F3. Mantemos as janelas imóveis.
-    fn move_request(&mut self, _surface: ToplevelSurface, _seat: wl_seat::WlSeat, _serial: Serial) {}
+    fn move_request(&mut self, _surface: ToplevelSurface, _seat: wl_seat::WlSeat, _serial: Serial) {
+    }
 
     fn resize_request(
         &mut self,
@@ -75,7 +83,10 @@ pub fn handle_commit(popups: &mut PopupManager, space: &Space<Window>, surface: 
                 .initial_configure_sent
         });
         if !initial_configure_sent {
-            let _ = window.toplevel().expect("janela sem toplevel").send_configure();
+            let _ = window
+                .toplevel()
+                .expect("janela sem toplevel")
+                .send_configure();
         }
     }
 

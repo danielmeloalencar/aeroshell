@@ -8,20 +8,20 @@ mod protocol {
     }
 
     mod generated {
-        #[allow(clippy::single_component_path_imports)]
-        use wayland_client;
         #[allow(unused_imports)]
         use super::core_interfaces::*;
+        #[allow(clippy::single_component_path_imports)]
+        use wayland_client;
         pub use wayland_client::protocol::{wl_compositor, wl_seat, wl_surface};
 
         wayland_scanner::generate_interfaces!("../../protocols/aero_frame_v1.xml");
         wayland_scanner::generate_client_code!("../../protocols/aero_frame_v1.xml");
 
         pub mod xdg {
-            #[allow(clippy::single_component_path_imports)]
-        use wayland_client;
             #[allow(unused_imports)]
             use super::super::core_interfaces::*;
+            #[allow(clippy::single_component_path_imports)]
+            use wayland_client;
             pub use wayland_client::protocol::{wl_output, wl_seat, wl_surface};
             wayland_scanner::generate_interfaces!(
                 "/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml"
@@ -38,14 +38,10 @@ mod protocol {
 use protocol::{
     aero_frame_manager_v1::{AeroFrameManagerV1, Event as ManagerEvent},
     aero_frame_v1::{AeroFrameV1, Event as FrameEvent},
-    xdg::{
-        xdg_surface::XdgSurface,
-        xdg_toplevel::XdgToplevel,
-        xdg_wm_base::XdgWmBase,
-    },
     wl_compositor::WlCompositor,
     wl_seat::WlSeat,
     wl_surface::WlSurface,
+    xdg::{xdg_surface::XdgSurface, xdg_toplevel::XdgToplevel, xdg_wm_base::XdgWmBase},
 };
 
 struct State {
@@ -69,22 +65,43 @@ impl Dispatch<wl_registry::WlRegistry, ()> for State {
         _conn: &Connection,
         qh: &QueueHandle<Self>,
     ) {
-        if let wl_registry::Event::Global { name, interface, version } = event {
+        if let wl_registry::Event::Global {
+            name,
+            interface,
+            version,
+        } = event
+        {
             eprintln!("global {name}: {interface} v{version}");
             match interface.as_str() {
                 "wl_compositor" => {
-                    state.compositor = Some(registry.bind::<WlCompositor, (), State>(name, version.min(5), qh, ()));
+                    state.compositor = Some(registry.bind::<WlCompositor, (), State>(
+                        name,
+                        version.min(5),
+                        qh,
+                        (),
+                    ));
                 }
                 "xdg_wm_base" => {
-                    state.xdg_shell = Some(registry.bind::<XdgWmBase, (), State>(name, version.min(6), qh, ()));
+                    state.xdg_shell =
+                        Some(registry.bind::<XdgWmBase, (), State>(name, version.min(6), qh, ()));
                 }
                 "wl_seat" => {
-                    state.seat = Some(registry.bind::<WlSeat, (), State>(name, version.min(9), qh, ()));
+                    state.seat =
+                        Some(registry.bind::<WlSeat, (), State>(name, version.min(9), qh, ()));
                 }
                 "aero_frame_manager_v1" => {
-                    eprintln!("bind manager global={name} v={} iface={}", version.min(1), AeroFrameManagerV1::interface().name);
+                    eprintln!(
+                        "bind manager global={name} v={} iface={}",
+                        version.min(1),
+                        AeroFrameManagerV1::interface().name
+                    );
                     state.saw_manager = true;
-                    state.manager = Some(registry.bind::<AeroFrameManagerV1, (), State>(name, version.min(1), qh, ()));
+                    state.manager = Some(registry.bind::<AeroFrameManagerV1, (), State>(
+                        name,
+                        version.min(1),
+                        qh,
+                        (),
+                    ));
                 }
                 _ => {}
             }
@@ -126,7 +143,12 @@ impl Dispatch<AeroFrameManagerV1, ()> for State {
         qh: &QueueHandle<Self>,
     ) {
         match event {
-            ManagerEvent::FrameRequested { window_id, width, height, .. } => {
+            ManagerEvent::FrameRequested {
+                window_id,
+                width,
+                height,
+                ..
+            } => {
                 eprintln!("frame_requested window_id={window_id} {width}x{height}");
                 let _ = qh;
             }
@@ -192,7 +214,12 @@ impl Dispatch<AeroFrameV1, ()> for State {
         _qh: &QueueHandle<Self>,
     ) {
         match event {
-            FrameEvent::Configure { serial, width, height, .. } => {
+            FrameEvent::Configure {
+                serial,
+                width,
+                height,
+                ..
+            } => {
                 state.configured += 1;
                 eprintln!("configure serial={serial} {width}x{height}");
                 frame.ack_configure(serial);
@@ -245,7 +272,10 @@ fn main() {
         return;
     }
 
-    let compositor = state.compositor.clone().expect("wl_compositor não anunciado");
+    let compositor = state
+        .compositor
+        .clone()
+        .expect("wl_compositor não anunciado");
     let surface = compositor.create_surface(&qh, ());
     state.surface = Some(surface.clone());
     queue.roundtrip(&mut state).expect("roundtrip surface");
@@ -258,7 +288,10 @@ fn main() {
         eprintln!("toplevel criado na mesma wl_surface");
     }
 
-    let manager = state.manager.clone().expect("aero_frame_manager_v1 não anunciado");
+    let manager = state
+        .manager
+        .clone()
+        .expect("aero_frame_manager_v1 não anunciado");
     let window_id: u32 = std::env::var("AERO_FRAME_WINDOW_ID")
         .ok()
         .and_then(|v| v.parse().ok())

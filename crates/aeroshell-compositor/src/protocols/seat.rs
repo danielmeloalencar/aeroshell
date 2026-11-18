@@ -3,10 +3,7 @@
 use smithay::{
     delegate_data_device, delegate_output, delegate_seat,
     input::{Seat, SeatHandler, SeatState},
-    reexports::wayland_server::{
-        protocol::wl_surface::WlSurface,
-        Resource,
-    },
+    reexports::wayland_server::{protocol::wl_surface::WlSurface, Resource},
     wayland::{
         output::OutputHandler,
         selection::{
@@ -30,7 +27,12 @@ impl SeatHandler for AeroState {
         &mut self.seat_state
     }
 
-    fn cursor_image(&mut self, _seat: &Seat<Self>, _image: smithay::input::pointer::CursorImageStatus) {}
+    fn cursor_image(
+        &mut self,
+        _seat: &Seat<Self>,
+        _image: smithay::input::pointer::CursorImageStatus,
+    ) {
+    }
 
     fn focus_changed(&mut self, seat: &Seat<Self>, focused: Option<&WlSurface>) {
         let is_panel = focused

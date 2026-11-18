@@ -1,6 +1,7 @@
 {
   "name": "aeroshell",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "workspaces": ["packages/*"],
   "engines": { "bun": ">=1.4.4" },

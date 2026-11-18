@@ -10,7 +10,8 @@ use smithay::{
     wayland::{
         buffer::BufferHandler,
         compositor::{
-            get_parent, is_sync_subsurface, CompositorClientState, CompositorHandler, CompositorState,
+            get_parent, is_sync_subsurface, CompositorClientState, CompositorHandler,
+            CompositorState,
         },
         shm::{ShmHandler, ShmState},
     },
@@ -64,7 +65,8 @@ impl CompositorHandler for AeroState {
             });
             tracing::debug!(?input_region, "input_region recebida do cliente layer");
             let cached = layer.cached_state();
-            static LOGGED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+            static LOGGED: std::sync::atomic::AtomicBool =
+                std::sync::atomic::AtomicBool::new(false);
             if !LOGGED.swap(true, std::sync::atomic::Ordering::Relaxed) {
                 tracing::info!(
                     layer = ?cached.layer,
@@ -90,7 +92,8 @@ impl CompositorHandler for AeroState {
                 let signature = zone.size.w as u32 * 65_536
                     + zone.size.h as u32
                     + geometry.map(|g| g.size.w as u32 * 131_072).unwrap_or(0);
-                static LAST_GEO: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+                static LAST_GEO: std::sync::atomic::AtomicU32 =
+                    std::sync::atomic::AtomicU32::new(0);
                 if LAST_GEO.swap(signature, std::sync::atomic::Ordering::Relaxed) != signature {
                     tracing::info!(
                         zone = ?zone,
