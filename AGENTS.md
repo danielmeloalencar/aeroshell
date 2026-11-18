@@ -1,54 +1,144 @@
-# AGENTS.md — AeroShell
+# AGENTS.md — Regras para o agente (AeroShell)
+ 
+Leia este arquivo e `docs/progress.md` no INÍCIO de toda sessão. Estas regras têm
+prioridade sobre qualquer instrução vaga em conversa. Se uma instrução do usuário
+conflitar com elas, avise o conflito e peça confirmação antes de agir.
+ 
+## 1. O que é o projeto
+ 
+AeroShell é um framework para criar compositores Wayland completos cuja parte visual
+(painéis, widgets, frames de janela, lock, login) é escrita em TSX e renderizada em
+WebKitGTK. Compositor em Rust + Smithay; política em Bun/TypeScript. Roda nested
+(janela dentro do compositor atual) para desenvolvimento e em sessão real (TTY).
+ 
+Plano completo: `docs/architecture.md`. Status atual: `docs/progress.md` (fonte única).
+Decisões: `docs/adr/`. Modelo de ameaça: `docs/security-model.md`.
+ 
+## 2. Decisões congeladas (NÃO reabra sem aprovação explícita)
+ 
+- WPE WebKit está AUSENTE no Ubuntu 26.04. Não proponha WPE como padrão.
+- WebView = WebKitGTK 6.0 como CLIENTE Wayland (GTK4 + gtk4-layer-shell).
+  O compositor não conhece GTK/WebKit; shell/lock/greeter não conhecem Smithay.
+- Frames de janela: uma WebView por janela com `related-view` de uma view-âncora
+  oculta (sempre viva) + pool pequeno pré-aquecido. Atlas = Plano B com gatilho em ADR.
+- Protocolo privado `aero_frame_v1`: EXPERIMENTAL e congelado para a Fase 0.
+  Mudanças no XML exigem aprovação.
+- Blur: somente `ext-background-effect-v1`. Não recrie blur próprio.
+- Lock e greeter: processos próprios e autônomos (sem Bun, sem dev server em produção).
+  A máquina de estados do lock vive no compositor. Fail-secure SEMPRE.
+- Mecanismo em Rust, política em TS. Tempo-real (grabs, animação, idle, lock) em Rust.
+- A senha NUNCA passa pelo Bun, pelo SDK geral, por logs ou métricas.
+- Backends: `winit` (nested), `udev` (real), `headless` (testes). Só `backend/*.rs`
+  conhece a diferença. Toda feature precisa funcionar no nested ou ter simulação documentada.
+- Rust via `rustup` com versão fixada em `rust-toolchain.toml` (versão mínima necessária
+  ao Smithay, não a mais nova instalada). Build de pacote no Debian 13 (trixie).
+## 3. PROIBIDO (nunca faça, mesmo que pareça mais rápido)
+ 
+1. Avançar de fase sem aprovação. Ao terminar uma tarefa, PARE e reporte.
+2. Afirmar que um teste passou sem tê-lo executado. Dizer "não executei" é aceitável.
+3. Descartar, ignorar ou "corrigir em silêncio" uma medição ou teste que falhou.
+4. Resolver um erro desligando a checagem (`--release` para sumir um abort, `#[allow]`,
+   `unsafe` para calar o compilador, `.unwrap()` para passar, comentar o teste).
+5. Usar PID ou variável de ambiente para decidir privilégio de cliente Wayland.
+6. Inventar APIs de Smithay, GTK, WebKitGTK, gtk4-layer-shell, PAM, greetd ou D-Bus.
+   Leia o código-fonte/doc da VERSÃO FIXADA (ex.: `.gir` instalado, crate no `~/.cargo`).
+7. Commitar `Box::leak`, ponteiros brutos, `from_raw_fd` em fd com dono, ou `unsafe`
+   sem comentário `// SAFETY:` que justifique.
+8. Alterar o ambiente do host: sem `sudo`, sem tocar em `/etc` (inclui `/etc/pam.d` e
+   display manager), sem instalar pacotes do sistema, sem sobrescrever `WAYLAND_DISPLAY`
+   globalmente, sem reivindicar nomes D-Bus do host. Tudo fora do repositório: pergunte.
+9. Fazer `git push --force`, reescrever histórico, apagar branches ou arquivos fora do
+   escopo da tarefa.
+10. Adicionar dependência (crate/npm/apt) sem listar: nome, versão, licença, motivo e
+    alternativa. Aguarde aprovação.
+11. Tocar em segurança (lock, PAM, greeter, filtro de globais) sem testes de segurança.
+12. Trocar de abordagem uma terceira vez para o mesmo problema (ver regra 4.5).
+## 4. Método obrigatório
+ 
+### 4.1 Investigação de problema
+1. Enuncie a hipótese em uma frase ANTES de mexer em código.
+2. Reproduza o problema e mostre a saída crua. Se não reproduziu, diga "não reproduzi".
+3. Corrija UMA coisa por vez.
+4. Prove que funcionou com o mesmo comando do passo 2.
+5. REGRA DAS DUAS TENTATIVAS: se a mesma abordagem falhar 2 vezes, PARE. Escreva o que
+   tentou, o que descobriu e peça decisão. Não tente uma terceira variação por conta própria.
+### 4.2 Implementação
+- Teste primeiro: escreva o teste que falha, mostre-o falhando, implemente, mostre passando.
+- Mudanças pequenas e compiláveis a cada passo. Um commit por unidade lógica.
+- Antes de criar arquivos, confira a árvore em `docs/architecture.md`. Crie só o que a
+  fase atual exige. Não crie diretórios vazios "para o futuro".
+### 4.3 Evidência
+- Toda afirmação técnica cita a fonte: `arquivo:linha`, saída de comando, ou documentação
+  instalada. Distinga SEMPRE: "medi", "li na documentação", "estou supondo".
+- Benchmarks: 3 repetições, aguardar estabilização por polling (variação < 2% em 3 leituras),
+  PSS por processo (não só RSS nem só a soma), release build, informar se é VM sem 3D.
+- Sanidade: confira se os números são fisicamente plausíveis (mais carga não usa menos
+  memória). Se algo parece estranho, investigue antes de concluir.
+- Nenhuma amostra pode ser descartada em silêncio: repita e registre.
+- VirtualBox sem 3D: valide FUNCIONAMENTO; desempenho só vale em GPU real.
+### 4.4 Segurança
+- Fail-secure no lock: se shell, runtime Bun ou cliente de lock morrerem, a sessão
+  permanece trancada. Nunca destrancar por erro, timeout ou crash.
+- Segredos (senhas, tokens) nunca em logs, métricas, mensagens de erro ou IPC geral.
+  Buffers de senha com `zeroize`.
+- WebViews só carregam `aero://` (produção) ou o dev server local (só em dev).
+  Sem navegação externa. Permissões por superfície.
+- Teste PAM real e greetd real SOMENTE em VM. Use backend mock no nested.
+## 5. Quando PERGUNTAR antes de agir
+ 
+Pare e peça aprovação quando:
+- a tarefa exigir mudar arquitetura, protocolo (`protocols/*.xml`), ADR aceito ou fase;
+- precisar de dependência nova, `sudo`, pacote do sistema ou alteração fora do repositório;
+- um requisito conflitar com a realidade técnica (apresente dados e alternativas);
+- houver dúvida sobre a API de uma biblioteca (crie um spike, não chute);
+- a correção exigir apagar ou reescrever código existente em grande escala.
+## 6. Arquivos protegidos (alteração só com aprovação explícita)
+ 
+- `protocols/*.xml`
+- `docs/adr/*` (ADR aceito não é editado; escreva um novo que o substitua)
+- `docs/security-model.md`, `packaging/pam.d/*`, `packaging/greetd/*`
+- `rust-toolchain.toml`, `Cargo.lock` (exceto por mudança aprovada de dependência)
+- `AGENTS.md` (este arquivo)
+## 7. Qualidade (rode antes de dizer "concluído")
+ 
+```
+bash scripts/check.sh   # doctor + fmt --check + clippy -D warnings + cargo test + bun test
+```
 
-## Leia isto primeiro
-- `plan.md` é o plano sincronizado; `docs/progress.md` é o histórico executivo com números e hashes.
-- **Cuidado**: `docs/progress.md` ainda contém seções históricas com `AERO_SHELL_PID` e um "BLOQUEIO" de fd. Isso está **superado**: o código atual usa `AERO_PRIVILEGED_FD` + socketpair. Para comportamento, confie no código (`crates/aeroshell-compositor/src/main.rs`, `crates/aeroshell-compositor/src/protocols/aero_frame.rs`), não nessas seções.
-- F0 avança por aprovação do usuário. Próximo passo registrado: protótipo mínimo do frame. **Não iniciar F1 sem autorização.**
-
-## Comandos que realmente funcionam
-- `bash scripts/doctor.sh` — verifica deps e **nomeia o pacote apt faltante**; `just check` roda `doctor` + `cargo check --workspace --all-targets` + `bun test`.
-- `cargo clippy --workspace --all-targets -- -D warnings` (recipe `just clippy`).
-- Teste focado do protocolo: `cargo test -p aeroshell-compositor protocols::aero_frame::tests`.
-- Testes de protocolo completos: `bash tests/integration/aero_frame_protocol.sh` (usa Python + socketpair; precisa de `zenity` e `python3`).
-- Outros: `bash tests/integration/s1_nested.sh`, `bash tests/integration/s2_panel.sh`, `bash tests/integration/s3_input.sh`, `bash tests/bench/run_s5_bench.sh`.
-- `bun test` cobre `tests/integration/s1_nested.test.ts`.
-- **`just dev` / `bun run dev` hoje quebram**: apontam para `packages/cli/src/index.ts`, que ainda não existe (S4 não iniciado). Não use como verificação.
-- **`just types` / `npm run generate:types` são stubs**: `aeroshell-ipc` tem `export-bindings = []`, sem `ts-rs`.
-
-## Ambiente e dependências
-- Validado sem env customizado: Ubuntu 26.04, `pkg-config --modversion gtk4-layer-shell-0` → 1.3.0, crate Rust `gtk4-layer-shell 0.8.0` (mínimo declarado 1.0). Debian trixie 1.0.x **não foi validado**.
-- `LD_PRELOAD=libgtk4-layer-shell.so.0` é defesa documentada; a falha silenciosa não reproduziu na lib C 1.3.0. Ver `docs/nested-dev.md`.
-- VM VirtualBox sem 3D: medir só funcionamento; FPS/RAM/latência finais exigem GPU real. `WebKitGPUProcess = 0` nos números de VM.
-- `sudo` pede senha neste ambiente; aptroot local em `/tmp/opencode/aptroot` é histórico e **não é mais necessário** para compilar.
-
-## Fronteiras de arquitetura
-- `aeroshell-compositor` não conhece GTK/WebKit; `shell`/`lock`/`greeter` não conhecem Smithay.
-- Somente `backend/*.rs` conhece `winit` (nested), `udev` (real) e `headless`.
-- Layer surfaces devem passar pelo `LayerMap` do Smithay (`map_layer`/`arrange`), **nunca** ser desenhadas manualmente: isso já causou painel invisível com `Transform::Flipped180`.
-- `aero://shell-reset.css` (`assets/shell-reset.css`) é injetado em todas as superfícies; componentes podem sobrescrever explicitamente. Ver `docs/sdk-reference/shell-reset.md`.
-- Z-order: `desktop < [frame + cliente] < panels/overlay < lock`.
-
-## Wayland / segurança (armadilhas caras)
-- **Nunca coloque `WAYLAND_SOCKET` no ambiente do compositor**: `winit` → `wayland-client::connect_to_env()` consome o fd e disputa posse (causou `IO Safety violation: owned file descriptor already closed`). Use `AERO_PRIVILEGED_FD`, convertido para `OwnedFd` no início de `main`, removido do env; a ponta vai para `UnixStream::from(fd)` → `display.insert_client` com `ClientState{is_shell:true}`. `WAYLAND_SOCKET` existe só no `Command` do filho.
-- Cliente do socket público **nunca** vê `aero_frame_manager_v1`; `can_view` só olha a marca `is_shell` (padrão: negar). `AERO_SHELL_PID` não existe mais.
-- `--command` do compositor usa `sh -c`, seta `WAYLAND_DISPLAY`/`GDK_BACKEND=wayland` e remove `DISPLAY` **e** `WAYLAND_SOCKET`. Sem remover `DISPLAY`, GTK3 abre no X11 do host e nada aparece na janela.
-- `aero_frame_v1`: `role` via `give_role`; `already_constructed` e serial inválido são erros/ignorados protegendo a fronteira; `unknown_window` gera `closed` (corrida legítima, não erro fatal).
-- Não altere `WAYLAND_DISPLAY` do host nem `/etc/pam.d` sem aviso.
-
-## Código gerado / protocolos
-- XML: `protocols/aero_frame_v1.xml`. Código gerado em tempo de compilação por `wayland_scanner::generate_interfaces!` + `generate_server_code!`/`generate_client_code!`, no lado servidor em `crates/aeroshell-compositor/src/aero_frame_protocol.rs` e no cliente em `crates/aeroshell-frame-client/src/main.rs`. Não editar "código gerado" à mão.
-- O XML usa objetos Wayland reais (`wl_surface`, `wl_seat`); o módulo gerado precisa reexportar as interfaces centrais de `wayland-server`/`wayland-client` e gerar interfaces de `/usr/share/wayland/wayland.xml` num submódulo separado.
-- `aero://panel/index.html` tem **host** `panel` e **path** `/index.html`: o handler do esquema casa pela URI completa, não só pelo path.
-
-## Variáveis de teste / depuração
-- Compositor: `AERO_PRIVILEGED_FD`, `AERO_TEST_INPUT_SOCK` (`motion x y`, `button press|release`), `AERO_DEBUG_CLEAR_LIGHT`.
-- Shell: `AERO_BENCH`, `AERO_BENCH_RELATED`, `AERO_BENCH_ATLAS`, `AERO_BENCH_ANCHOR`, `AERO_TEST_BACKDROP`, `AERO_PANEL_FORCE_OVERFLOW`, `AERO_PANEL_LEGACY`, `AERO_SHELL_EXIT_AFTER` (saída graciosa para logs completos).
-- Cliente de teste: `AERO_WAIT_SOCKET`, `AERO_EXPECT_NO_GLOBAL`, `AERO_TEST_OK`, `AERO_TEST_DOUBLE`, `AERO_TEST_ROLE`, `AERO_TEST_FALSE_SERIAL`, `AERO_FRAME_WINDOW_ID`.
-- O shell escreve logs no **stderr** (unbuffered) porque processos mortos por `timeout` perdiam o buffer de stdout.
-- `AERO_TEST_BACKDROP` troca o `application_id` para `dev.aeroshell.backdrop`; sem isso o GApplication faz handoff para a instância já registrada.
-
-## Decisões e métricas
-- ADR 0001: `related-view` com âncora oculta viva; pool 2–4 frames serve **latência**, não memória; atlas é Plano B condicionado a medição em GPU real.
-- ADR 0003: blur apenas via `ext-background-effect-v1`; Smithay git já tem handler, `wayland-protocols` tem bindings; custo real é o render. Não reintroduzir `set_blur_region` privado.
-- Métrica congelada do frame: ms entre `frame.configure(serial,w,h)` e o `wl_surface.commit` do frame com o novo tamanho, por passo de resize; média, p95 e frames perdidos (timeout de ack = 100 ms); release, 3 repetições, N=5 e N=20; VM = relativo.
-- Commits pequenos e descritivos. Documentação em `docs/adr/`, `docs/progress.md`, `docs/nested-dev.md`.
+Fonte única de verificação: `scripts/check.sh` (versionado). **Não usar `just`**: não está
+instalado neste ambiente e instalar fora do repositório exige aprovação. CI, agentes e
+desenvolvimento rodam exatamente este script. Se ele falhar, a tarefa NÃO está concluída.
+Testes que exigem display (nested) ficam em scripts separados e devem ser rodados manualmente
+e reportados.
+ 
+## 8. Formato de relatório (toda resposta de fim de tarefa)
+ 
+1. O que foi feito (3 a 6 linhas).
+2. Para cada verificação: comando executado → saída crua → interpretação em 1–2 frases.
+3. O que NÃO foi feito ou não foi testado, e por quê.
+4. Riscos e incertezas ("estou supondo que…").
+5. Liste 3 maneiras pelas quais sua conclusão pode estar errada e o que checou para cada.
+6. Próximo passo proposto. NÃO o execute. Aguarde aprovação.
+Atualize `docs/progress.md` ao fim de cada tarefa: decisões, pendências, números medidos
+(com a ressalva de ambiente) e o que está "não medido".
+ 
+## 9. Checklist de fim de tarefa
+ 
+- [ ] `bash scripts/check.sh` verde (saída colada no relatório)
+- [ ] Testes novos escritos primeiro e vistos falhando
+- [ ] Nenhum `unsafe`/`unwrap`/`allow` novo sem justificativa
+- [ ] Nenhum arquivo protegido alterado sem aprovação
+- [ ] Nenhuma dependência nova sem aprovação
+- [ ] `docs/progress.md` atualizado
+- [ ] Relatório no formato da seção 8, com o que NÃO foi testado
+- [ ] Parou. Não iniciou a próxima fase.
+## 10. Erros já cometidos neste projeto (não repita)
+ 
+- Diagnosticar causa (ex.: margem horizontal) sem reproduzir; era uma scrollbar por overflow.
+- Concluir "pool obrigatório" a partir de números inconsistentes (PSS com N=20 menor que N=1).
+- Testar `related-view` pelo mecanismo errado (WebContext) antes de ler a documentação.
+- Ler `WAYLAND_SOCKET` no próprio compositor (nome reservado a bibliotecas cliente) e
+  contornar o abort com tentativas sucessivas em vez de investigar a posse do fd.
+- Manter duas rotas para a mesma funcionalidade (ex.: blur próprio e padrão).
+- Declarar teste "coberto" quando só existia teste unitário sem cliente real.
+ 

@@ -251,10 +251,17 @@ e a latência precisa ir até a tela, não só até o commit. Nada abaixo foi me
   em silêncio.
 
 ### Resultados do protótipo do frame (medidos em 2026-11-18)
-Comando: `python3 tests/bench/run_frame_bench.py` (release, 3 repetições, N=5 e N=20,
-compositor winit + cliente privilegiado por socketpair real). **VM VirtualBox sem 3D: valores
-relativos, não comparáveis com GPU real.** Todas as execuções registradas; nenhuma amostra
-descartada em silêncio.
+Comando: `python3 tests/bench/run_frame_bench.py` (release com `--features bench`,
+3 repetições, N=5 e N=20, compositor winit + cliente privilegiado por socketpair real).
+**VM VirtualBox sem 3D: valores relativos, não comparáveis com GPU real.** Todas as execuções
+registradas; nenhuma amostra descartada em silêncio.
+
+> **STATUS: NÃO VALIDADO para o desenho dos frames.** Estes números são de **protocolo puro**:
+> buffer shm sintético, janela simulada (`AERO_FRAME_BENCH_WINDOWS=1`), cliente de teste que
+> dá `commit` e `ack` imediatos. O custo real de um resize é o **WebKit reflowar e repintar**
+> a página no tamanho novo — isso **não foi medido**. Portanto o ADR 0001 (um WebView por
+> janela com `related-view`) **continua sem validação de latência de resize**. Não escrever
+> "passou"; escrever "não validado".
 
 | N | amostras | (i) mean_ms | (i) p95_ms | (ii) descompasso | (iii) timeouts |
 |---|----------|-------------|------------|------------------|----------------|
@@ -265,12 +272,14 @@ descartada em silêncio.
   Intervalos entre execuções do benchmark: N=5 mean 6,4–9,5 ms; N=20 mean 9,9–15,7 ms,
   p95 11,5–29,7 ms. **Alta variabilidade entre execuções** — coerente com VM sem 3D; não
   concluir nada sobre GPU real.
-- **(ii)** métrica validada: com `AERO_FRAME_CONTENT_MISMATCH=1` (conteúdo 20×12 px menor),
-  `descompasso=true` em 1 commit. Nos runs normais, 0 — conteúdo e decoração com o mesmo
-  tamanho. O leitor de tamanho do buffer foi corrigido: ler **antes** de
-  `on_commit_buffer_handler`, que faz `attrs.buffer.take()`.
+- **(ii)** detector validado: com `AERO_FRAME_CONTENT_MISMATCH=1` (conteúdo 20×12 px menor),
+  `descompasso=true` em 1 commit. Nos runs normais, **0 é trivial**: o cliente sintético
+  anexa exatamente o buffer do tamanho configurado, então descompasso não tem como ocorrer.
+  O leitor de tamanho do buffer foi corrigido: ler **antes** de `on_commit_buffer_handler`,
+  que faz `attrs.buffer.take()`.
 - **(iii)** contador validado: com ack forçado para 150 ms, `FRAME_TIMEOUT=1`; nos runs
-  normais, 0. O que o usuário veria: o frame ficaria no tamanho antigo até o ack chegar.
+  normais, **0 é trivial**: o cliente responde na hora, nunca estoura os 100 ms. O que o
+  usuário veria num timeout real: o frame ficaria no tamanho antigo até o ack chegar.
 - **(iv) NÃO ESTABILIZADO.** Tentativa de 3 leituras com variação < 2% falhou em todas as
   repetições (12 leituras cada). Amostras brutas ficam entre ~0,06 e ~2,1 ms, com picos
   de scheduler da VM. Síntese: `ponteiro_ms=nan` no resumo — **não reportar número único**.
@@ -280,6 +289,72 @@ descartada em silêncio.
   no benchmark S5 (sem protocolo). A ligação do `wl_surface` da WebView ao `aero_frame_v1`
   **não foi feita** — exigiria `gdk4wayland` (dependência nova, aguardando aprovação).
   Portanto os números acima são de protocolo puro, não de WebKit real.
+
+### Dívidas técnicas (pré-requisitos da Fase 1)
+- **(a) Supervisor ainda é script Python de teste.** `tests/integration/launch_manual.py` e
+  `supervisor_real.py` criam o socketpair e lançam os processos **fora do repositório de código**.
+  O desenho final é o **supervisor dentro do compositor**, sem variáveis de ambiente para
+  privilégio. Enquanto isso não existir, o caminho de produção é validado, mas não é o desenho
+  final.
+- **(b) Ciclo de vida dos filhos.** Se o compositor morre ou a conexão cai, os filhos devem
+  terminar (fail-secure de sessão). Teste executado: `launch_manual.py` (compositor 160117,
+  shell 160120, backdrop 160121, mais WebKitNetworkProcess/WebKitWebProcess), depois
+  `kill 160117` (simula fechar a janela). Saída:
+  ```
+  === ANTES ===
+  160117 aeroshell-compositor --backend winit --socket wayland-aero-manual
+  160120 aeroshell-shell
+  160121 aeroshell-shell
+  160181 /usr/lib/.../WebKitNetworkProcess
+  160210 /usr/lib/.../WebKitWebProcess
+  === DEPOIS (ps aux | grep -E "aeroshell|WebKit") ===
+  daniel  4357 ... ptyxis --new-window --working-directory /home/daniel/Projetos/aeroshell
+  ```
+  **Observação:** os filhos realmente terminaram nesta execução, mas por comportamento
+  incidental do GDK ao perder a conexão Wayland — **não** por um mecanismo explícito do
+  supervisor. Em Fase 1 isso precisa ser garantido pelo supervisor dentro do compositor.
+- **(c) presentation-time** não implementado (métrica v).
+
+### SPIKE de role: ligar WebView ao `aero_frame_v1` (pesquisa, SEM implementação)
+Pesquisa em docs/código instalados. **Nenhum XML alterado, nenhuma dependência adicionada.**
+Hipótese do usuário confirmada: `get_frame` dá `give_role(aero_frame)` em
+`protocols/aero_frame.rs:81`, mas o GDK4/Smithay já deram outro role à superfície ao mapear.
+
+**Evidências (fonte citada):**
+- `/usr/share/wayland/wayland.xml:1418` — "A surface can have only one role at a time... Once a
+  wl_surface is given a role, it is set permanently".
+- `smithay-0.7.0/src/wayland/compositor/tree.rs:170-177` — `set_role` retorna `AlreadyHasRole`
+  se já há role diferente. `give_role` é esse `set_role` (`compositor/mod.rs:394`).
+- `smithay-0.7.0/src/wayland/shell/wlr_layer/handlers.rs:86` — handler layer-shell dá
+  `LAYER_SURFACE_ROLE`. Logo `give_role(aero_frame)` numa `GdkSurface` mapeada como layer
+  **falha** (`ManagerError::Role`), e o frame do próprio shell seria rejeitado.
+- `/usr/share/gir-1.0/GdkWayland-4.0.gir:726` (`gdk_wayland_surface_get_wl_surface`) e `:447`
+  (`gdk_wayland_display_get_wl_display`); `/usr/include/gtk-4.0/gdk/wayland/gdkwaylandsurface.h:44`.
+  São as **únicas** APIs Wayland do GDK4 para superfície/display.
+- `/usr/share/gir-1.0/Gdk-4.0.gir:32419` (`gdk_surface_new_popup`) e `:32448`
+  (`gdk_surface_new_toplevel`) — os únicos construtores de `GdkSurface`. Ambos criam superfície
+  com role (popup/toplevel). **Não existe API para criar uma `wl_surface` sem role no GDK4.**
+- `gtk4-layer-shell-0.8.0/src/manual.rs:13-22` — expõe o `zwlr_layer_surface_v1` **já existente**
+  de uma `gtk::Window`; não cria superfície nova.
+- Não há `app_id` por janela no GDK4/Gtk4 instalado (nenhuma entrada `app_id` em
+  `GdkWayland-4.0.gir`); `application-id` é do `GApplication`, compartilhado por todas as janelas.
+
+**Respostas:**
+
+| Opção | Viável hoje? | Mudança no `aero_frame_v1` | Esforço |
+|---|---|---|---|
+| **A** — superfície sem role via gdk4-wayland | **NÃO.** GDK4 não expõe criação de `wl_surface` sem role (só `new_toplevel`/`new_popup`); `get_wl_surface` devolve a superfície já com role. Exigiria `gdk4-wayland` + provável FFI/unsafe e ainda assim não há API para "desenhar numa superfície sem role". | Nenhuma ajuda: o bloqueio é no GDK, não no protocolo. | Alto e incerto — pode ser impossível sem sair do GDK. |
+| **B** — frame como `layer_surface` + `associate(surface, window_id)` que só **marca** | **SIM.** O S2 já validou layer surface transparente com WebView e `LayerMap` (`protocols/layer_shell.rs:53-63`). Basta **não** chamar `give_role`: registrar a superfície já existente como frame, manter no `LayerMap` e deixar o compositor definir geometria (o cliente não pede tamanho). | Adicionar request `associate` no manager (sem `give_role`); remover/condicionar `get_frame`. **Muda protocolo congelado → exige aprovação.** | **Baixo/médio** — reaproveita S2; toca no handler de layer e no `get_frame`. |
+| **C** — marcar `xdg_toplevel` por `app_id` | **Frágil.** `app_id` é do `GApplication`, igual para todas as janelas; não há API por janela no GDK4 instalado. Compositores e GTK tratam toplevels de forma especial. | `associate` com `app_id` em vez de `window_id`, com risco de colisão entre janelas. | Médio, com risco de retrabalho. |
+
+**Recomendação: opção B.** É a única que reaproveita algo já validado (S2) e resolve a
+incompatibilidade de role sem FFI especulativa. Custo: uma mudança no XML congelado (nova request
+`associate` no `aero_frame_manager_v1`, removendo a atribuição de role de `get_frame`), que
+**depende de aprovação explícita**. Não listo `gdk4-wayland` porque a opção A não é recomendada;
+se o usuário escolher A, listarei nome/versão/licença/motivo na ocasião.
+
+**Não executei:** nenhuma implementação, nenhuma medição com WebKit real, nenhuma mudança de XML.
+O spike é apenas leitura de documentação/código instalados. Próximo passo depende da decisão.
 
 ### ADR 0001 aceito provisoriamente (2026-11-18)
 - `related-view` padrão com âncora oculta viva; teste real: destruir a âncora **não** matou o
