@@ -22,6 +22,7 @@ impl XdgShellHandler for AeroState {
     }
 
     fn new_toplevel(&mut self, surface: ToplevelSurface) {
+        tracing::info!("novo toplevel xdg-surface mapeado");
         let window = Window::new_wayland_window(surface);
         self.space.map_element(window, (0, 0), false);
     }

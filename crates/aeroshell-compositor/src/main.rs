@@ -49,6 +49,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             .arg("-c")
             .arg(command)
             .env("WAYLAND_DISPLAY", &socket_name)
+            // Sem remover DISPLAY, GTK3 abre no X11 do host em vez do nosso compositor.
+            .env_remove("DISPLAY")
+            .env("GDK_BACKEND", "wayland")
             .spawn();
         match status {
             Ok(mut child) => {

@@ -10,8 +10,8 @@ use smithay::{
         winit::{self, WinitEvent},
     },
     output::{Mode, Output, PhysicalProperties, Scale, Subpixel},
-    reexports::calloop::EventLoop,
-    utils::Transform,
+    reexports::{calloop::EventLoop, winit::dpi::PhysicalSize},
+    utils::{IsAlive, Transform},
 };
 
 use crate::{cli::Options, CalloopData};
@@ -34,8 +34,14 @@ pub fn init_winit(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let (mut backend, winit_source) = winit::init::<GlesRenderer>()?;
 
-    // `--size` define o modo do output; o redimensionamento da janela host
-    // continua gerando WinitEvent::Resized (ver abaixo).
+    // winit 0.30 não expõe Window::set_size. Fixamos min=max para forçar o tamanho
+    // pedido; assim `window_size()` e os eventos Resized convergem para `--size`.
+    if let Some((width, height)) = opts.size {
+        let requested = PhysicalSize::new(width, height);
+        backend.window().set_min_inner_size(Some(requested));
+        backend.window().set_max_inner_size(Some(requested));
+    }
+
     let size = opts
         .size
         .map(|(w, h)| (w as i32, h as i32).into())
@@ -44,6 +50,13 @@ pub fn init_winit(
         size,
         refresh: 60_000,
     };
+
+    tracing::info!(
+        requested = ?opts.size,
+        window = ?backend.window_size(),
+        mode = ?size,
+        "tamanho do output winit"
+    );
 
     let mut outputs = Vec::new();
     for i in 0..opts.outputs {
@@ -72,18 +85,23 @@ pub fn init_winit(
     data.state.outputs = outputs.clone();
 
     let mut damage_trackers: Vec<_> = outputs.iter().map(OutputDamageTracker::from_output).collect();
+    let forced_size = opts.size;
 
     event_loop.handle().insert_source(winit_source, move |event, _, data| {
         let state = &mut data.state;
         match event {
             WinitEvent::Resized { size, .. } => {
-                if let Some(output) = state.outputs.first() {
-                    let new_mode = Mode {
-                        size,
-                        refresh: 60_000,
-                    };
-                    output.change_current_state(Some(new_mode), None, None, None);
-                    output.set_preferred(new_mode);
+                // Sem `--size`, a janela host é a fonte da verdade. Com `--size`,
+                // mantemos o modo pedido: winit 0.30 não permite redimensionar a janela.
+                if forced_size.is_none() {
+                    if let Some(output) = state.outputs.first() {
+                        let new_mode = Mode {
+                            size,
+                            refresh: 60_000,
+                        };
+                        output.change_current_state(Some(new_mode), None, None, None);
+                        output.set_preferred(new_mode);
+                    }
                 }
                 backend.window().request_redraw();
             }
@@ -98,6 +116,8 @@ pub fn init_winit(
                 };
                 let rendered = match backend.bind() {
                     Ok((renderer, mut framebuffer)) => {
+                        // `render_output` consulta o LayerMap do output: não desenhamos
+                        // layer surfaces manualmente (isso causava o painel invisível).
                         match smithay::desktop::space::render_output::<
                             _,
                             WaylandSurfaceRenderElement<GlesRenderer>,
@@ -112,7 +132,11 @@ pub fn init_winit(
                             [&state.space],
                             &[],
                             tracker,
-                            [0.08, 0.08, 0.10, 1.0],
+                            if std::env::var_os("AERO_DEBUG_CLEAR_LIGHT").is_some() {
+                                [0.95, 0.95, 0.95, 1.0]
+                            } else {
+                                [0.08, 0.08, 0.10, 1.0]
+                            },
                         ) {
                             Ok(rendered) => Some(rendered),
                             Err(err) => {
@@ -142,6 +166,16 @@ pub fn init_winit(
                             |_, _| Some(output.clone()),
                         )
                     });
+                    for layer in &state.layer_surfaces {
+                        if layer.alive() {
+                            layer.send_frame(
+                                output,
+                                now,
+                                Some(Duration::ZERO),
+                                |_, _| Some(output.clone()),
+                            );
+                        }
+                    }
                     state.space.refresh();
                     state.popups.cleanup();
                     let _ = data.display_handle.flush_clients();

@@ -19,10 +19,7 @@ use smithay::{
         compositor::{CompositorClientState, CompositorState},
         output::OutputManagerState,
         selection::data_device::DataDeviceState,
-        shell::{
-            wlr_layer::{LayerSurface, WlrLayerShellState},
-            xdg::XdgShellState,
-        },
+        shell::{wlr_layer::WlrLayerShellState, xdg::XdgShellState},
         shm::ShmState,
         socket::ListeningSocketSource,
     },
@@ -38,7 +35,8 @@ pub struct AeroState {
     pub space: Space<Window>,
     pub loop_signal: LoopSignal,
     pub outputs: Vec<Output>,
-    pub layer_surfaces: Vec<LayerSurface>,
+    /// Layer surfaces já embrulhadas no tipo de desktop, prontas para o `LayerMap`.
+    pub layer_surfaces: Vec<smithay::desktop::LayerSurface>,
 
     pub compositor_state: CompositorState,
     pub xdg_shell_state: XdgShellState,

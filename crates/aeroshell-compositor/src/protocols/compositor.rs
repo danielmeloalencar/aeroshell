@@ -47,6 +47,50 @@ impl CompositorHandler for AeroState {
             }
         }
         xdg_shell::handle_commit(&mut self.popups, &self.space, surface);
+
+        if let Some(layer) = self
+            .layer_surfaces
+            .iter()
+            .find(|layer| layer.wl_surface() == surface)
+            .cloned()
+        {
+            let cached = layer.cached_state();
+            static LOGGED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+            if !LOGGED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                tracing::info!(
+                    layer = ?cached.layer,
+                    anchor = ?cached.anchor,
+                    exclusive_zone = ?cached.exclusive_zone,
+                    margins = ?cached.margin,
+                    "primeiro commit da layer surface (zwlr_layer_surface_v1)"
+                );
+            }
+            let accepted = cached.size;
+            static LAST_SIZE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+            let signature = (accepted.w as u32) << 16 | (accepted.h as u32).min(0xffff);
+            if LAST_SIZE.swap(signature, std::sync::atomic::Ordering::Relaxed) != signature {
+                tracing::info!(size = ?accepted, "tamanho aceito pela layer surface");
+            }
+            self.configure_layer_surface(&layer);
+            let _ = layer.layer_surface().send_pending_configure();
+            self.arrange_layers();
+            if let Some(output) = self.outputs.first() {
+                let map = smithay::desktop::layer_map_for_output(output);
+                let zone = map.non_exclusive_zone();
+                let geometry = map.layer_geometry(&layer);
+                let signature = zone.size.w as u32 * 65_536
+                    + zone.size.h as u32
+                    + geometry.map(|g| g.size.w as u32 * 131_072).unwrap_or(0);
+                static LAST_GEO: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+                if LAST_GEO.swap(signature, std::sync::atomic::Ordering::Relaxed) != signature {
+                    tracing::info!(
+                        zone = ?zone,
+                        geometry = ?geometry,
+                        "geometria real da layer surface (LayerMap)"
+                    );
+                }
+            }
+        }
     }
 }
 
