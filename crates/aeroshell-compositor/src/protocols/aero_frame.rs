@@ -111,13 +111,37 @@ impl Dispatch<AeroFrameManagerV1, ()> for AeroState {
                     .unwrap_or((1280, 800).into());
                 let frame_state = crate::aero_frame_protocol::aero_frame_v1::State::empty();
                 manager.frame_requested(window_id, size.w, size.h, frame_state);
-                let serial = state.pending_configures.len() as u32 + 1;
-                frame.configure(serial, size.w, size.h, frame_state);
-                state.pending_configures.push((serial, Instant::now()));
+                // `AERO_FRAME_STEPS`: quantos passos de resize sintéticos enviar
+                // de uma vez (N=5 / N=20 nas medições). Cada passo tem tamanho
+                // diferente para exercitar configure → commit e descompasso.
+                let steps: u32 = std::env::var("AERO_FRAME_STEPS")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(1)
+                    .max(1);
+                for step in 0..steps {
+                    let serial = step + 1;
+                    let w = size.w + (step as i32) * 24;
+                    let h = size.h + (step as i32) * 16;
+                    frame.configure(serial, w, h, frame_state);
+                    let configured_at = Instant::now();
+                    state.pending_configures.push((serial, configured_at));
+                    state.frame_probes.push(crate::state::FrameProbe {
+                        surface: surface.clone(),
+                        window_id,
+                        serial,
+                        configured_at,
+                        size: (w as u32, h as u32),
+                        acked: false,
+                        committed: false,
+                        timeout_logged: false,
+                    });
+                    eprintln!("FRAME_CONFIGURE serial={serial} window_id={window_id} w={w} h={h}");
+                }
                 state.frames.push((frame, window_id));
                 tracing::info!(
                     window_id,
-                    serial,
+                    steps,
                     "frame criado; frame_requested+configure enviados"
                 );
             }
@@ -189,6 +213,26 @@ impl Dispatch<AeroFrameV1, u32> for AeroState {
                 let _ = seat;
                 state.last_geometry_action = Some(("resize".to_owned(), now));
                 tracing::info!(window_id = *window_id, serial, ?edges, "resize do frame");
+
+                // Protótipo: cada resize válido gera um novo configure com tamanho
+                // diferente, para exercitar configure → commit por passo.
+                if let Some(probe) = state.frame_probes.iter_mut().find(|p| p.serial == serial) {
+                    let next_serial = state.pending_configures.len() as u32 + 100;
+                    let w = probe.size.0.saturating_add(40);
+                    let h = probe.size.1.saturating_add(25);
+                    let configured_at = Instant::now();
+                    let frame_state = crate::aero_frame_protocol::aero_frame_v1::State::empty();
+                    resource.configure(next_serial, w as i32, h as i32, frame_state);
+                    state.pending_configures.push((next_serial, configured_at));
+                    probe.serial = next_serial;
+                    probe.size = (w, h);
+                    probe.configured_at = configured_at;
+                    probe.acked = false;
+                    probe.timeout_logged = false;
+                    eprintln!(
+                        "FRAME_CONFIGURE serial={next_serial} window_id={window_id} w={w} h={h}"
+                    );
+                }
             }
             FrameRequest::AckConfigure { serial } => {
                 if let Some(pos) = state
@@ -197,11 +241,16 @@ impl Dispatch<AeroFrameV1, u32> for AeroState {
                     .position(|(s, _)| *s == serial)
                 {
                     let (_, started) = state.pending_configures.remove(pos);
-                    tracing::info!(
-                        serial,
-                        ack_ms = started.elapsed().as_secs_f64() * 1000.0,
-                        "ack_configure"
-                    );
+                    let ack_ms = started.elapsed().as_secs_f64() * 1000.0;
+                    if let Some(probe) = state.frame_probes.iter_mut().find(|p| p.serial == serial)
+                    {
+                        probe.acked = true;
+                        eprintln!(
+                            "FRAME_ACK serial={serial} window_id={} ack_ms={ack_ms:.3}",
+                            probe.window_id
+                        );
+                    }
+                    tracing::info!(serial, ack_ms, "ack_configure");
                 }
             }
             FrameRequest::Destroy => {

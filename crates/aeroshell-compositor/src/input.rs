@@ -24,6 +24,14 @@ impl AeroState {
             .as_ref()
             .map(|(s, _)| self.is_interactive_layer_surface(s))
             .unwrap_or(false);
+        let t_nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        eprintln!(
+            "POINTER_MOTION serial={} t={t_nanos} x={x} y={y}",
+            u32::from(serial)
+        );
         tracing::info!(x, y, under = ?under.as_ref().map(|(s, _)| s.id()), "TESTE ponteiro motion");
         let pointer = self.seat.get_pointer().unwrap();
         pointer.motion(
@@ -40,6 +48,9 @@ impl AeroState {
 
     pub fn inject_button(&mut self, pressed: bool) {
         let serial = smithay::utils::SERIAL_COUNTER.next_serial();
+        if pressed {
+            self.last_button_serial = Some(u32::from(serial));
+        }
         let pointer = self.seat.get_pointer().unwrap();
         tracing::info!(pressed, "TESTE ponteiro button");
         pointer.button(

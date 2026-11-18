@@ -229,6 +229,58 @@ e/ou WebView). Os testes `protocol_tests` e `bun test` rodam headless.
 estado pré-alfa e comandos nested (avisa que `aero dev` ainda não existe); `plan.md` reduzido a
 resumo com link para este arquivo como fonte única de status.
 
+### Métricas CONGELADAS do protótipo do frame (definidas ANTES de medir)
+Ajustes aprovados pelo usuário: o número que decide o `ack_configure` atômico é o **descompasso**,
+e a latência precisa ir até a tela, não só até o commit. Nada abaixo foi medido ainda.
+
+| # | Métrica | Como obter | Agregação |
+|---|---------|-----------|-----------|
+| i | ms de `frame.configure(serial,w,h)` → `wl_surface.commit` do frame com o **novo tamanho**, por passo de resize | instrumentar compositor (envio) + handler de `commit` da superfície do frame | média + p95 por passo |
+| ii | **quadros com descompasso**: frames apresentados com conteúdo e decoração de tamanhos diferentes, por resize | comparar, no commit, tamanho do buffer de conteúdo vs. insets/decoração reportados | contagem por resize |
+| ii-b | quadros apresentados com conteúdo e frames de tamanhos diferentes por resize | comparar tamanho do frame vs. tamanho do conteúdo no mesmo commit | contagem por resize |
+| iii | nº de vezes que o timeout do `ack_configure` (100 ms) disparou | timer no compositor sobre `pending_configures` | contagem + descrição do que o usuário veria |
+| iv | latência do ponteiro até a nova posição no drag (baseline; grab no compositor) | `AERO_TEST_INPUT_SOCK` motion → atualização de posição no compositor | média + p95 |
+| v | **latência até a tela**: commit → próximo frame composto pelo compositor (ou `presentation-time`, se disponível) | timestamp do commit vs. callback de apresentação do backend | média + p95 |
+
+- Protocolo de medição: **release**, **3 repetições**, **N=5 e N=20**, estabilização por polling
+  (variação < 2% em 3 leituras), PSS por processo, VM VirtualBox **sem 3D** → valores relativos,
+  não comparáveis com GPU real.
+- Arquitetura sob teste: frame = WebView filha por janela via `related-view` de uma âncora oculta
+  **sempre viva** + pool pré-aquecido de **2 a 4** views. Atlas é Plano B condicionado a ADR.
+- Sanidade: número implausível → repetir e investigar antes de relatar; nenhuma amostra descartada
+  em silêncio.
+
+### Resultados do protótipo do frame (medidos em 2026-11-18)
+Comando: `python3 tests/bench/run_frame_bench.py` (release, 3 repetições, N=5 e N=20,
+compositor winit + cliente privilegiado por socketpair real). **VM VirtualBox sem 3D: valores
+relativos, não comparáveis com GPU real.** Todas as execuções registradas; nenhuma amostra
+descartada em silêncio.
+
+| N | amostras | (i) mean_ms | (i) p95_ms | (ii) descompasso | (iii) timeouts |
+|---|----------|-------------|------------|------------------|----------------|
+| 5  | 15 | 7,429 | 7,921 | 0 | 0 |
+| 20 | 60 | 10,617 | 12,717 | 0 | 0 |
+
+- **(i)** medido de `frame.configure` → `wl_surface.commit` com buffer do novo tamanho.
+  Intervalos entre execuções do benchmark: N=5 mean 6,4–9,5 ms; N=20 mean 9,9–15,7 ms,
+  p95 11,5–29,7 ms. **Alta variabilidade entre execuções** — coerente com VM sem 3D; não
+  concluir nada sobre GPU real.
+- **(ii)** métrica validada: com `AERO_FRAME_CONTENT_MISMATCH=1` (conteúdo 20×12 px menor),
+  `descompasso=true` em 1 commit. Nos runs normais, 0 — conteúdo e decoração com o mesmo
+  tamanho. O leitor de tamanho do buffer foi corrigido: ler **antes** de
+  `on_commit_buffer_handler`, que faz `attrs.buffer.take()`.
+- **(iii)** contador validado: com ack forçado para 150 ms, `FRAME_TIMEOUT=1`; nos runs
+  normais, 0. O que o usuário veria: o frame ficaria no tamanho antigo até o ack chegar.
+- **(iv) NÃO ESTABILIZADO.** Tentativa de 3 leituras com variação < 2% falhou em todas as
+  repetições (12 leituras cada). Amostras brutas ficam entre ~0,06 e ~2,1 ms, com picos
+  de scheduler da VM. Síntese: `ponteiro_ms=nan` no resumo — **não reportar número único**.
+- **(v) NÃO MEDIDO**: este compositor não implementa `presentation-time`; não há caminho
+  de commit → frame composto instrumentado.
+- **Arquitetura WebKit**: `related-view` de âncora oculta + pool pré-aquecido já validados
+  no benchmark S5 (sem protocolo). A ligação do `wl_surface` da WebView ao `aero_frame_v1`
+  **não foi feita** — exigiria `gdk4wayland` (dependência nova, aguardando aprovação).
+  Portanto os números acima são de protocolo puro, não de WebKit real.
+
 ### ADR 0001 aceito provisoriamente (2026-11-18)
 - `related-view` padrão com âncora oculta viva; teste real: destruir a âncora **não** matou o
   WebProcess compartilhado (pid 84087 antes e 5 s depois); a propriedade é construct-only, então

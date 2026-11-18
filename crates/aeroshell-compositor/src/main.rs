@@ -3,6 +3,7 @@
 mod aero_frame_protocol;
 mod backend;
 mod cli;
+mod frame_metrics;
 mod input;
 mod protocols;
 mod state;
@@ -95,7 +96,19 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    let mut data = CalloopData { state, display_handle };
+    let mut data = CalloopData {
+        state,
+        display_handle,
+    };
+
+    // Knob de benchmark: simula janelas existentes para que get_frame com
+    // window_id=0 não seja tratado como corrida de fechamento.
+    if let Ok(count) = std::env::var("AERO_FRAME_BENCH_WINDOWS").and_then(|v| {
+        v.parse::<usize>()
+            .map_err(|_| std::env::VarError::NotPresent)
+    }) {
+        data.state.test_window_count = count;
+    }
 
     // O supervisor entrega uma ponta do socketpair ao shell via WAYLAND_SOCKET.
     // Essa conexão é marcada como privilegiada; o socket público nunca é.
@@ -154,7 +167,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         tracing::info!(?path, "injeção de ponteiro sintético ativa");
     }
 
-    event_loop.run(None, &mut data, |_| {})?;
+    event_loop.run(None, &mut data, |data| {
+        data.state.check_frame_timeouts();
+    })?;
+    data.state.log_frame_summary();
 
     Ok(())
 }
@@ -370,7 +386,10 @@ mod protocol_tests {
                     }),
                 )
                 .unwrap();
-            let mut data = CalloopData { state, display_handle };
+            let mut data = CalloopData {
+                state,
+                display_handle,
+            };
             data.state.test_window_count = 1;
 
             let connection = Connection::from_backend(Backend::connect(client).unwrap());

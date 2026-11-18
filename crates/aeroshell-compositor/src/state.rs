@@ -27,6 +27,19 @@ use smithay::{
 
 use crate::{cli::Options, CalloopData};
 
+/// Estado de um configure pendente, usado para as métricas do protótipo.
+#[derive(Debug, Clone)]
+pub struct FrameProbe {
+    pub surface: WlSurface,
+    pub window_id: u32,
+    pub serial: u32,
+    pub configured_at: Instant,
+    pub size: (u32, u32),
+    pub acked: bool,
+    pub committed: bool,
+    pub timeout_logged: bool,
+}
+
 pub struct AeroState {
     pub start_time: Instant,
     /// Nome do socket próprio; nunca sobrescreve o WAYLAND_DISPLAY do host.
@@ -43,6 +56,10 @@ pub struct AeroState {
     pub frames: Vec<(crate::aero_frame_protocol::aero_frame_v1::AeroFrameV1, u32)>,
     /// Configurações enviadas e ainda não confirmadas (serial, instante).
     pub pending_configures: Vec<(u32, std::time::Instant)>,
+    /// Sondas de configure: medem configure → commit e descompasso por passo.
+    pub frame_probes: Vec<FrameProbe>,
+    /// Amostras de configure → commit (serial, ms) para agregação no fim.
+    pub frame_commit_samples: Vec<(u32, f64)>,
     /// Último serial de botão recebido (validação de move/resize).
     pub last_button_serial: Option<u32>,
 
@@ -131,6 +148,8 @@ impl AeroState {
             cursor_over_interactive: false,
             frames: Vec::new(),
             pending_configures: Vec::new(),
+            frame_probes: Vec::new(),
+            frame_commit_samples: Vec::new(),
             last_button_serial: None,
             last_geometry_action: None,
             test_window_count: 0,
@@ -185,6 +204,43 @@ impl AeroState {
                     .surface_under(pos - location.to_f64(), WindowSurfaceType::ALL)
                     .map(|(s, p)| (s, (p + location).to_f64()))
             })
+    }
+
+    /// Agrega média e p95 de configure → commit ao encerrar.
+    pub fn log_frame_summary(&self) {
+        if self.frame_commit_samples.is_empty() {
+            return;
+        }
+        let mut values: Vec<f64> = self
+            .frame_commit_samples
+            .iter()
+            .map(|(_, ms)| *ms)
+            .collect();
+        let mean = values.iter().sum::<f64>() / values.len() as f64;
+        let p95 = crate::frame_metrics::percentile(&mut values, 0.95);
+        eprintln!(
+            "FRAME_SUMMARY samples={} mean_ms={mean:.3} p95_ms={p95:.3}",
+            values.len()
+        );
+    }
+
+    /// Chamado no idle do event loop: registra uma vez cada `ack_configure`
+    /// que estourou o timeout de 100 ms (métrica iii).
+    pub fn check_frame_timeouts(&mut self) {
+        for probe in self.frame_probes.iter_mut() {
+            if !probe.acked
+                && !probe.timeout_logged
+                && probe.configured_at.elapsed().as_millis() >= 100
+            {
+                probe.timeout_logged = true;
+                eprintln!(
+                    "FRAME_TIMEOUT serial={} window_id={} waited_ms={}",
+                    probe.serial,
+                    probe.window_id,
+                    probe.configured_at.elapsed().as_millis()
+                );
+            }
+        }
     }
 }
 
