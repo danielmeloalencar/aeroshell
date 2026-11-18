@@ -1,0 +1,194 @@
+//! Cliente de teste do protocolo aero_frame_v1 (S5): valida global, get_frame e eventos.
+
+use wayland_client::{protocol::wl_registry, Connection, Dispatch, Proxy, QueueHandle};
+
+mod protocol {
+    mod core_interfaces {
+        use wayland_backend;
+        wayland_scanner::generate_interfaces!("/usr/share/wayland/wayland.xml");
+    }
+
+    mod generated {
+        use wayland_client;
+        use wayland_backend;
+        #[allow(unused_imports)]
+        use super::core_interfaces::*;
+        pub use wayland_client::protocol::{wl_compositor, wl_region, wl_seat, wl_surface};
+
+        wayland_scanner::generate_interfaces!("../../protocols/aero_frame_v1.xml");
+        wayland_scanner::generate_client_code!("../../protocols/aero_frame_v1.xml");
+    }
+
+    pub use generated::*;
+}
+
+use protocol::{
+    aero_frame_manager_v1::{AeroFrameManagerV1, Event as ManagerEvent},
+    aero_frame_v1::{AeroFrameV1, Event as FrameEvent},
+    wl_compositor::WlCompositor,
+    wl_surface::WlSurface,
+};
+
+struct State {
+    compositor: Option<WlCompositor>,
+    manager: Option<AeroFrameManagerV1>,
+    surface: Option<WlSurface>,
+    configured: u32,
+    closed: u32,
+    saw_manager: bool,
+}
+
+impl Dispatch<wl_registry::WlRegistry, ()> for State {
+    fn event(
+        state: &mut Self,
+        registry: &wl_registry::WlRegistry,
+        event: wl_registry::Event,
+        _data: &(),
+        _conn: &Connection,
+        qh: &QueueHandle<Self>,
+    ) {
+        if let wl_registry::Event::Global { name, interface, version } = event {
+            eprintln!("global {name}: {interface} v{version}");
+            match interface.as_str() {
+                "wl_compositor" => {
+                    eprintln!("bind wl_compositor global={name} v={}", version.min(5));
+                    state.compositor = Some(registry.bind::<WlCompositor, (), State>(name, version.min(5), qh, ()));
+                }
+                "aero_frame_manager_v1" => {
+                    eprintln!("bind manager global={name} v={} iface={}", version.min(1), AeroFrameManagerV1::interface().name);
+                    state.saw_manager = true;
+                    state.manager = Some(registry.bind::<AeroFrameManagerV1, (), State>(name, version.min(1), qh, ()));
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+impl Dispatch<WlCompositor, ()> for State {
+    fn event(
+        _state: &mut Self,
+        _proxy: &WlCompositor,
+        _event: protocol::wl_compositor::Event,
+        _data: &(),
+        _conn: &Connection,
+        _qh: &QueueHandle<Self>,
+    ) {
+    }
+}
+
+impl Dispatch<WlSurface, ()> for State {
+    fn event(
+        _state: &mut Self,
+        _proxy: &WlSurface,
+        _event: protocol::wl_surface::Event,
+        _data: &(),
+        _conn: &Connection,
+        _qh: &QueueHandle<Self>,
+    ) {
+    }
+}
+
+impl Dispatch<AeroFrameManagerV1, ()> for State {
+    fn event(
+        state: &mut Self,
+        _proxy: &AeroFrameManagerV1,
+        event: ManagerEvent,
+        _data: &(),
+        _conn: &Connection,
+        qh: &QueueHandle<Self>,
+    ) {
+        match event {
+            ManagerEvent::FrameRequested { window_id, width, height, .. } => {
+                eprintln!("frame_requested window_id={window_id} {width}x{height}");
+                let surface = state.surface.clone().expect("sem wl_surface");
+                let manager = state.manager.clone().expect("sem manager");
+                manager.get_frame(&surface, window_id, qh, ());
+            }
+        }
+    }
+}
+
+impl Dispatch<AeroFrameV1, ()> for State {
+    fn event(
+        state: &mut Self,
+        frame: &AeroFrameV1,
+        event: FrameEvent,
+        _data: &(),
+        _conn: &Connection,
+        _qh: &QueueHandle<Self>,
+    ) {
+        match event {
+            FrameEvent::Configure { serial, width, height, .. } => {
+                state.configured += 1;
+                eprintln!("configure serial={serial} {width}x{height}");
+                frame.ack_configure(serial);
+            }
+            FrameEvent::Closed => {
+                state.closed += 1;
+                eprintln!("closed recebido");
+            }
+        }
+    }
+}
+
+fn main() {
+    if std::env::var_os("AERO_WAIT_SOCKET").is_some() {
+        let runtime_dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".to_owned());
+        let socket = std::env::var("WAYLAND_DISPLAY").unwrap_or_default();
+        let path = std::path::Path::new(&runtime_dir).join(&socket);
+        while !path.exists() {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+    }
+    let connection = Connection::connect_to_env().expect("conectar ao socket do AeroShell");
+    let display = connection.display();
+    let mut queue = connection.new_event_queue();
+    let qh = queue.handle();
+    display.get_registry(&qh, ());
+
+    let mut state = State {
+        compositor: None,
+        manager: None,
+        surface: None,
+        configured: 0,
+        closed: 0,
+        saw_manager: false,
+    };
+    queue.roundtrip(&mut state).expect("roundtrip");
+
+    if std::env::var_os("AERO_EXPECT_NO_GLOBAL").is_some() {
+        assert!(!state.saw_manager, "cliente comum NÃO deveria ver o global");
+        eprintln!("OK: aero_frame_manager_v1 não é visível para cliente comum");
+        return;
+    }
+
+    if std::env::var_os("AERO_ONLY_BIND").is_some() {
+        queue.roundtrip(&mut state).expect("roundtrip bind only");
+        eprintln!("OK bind only");
+        return;
+    }
+
+    let compositor = state.compositor.take().expect("wl_compositor não anunciado");
+    let surface = compositor.create_surface(&qh, ());
+    state.surface = Some(surface);
+    queue.roundtrip(&mut state).expect("roundtrip surface");
+
+    let manager = state.manager.take().expect("aero_frame_manager_v1 não anunciado");
+    let window_id: u32 = std::env::var("AERO_FRAME_WINDOW_ID")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    let surface = state.surface.clone().unwrap();
+    manager.get_frame(&surface, window_id, &qh, ());
+    queue.roundtrip(&mut state).expect("roundtrip get_frame");
+    queue.roundtrip(&mut state).expect("roundtrip configure");
+
+    eprintln!(
+        "configured={} closed={} saw_manager={}",
+        state.configured, state.closed, state.saw_manager
+    );
+    if std::env::var_os("AERO_EXPECT_CLOSED").is_some() {
+        assert_eq!(state.closed, 1, "esperado closed para janela inexistente");
+    }
+}

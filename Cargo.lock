@@ -14,10 +14,24 @@ version = "0.0.0"
 name = "aeroshell-compositor"
 version = "0.0.0"
 dependencies = [
+ "bitflags 2.13.2",
  "calloop 0.14.5",
  "smithay",
  "tracing",
  "tracing-subscriber",
+ "wayland-backend",
+ "wayland-scanner",
+ "wayland-server",
+]
+
+[[package]]
+name = "aeroshell-frame-client"
+version = "0.0.0"
+dependencies = [
+ "bitflags 2.13.2",
+ "wayland-backend",
+ "wayland-client",
+ "wayland-scanner",
 ]
 
 [[package]]

@@ -7,5 +7,9 @@ license.workspace = true
 [dependencies]
 smithay.workspace = true
 calloop.workspace = true
+wayland-scanner.workspace = true
+wayland-server.workspace = true
+wayland-backend.workspace = true
+bitflags.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true

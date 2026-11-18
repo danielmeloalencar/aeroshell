@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="aero_frame_v1">
+  <copyright>AeroShell private protocol (MIT).</copyright>
+
+  <interface name="aero_frame_manager_v1" version="1">
+    <description summary="frames de janela desenhados pelo shell">
+      Exposto apenas ao cliente de shell privilegiado; o compositor deve
+      recusar o bind para outros clientes (filtro de globais por credenciais).
+      O compositor anuncia janelas que precisam de decoração; o shell responde
+      criando frames. IDs de janela (uint32) nunca são reutilizados durante a
+      sessão, para que um frame atrasado não seja associado a outra janela.
+    </description>
+
+    <enum name="error">
+      <entry name="role" value="0" summary="wl_surface já tem outro role"/>
+      <entry name="already_constructed" value="1" summary="a janela já tem frame"/>
+    </enum>
+
+    <request name="destroy" type="destructor"/>
+
+    <request name="get_frame">
+      <description summary="cria o frame de uma janela">
+        Atribui o role aero_frame à superfície. Se o window_id não existir mais
+        (corrida legítima: a janela fechou após frame_requested), o compositor
+        cria o objeto normalmente e envia closed em seguida — NÃO é erro fatal.
+      </description>
+      <arg name="id" type="new_id" interface="aero_frame_v1"/>
+      <arg name="surface" type="object" interface="wl_surface"/>
+      <arg name="window_id" type="uint"/>
+    </request>
+
+    <event name="frame_requested">
+      <description summary="uma janela precisa de frame">
+        width/height são SEMPRE o tamanho do conteúdo, nunca o tamanho total do
+        frame. 0 significa "o cliente decide", como no xdg-shell.
+      </description>
+      <arg name="window_id" type="uint"/>
+      <arg name="width" type="int" summary="largura do conteúdo; 0 = o cliente decide"/>
+      <arg name="height" type="int" summary="altura do conteúdo; 0 = o cliente decide"/>
+      <arg name="state" type="uint" enum="aero_frame_v1.state"/>
+    </event>
+  </interface>
+
+  <interface name="aero_frame_v1" version="1">
+    <description summary="decoração de uma janela">
+
+      Convenção de geometry (todas as coordenadas do frame são relativas à
+      superfície do frame):
+
+        +-----------------------------------------------+
+        | sombra  | decoração (insets) | conteúdo       |
+        | (visual)| (posiciona cliente)|                |
+        +-----------------------------------------------+
+        ^         ^                     ^
+        |         |                     +-- (left, top) dentro da superfície
+        |         +-- insets: movedor do conteúdo
+        +-- shadow_extents: apenas visual, NÃO move o conteúdo
+
+      A superfície do frame mede conteúdo + insets + shadow_extents. O cliente
+      exclui a sombra da área de input com wl_surface.set_input_region.
+    </description>
+
+    <enum name="state" bitfield="true">
+      <entry name="maximized" value="1"/>
+      <entry name="fullscreen" value="2"/>
+      <entry name="activated" value="4"/>
+      <entry name="tiled" value="8"/>
+      <entry name="resizing" value="16"/>
+    </enum>
+
+    <enum name="resize_edge">
+      <entry name="none" value="0"/>
+      <entry name="top" value="1"/>
+      <entry name="bottom" value="2"/>
+      <entry name="left" value="4"/>
+      <entry name="top_left" value="5"/>
+      <entry name="bottom_left" value="6"/>
+      <entry name="right" value="8"/>
+      <entry name="top_right" value="9"/>
+      <entry name="bottom_right" value="10"/>
+    </enum>
+
+    <request name="destroy" type="destructor"/>
+
+    <request name="set_insets">
+      <description summary="decoração visível ao redor do conteúdo">
+        Estado pendente; vale no próximo wl_surface.commit. O conteúdo da
+        janela é posicionado a (left, top) dentro da superfície do frame.
+      </description>
+      <arg name="left" type="int"/>
+      <arg name="top" type="int"/>
+      <arg name="right" type="int"/>
+      <arg name="bottom" type="int"/>
+    </request>
+
+    <request name="set_shadow_extents">
+      <description summary="área apenas visual além dos insets">
+        Estado pendente. A sombra fica fora dos insets e não move o conteúdo;
+        o cliente deve excluí-la com wl_surface.set_input_region.
+      </description>
+      <arg name="left" type="int"/>
+      <arg name="top" type="int"/>
+      <arg name="right" type="int"/>
+      <arg name="bottom" type="int"/>
+    </request>
+
+    <request name="set_blur_region">
+      <description summary="região de blur-behind; ver ADR 0003">
+        Preferir ext-background-effect-v1 quando disponível; este request é o
+        fallback privado para versões sem o protocolo padrão.
+      </description>
+      <arg name="region" type="object" interface="wl_region" allow-null="true"/>
+    </request>
+
+    <request name="move">
+      <description summary="inicia grab de mover">
+        O compositor valida que o serial corresponde a um clique de botão
+        recebido na superfície DESTE frame e DESTE seat; caso contrário,
+        ignora silenciosamente, como o xdg-shell.
+      </description>
+      <arg name="seat" type="object" interface="wl_seat"/>
+      <arg name="serial" type="uint"/>
+    </request>
+
+    <request name="resize">
+      <description summary="inicia grab de redimensionar">
+        Mesma regra de validação de serial e seat de move.
+      </description>
+      <arg name="seat" type="object" interface="wl_seat"/>
+      <arg name="serial" type="uint"/>
+      <arg name="edges" type="uint" enum="resize_edge"/>
+    </request>
+
+    <request name="ack_configure">
+      <description summary="confirma uma configuração atômica">
+        O compositor aplica a geometria no commit seguinte; sem ack até o
+        timeout, a configuração é descartada.
+      </description>
+      <arg name="serial" type="uint"/>
+    </request>
+
+    <event name="configure">
+      <description summary="configuração atômica do frame">
+        width/height são do CONTEÚDO; 0 = o cliente decide.
+        Janelas minimizadas ou em fullscreen não têm o frame mapeado, mas o
+        objeto permanece vivo e continua recebendo configure.
+      </description>
+      <arg name="serial" type="uint"/>
+      <arg name="width" type="int"/>
+      <arg name="height" type="int"/>
+      <arg name="state" type="uint" enum="state"/>
+    </event>
+
+    <event name="closed">
+      <description summary="a janela foi destruída; destrua o frame"/>
+    </event>
+  </interface>
+</protocol>

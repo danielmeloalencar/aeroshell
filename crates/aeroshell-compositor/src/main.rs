@@ -1,5 +1,6 @@
 //! aeroshell-compositor — dono do estado e do input.
 
+mod aero_frame_protocol;
 mod backend;
 mod cli;
 mod input;
@@ -14,6 +15,8 @@ use smithay::reexports::{
     calloop::EventLoop,
     wayland_server::{Display, DisplayHandle},
 };
+pub use wayland_server;
+pub use wayland_server::protocol::{wl_seat, wl_surface};
 
 pub use state::AeroState;
 

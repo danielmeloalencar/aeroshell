@@ -98,6 +98,24 @@ remover/reinserir 1 componente 0,01 ms, buffer 1000x613 ARGB8888 = 2.452.000 byt
 **latência**, não memória; o ganho de memória vem de `related-view`. Smithay 0.7 já aceita
 `src` rect no `RenderElement::draw`.
 
+### S5 protocolo — código gerado e testes (ANTES do desenho do frame)
+- `protocols/aero_frame_v1.xml` v1 revisado:wl_surface no get_frame, frame_requested no manager,
+  objects wl_surface/wl_seat/wl_region, destructors, enums `state`/`resize_edge`/`error`,
+  `configure`/`ack_configure`, `closed`, `set_insets` + `set_shadow_extents` convenção com
+  diagrama ASCII, width/height sempre do conteúdo (0 = cliente decide), window_id não reutilizado,
+  validação de serial documentada, comportamento em minimized/fullscreen.
+- Código gerado com `wayland-scanner 0.31.11` + `wayland-backend 0.3.17`
+  (servidor no compositor, cliente em `aeroshell-frame-client`).
+- Segurança: global `aero_frame_manager_v1` com `can_view` que só libera clientes cujo PID foi
+  registrado como shell privilegiado no `insert_client` (`AERO_SHELL_PID`); padrão é negar todos.
+- `unknown_window`: objeto é criado e `closed` enviado (sem erro fatal); erro fatal reservado a
+  `already_constructed` (e role, quando aplicado).
+- Testes: `tests/integration/aero_frame_protocol.sh` (global invisível a cliente comum; corrida
+  com janela inexistente → closed) + 4 testes unitários (unknown/already/known/serial).
+- ADR 0003: `ext-background-effect-v1` existe no wayland-protocols 1.47; request privado fica
+  como fallback documentado.
+- **NÃO implementei o desenho do frame**, conforme pedido.
+
 ### S3 — concluído (2026-11-18)
 - `data-aero-interactive` → rects enviados por `window.webkit.messageHandlers.aero` → host aplica
   `gdk_surface_set_input_region`. `MutationObserver` + `ResizeObserver` recalculam a região quando

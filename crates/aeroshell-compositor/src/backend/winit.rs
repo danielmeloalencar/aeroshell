@@ -179,6 +179,13 @@ pub fn init_winit(
                             );
                         }
                     }
+                    if let Some((action, started)) = state.last_geometry_action.take() {
+                        tracing::info!(
+                            action = %action,
+                            latency_ms = started.elapsed().as_secs_f64() * 1000.0,
+                            "S5: resize/move → frame atualizado"
+                        );
+                    }
                     state.space.refresh();
                     state.popups.cleanup();
                     let _ = data.display_handle.flush_clients();
