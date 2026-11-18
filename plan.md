@@ -22,4 +22,6 @@ Rust 1.100.0, Bun 1.4.4, VM sem 3D (funcionamento validado; desempenho só em GP
   ambiente do compositor (use `AERO_PRIVILEGED_FD`); sem `/etc/pam.d` sem aviso.
 
 Histórico detalhado, hashes, benchmarks e limitações: [`docs/progress.md`](docs/progress.md).
-Guia rápido: [`README.md`](README.md). Convenções para agentes: [`AGENTS.md`](AGENTS.md).
+Plano completo (F0–F9, regras e visão): [`docs/plano-mestre.md`](docs/plano-mestre.md) (recuperado
+do `Agents.md` histórico) e [`docs/plano-completo-nested.md`](docs/plano-completo-nested.md) (matriz
+nested/udev). Guia rápido: [`README.md`](README.md). Convenções: [`AGENTS.md`](AGENTS.md).
