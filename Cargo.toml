@@ -1,0 +1,28 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/aeroshell-ipc",
+  "crates/aeroshell-auth",
+  "crates/aeroshell-services",
+  "crates/aeroshell-apps",
+  "crates/aeroshell-compositor",
+  "crates/aeroshell-shell",
+  "crates/aeroshell-lock",
+  "crates/aeroshell-greeter",
+]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+smithay = { version = "=0.7.0", default-features = false, features = [
+  "backend_winit",
+  "wayland_frontend",
+  "desktop",
+  "renderer_gl",
+] }
+calloop = "=0.14.5"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

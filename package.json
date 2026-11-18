@@ -1,0 +1,18 @@
+{
+  "name": "aeroshell",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/*"],
+  "engines": { "bun": ">=1.4.4" },
+  "scripts": {
+    "test": "bun test",
+    "check": "bun test && tsc --noEmit",
+    "dev": "bun packages/cli/src/index.ts dev",
+    "doctor": "bun packages/cli/src/index.ts doctor",
+    "generate:types": "cargo test -p aeroshell-ipc --features export-bindings"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5"
+  }
+}
