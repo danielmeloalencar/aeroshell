@@ -140,11 +140,13 @@ OK (d): move com serial falso ignorado
 - Execução: build `--release`, 3 repetições, N=5 e N=20 frames, VM sem 3D (medida relativa);
   veredito final em GPU real.
 
-### Blur: esforço
-Smithay 0.7 não tem handler para `ext-background-effect-v1`. Implementar exige gerar o protocolo,
-fazer `GlobalDispatch`/`Dispatch`, guardar a região por superfície e integrar blur no pipeline de
-render (o `RenderElement::draw` já aceita `opaque_regions`; blur real precisa shader/textura).
-É esforço grande → **adiar o blur para depois do protótipo do frame**, conforme permitido.
+### Blur: esforço (corrigido)
+O crate publicado smithay 0.7.0 não tem handler, **mas o git master já tem**
+`smithay::wayland::background_effect` (handler + estado double-buffered), e `wayland-protocols
+0.32.13` já traz os bindings em `ext::background_effect::v1`. O custo do protocolo é baixo; o
+trabalho real é o render offscreen/shader e o damage tracking (issue #1363), com prior art no
+niri. ADR 0003 reescrito: esforço **médio**, adiado para depois do protótipo; trocar para uma rev
+fixa do Smithay git será avaliado em ADR próprio no fim do F0/início do F1.
 
 ### Correções pedidas ao protocolo (histórico)
 - `role` implementado com `smithay::wayland::compositor::give_role` + erro fatal `Role`.
