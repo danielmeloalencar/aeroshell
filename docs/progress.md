@@ -349,11 +349,20 @@ Código: `examples/frame_spike.rs` + `tests/integration/frame_spike_real.py`
 3. teste diagnóstico com margem de 60 px (`AERO_FRAME_TEST_MARGIN`, só debug/bench;
    `total=420x345`, posição `(-60,-60)`): usuário viu **frame pequeno e por cima**.
 
-A fonte (`smithay-0.7.0/src/desktop/space/mod.rs:696-705`) coloca `custom_elements` antes dos
-elementos do space (teoricamente atrás), mas as observações não são consistentes entre si.
-Não houve erro de import/render no log; `RENDER_DEBUG` confirmou `space=1 frames=1` e geometria
-do zenity `300x225`. **Causa do z-order: NÃO PROVADA.** Não tentei uma quarta variação —
-regra 4.1 e regra de parada do usuário. Isso exige decisão antes de qualquer novo código.
+**TESTE CONTROLADO DE CORES (aceito pelo usuário) — DEFINITIVO:** frame vermelho
+(`#ff0000` via CSS no spike) contra zenity cinza. Imagem enviada pelo usuário mostra o
+**vermelho POR CIMA do diálogo**, cobrindo a parte superior do zenity (o botão OK continua
+visível abaixo). Logo o z-order está **errado**: `custom_elements` do `render_output`
+são desenhados na frente dos elementos do space nesta composição, apesar de
+`smithay-0.7.0/src/desktop/space/mod.rs:696-705` acrescentá-los ao vetor antes.
+O frame também ficou menor que o `total=420x345` configurado — o GTK não aplicou o
+`zwlr_layer_surface.configure` completo (não medido ao certo; estou supondo).
+
+**CONCLUSÃO:** z-order do frame é bug confirmado, não observação ambígua. Causa raiz da ordem de
+desenho **não determinada**. Parei sem nova variação (regra 4.1 / regra de parada).
+Correções possíveis a decidir: (1) desenhar o frame num passe manual ANTERIOR ao
+`render_output` (`RenderElement::draw` direto no framebuffer); (2) renderizar o cliente
+também como custom element depois do frame. Nenhuma foi tentada.
 
 **NÃO VALIDADO:** fechar zenity → `closed` → frame destruído (bloqueado pela falha de z-order);
 move/resize com serial válido; teclado nunca no frame (zenity tem só um botão e estava coberto).

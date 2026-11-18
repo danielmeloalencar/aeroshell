@@ -137,6 +137,16 @@ fn main() {
         .application_id("dev.aeroshell.frame-spike")
         .build();
     app.connect_activate(|app| {
+        // Teste controlado: frame VERMELHO para distinguir do cliente (zenity cinza).
+        let provider = gtk4::CssProvider::new();
+        provider.load_from_string("window { background-color: #ff0000; }");
+        if let Some(display) = gtk4::gdk::Display::default() {
+            gtk4::style_context_add_provider_for_display(
+                &display,
+                &provider,
+                gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+            );
+        }
         let window = gtk4::ApplicationWindow::builder()
             .application(app)
             .default_width(320)
