@@ -24,14 +24,17 @@ impl AeroState {
             .as_ref()
             .map(|(s, _)| self.is_interactive_layer_surface(s))
             .unwrap_or(false);
-        let t_nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0);
-        eprintln!(
-            "POINTER_MOTION serial={} t={t_nanos} x={x} y={y}",
-            u32::from(serial)
-        );
+        #[cfg(feature = "bench")]
+        {
+            let t_nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0);
+            eprintln!(
+                "POINTER_MOTION serial={} t={t_nanos} x={x} y={y}",
+                u32::from(serial)
+            );
+        }
         tracing::info!(x, y, under = ?under.as_ref().map(|(s, _)| s.id()), "TESTE ponteiro motion");
         let pointer = self.seat.get_pointer().unwrap();
         pointer.motion(

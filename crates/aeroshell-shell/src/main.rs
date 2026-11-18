@@ -4,6 +4,8 @@ mod benchmark;
 mod bridge;
 mod host;
 mod input_region;
+#[cfg(feature = "probe-registry")]
+mod registry_probe;
 mod scheme;
 
 use gtk4::prelude::*;
@@ -22,6 +24,11 @@ fn main() {
             .with_writer(std::io::stderr)
             .init();
     }
+
+    // Prova do caminho de produção: usar WAYLAND_SOCKET ANTES do GDK e remover a
+    // variável em seguida, para o painel seguir pelo socket público.
+    #[cfg(feature = "probe-registry")]
+    registry_probe::log_privileged_globals();
 
     // GApplication rejeita opções desconhecidas antes do nosso código; use env vars.
     let benchmark_n = std::env::var("AERO_BENCH")
@@ -48,9 +55,21 @@ fn main() {
                 .default_width(1280)
                 .default_height(800)
                 .build();
-            let label = gtk4::Label::new(Some(
-                "BACKDROP — clique aqui pela área transparente do painel",
-            ));
+            let label = gtk4::Label::new(Some("BACKDROP — clique na área transparente do painel"));
+            // Contador visível: permite confirmar que o clique na parte transparente
+            // do painel passa através da layer surface e chega a esta janela.
+            let counter = std::rc::Rc::new(std::cell::Cell::new(0u32));
+            let gesture = gtk4::GestureClick::new();
+            let weak_label = label.downgrade();
+            let weak_counter = counter.clone();
+            gesture.connect_pressed(move |_, _, _, _| {
+                if let Some(label) = weak_label.upgrade() {
+                    let n = weak_counter.get() + 1;
+                    weak_counter.set(n);
+                    label.set_label(&format!("BACKDROP recebeu {n} clique(s)"));
+                }
+            });
+            window.add_controller(gesture);
             window.set_child(Some(&label));
             window.present();
             tracing::info!("BACKDROP apresentado");

@@ -1,5 +1,6 @@
 //! Cliente de teste do protocolo aero_frame_v1 (S5): valida global, get_frame e eventos.
 
+#[cfg(feature = "bench")]
 use std::os::fd::AsFd;
 use wayland_client::{protocol::wl_registry, Connection, Dispatch, Proxy, QueueHandle};
 
@@ -13,9 +14,9 @@ mod protocol {
         use super::core_interfaces::*;
         #[allow(clippy::single_component_path_imports)]
         use wayland_client;
-        pub use wayland_client::protocol::{
-            wl_buffer, wl_compositor, wl_seat, wl_shm, wl_shm_pool, wl_surface,
-        };
+        #[cfg(feature = "bench")]
+        pub use wayland_client::protocol::{wl_buffer, wl_shm, wl_shm_pool};
+        pub use wayland_client::protocol::{wl_compositor, wl_seat, wl_surface};
 
         wayland_scanner::generate_interfaces!("../../protocols/aero_frame_v1.xml");
         wayland_scanner::generate_client_code!("../../protocols/aero_frame_v1.xml");
@@ -41,17 +42,21 @@ mod protocol {
 use protocol::{
     aero_frame_manager_v1::{AeroFrameManagerV1, Event as ManagerEvent},
     aero_frame_v1::{AeroFrameV1, Event as FrameEvent},
-    wl_buffer::{self, WlBuffer},
     wl_compositor::WlCompositor,
     wl_seat::WlSeat,
-    wl_shm::{self, WlShm},
-    wl_shm_pool,
     wl_surface::WlSurface,
     xdg::{xdg_surface::XdgSurface, xdg_toplevel::XdgToplevel, xdg_wm_base::XdgWmBase},
+};
+#[cfg(feature = "bench")]
+use protocol::{
+    wl_buffer::{self, WlBuffer},
+    wl_shm::{self, WlShm},
+    wl_shm_pool,
 };
 
 /// Cria um buffer shm com o tamanho pedido. Arquivo em /dev/shm: sem libc,
 /// sem `from_raw_fd` (o fd vem de `File::as_fd`, com dono).
+#[cfg(feature = "bench")]
 fn make_buffer(shm: &WlShm, qh: &QueueHandle<State>, width: i32, height: i32) -> Option<WlBuffer> {
     let stride = width * 4;
     let size = stride * height;
@@ -74,6 +79,7 @@ struct State {
     frames: Vec<AeroFrameV1>,
     xdg_shell: Option<XdgWmBase>,
     seat: Option<WlSeat>,
+    #[cfg(feature = "bench")]
     shm: Option<WlShm>,
     surface: Option<WlSurface>,
     configured: u32,
@@ -114,6 +120,7 @@ impl Dispatch<wl_registry::WlRegistry, ()> for State {
                     state.seat =
                         Some(registry.bind::<WlSeat, (), State>(name, version.min(9), qh, ()));
                 }
+                #[cfg(feature = "bench")]
                 "wl_shm" => {
                     state.shm =
                         Some(registry.bind::<WlShm, (), State>(name, version.min(2), qh, ()));
@@ -162,6 +169,7 @@ impl Dispatch<WlSurface, ()> for State {
     }
 }
 
+#[cfg(feature = "bench")]
 macro_rules! empty_dispatch {
     ($ty:ty, $event:ty) => {
         impl Dispatch<$ty, ()> for State {
@@ -177,8 +185,11 @@ macro_rules! empty_dispatch {
         }
     };
 }
+#[cfg(feature = "bench")]
 empty_dispatch!(WlShm, wl_shm::Event);
+#[cfg(feature = "bench")]
 empty_dispatch!(wl_shm_pool::WlShmPool, wl_shm_pool::Event);
+#[cfg(feature = "bench")]
 empty_dispatch!(WlBuffer, wl_buffer::Event);
 
 impl Dispatch<AeroFrameManagerV1, ()> for State {
@@ -269,44 +280,52 @@ impl Dispatch<AeroFrameV1, ()> for State {
                 ..
             } => {
                 state.configured += 1;
-                let t_nanos = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_nanos())
-                    .unwrap_or(0);
-                eprintln!("CLIENT_CONFIGURE_RECV serial={serial} t={t_nanos} {width}x{height}");
-                if std::env::var_os("AERO_FRAME_BENCH").is_some() {
-                    let delay: u64 = std::env::var("AERO_FRAME_ACK_DELAY_MS")
-                        .ok()
-                        .and_then(|v| v.parse().ok())
-                        .unwrap_or(0);
-                    if delay > 0 {
-                        std::thread::sleep(std::time::Duration::from_millis(delay));
-                    }
-                    if let (Some(shm), Some(surface)) = (&state.shm, &state.surface) {
-                        let mismatch = std::env::var_os("AERO_FRAME_CONTENT_MISMATCH").is_some();
-                        let bw = if mismatch { (width - 20).max(1) } else { width };
-                        let bh = if mismatch {
-                            (height - 12).max(1)
-                        } else {
-                            height
-                        };
-                        if let Some(buffer) = make_buffer(shm, qh, bw, bh) {
-                            surface.attach(Some(&buffer), 0, 0);
-                        }
-                    }
-                    if let Some(surface) = &state.surface {
-                        surface.commit();
-                    }
-                    eprintln!("CLIENT_COMMIT serial={serial}");
-                    frame.ack_configure(serial);
-                    let ack_nanos = std::time::SystemTime::now()
+                #[cfg(not(feature = "bench"))]
+                let _ = (qh, width, height);
+                #[cfg(feature = "bench")]
+                {
+                    let t_nanos = std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
                         .map(|d| d.as_nanos())
                         .unwrap_or(0);
-                    eprintln!("CLIENT_ACK_SENT serial={serial} t={ack_nanos}");
-                } else {
-                    frame.ack_configure(serial);
+                    eprintln!("CLIENT_CONFIGURE_RECV serial={serial} t={t_nanos} {width}x{height}");
+                    if std::env::var_os("AERO_FRAME_BENCH").is_some() {
+                        let delay: u64 = std::env::var("AERO_FRAME_ACK_DELAY_MS")
+                            .ok()
+                            .and_then(|v| v.parse().ok())
+                            .unwrap_or(0);
+                        if delay > 0 {
+                            std::thread::sleep(std::time::Duration::from_millis(delay));
+                        }
+                        if let (Some(shm), Some(surface)) = (&state.shm, &state.surface) {
+                            let mismatch =
+                                std::env::var_os("AERO_FRAME_CONTENT_MISMATCH").is_some();
+                            let bw = if mismatch { (width - 20).max(1) } else { width };
+                            let bh = if mismatch {
+                                (height - 12).max(1)
+                            } else {
+                                height
+                            };
+                            if let Some(buffer) = make_buffer(shm, qh, bw, bh) {
+                                surface.attach(Some(&buffer), 0, 0);
+                            }
+                        }
+                        if let Some(surface) = &state.surface {
+                            surface.commit();
+                        }
+                        eprintln!("CLIENT_COMMIT serial={serial}");
+                        frame.ack_configure(serial);
+                        let ack_nanos = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_nanos())
+                            .unwrap_or(0);
+                        eprintln!("CLIENT_ACK_SENT serial={serial} t={ack_nanos}");
+                    } else {
+                        frame.ack_configure(serial);
+                    }
                 }
+                #[cfg(not(feature = "bench"))]
+                frame.ack_configure(serial);
             }
             FrameEvent::Closed => {
                 state.closed += 1;
@@ -337,6 +356,7 @@ fn main() {
         frames: Vec::new(),
         xdg_shell: None,
         seat: None,
+        #[cfg(feature = "bench")]
         shm: None,
         surface: None,
         configured: 0,
@@ -392,6 +412,7 @@ fn main() {
     }
     queue.roundtrip(&mut state).expect("roundtrip get_frame");
     queue.roundtrip(&mut state).expect("roundtrip configure");
+    #[cfg(feature = "bench")]
     if std::env::var_os("AERO_FRAME_BENCH").is_some() {
         queue.roundtrip(&mut state).expect("roundtrip bench flush");
     }

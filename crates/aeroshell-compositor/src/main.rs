@@ -3,6 +3,7 @@
 mod aero_frame_protocol;
 mod backend;
 mod cli;
+#[cfg(feature = "bench")]
 mod frame_metrics;
 mod input;
 mod protocols;
@@ -103,6 +104,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Knob de benchmark: simula janelas existentes para que get_frame com
     // window_id=0 não seja tratado como corrida de fechamento.
+    // Só existe sob a feature `bench`; o binário de produção não lê este env.
+    #[cfg(feature = "bench")]
     if let Ok(count) = std::env::var("AERO_FRAME_BENCH_WINDOWS").and_then(|v| {
         v.parse::<usize>()
             .map_err(|_| std::env::VarError::NotPresent)
@@ -168,8 +171,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     event_loop.run(None, &mut data, |data| {
+        #[cfg(feature = "bench")]
         data.state.check_frame_timeouts();
+        let _ = data;
     })?;
+    #[cfg(feature = "bench")]
     data.state.log_frame_summary();
 
     Ok(())

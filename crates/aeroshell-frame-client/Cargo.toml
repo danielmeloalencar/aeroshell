@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+# Modo bench: shm sintético, ack configurável e CONTENT_MISMATCH.
+bench = []
+
 [dependencies]
 wayland-client.workspace = true
 wayland-backend.workspace = true

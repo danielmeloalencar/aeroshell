@@ -19,6 +19,15 @@ CLIENT = os.path.join(ROOT, "target/release/aeroshell-frame-client")
 
 REPS = 3
 NS = (5, 20)
+
+# Os knobs de benchmark só existem com a feature `bench`: construir essa variante.
+subprocess.run(
+    ["cargo", "build", "--release",
+     "-p", "aeroshell-compositor", "--features", "bench",
+     "-p", "aeroshell-frame-client", "--features", "bench"],
+    cwd=ROOT, check=True,
+)
+
 base = os.environ.copy()
 for key in ("WAYLAND_SOCKET", "AERO_PRIVILEGED_FD"):
     base.pop(key, None)

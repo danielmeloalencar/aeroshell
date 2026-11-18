@@ -10,12 +10,15 @@ use smithay::{
     wayland::{
         buffer::BufferHandler,
         compositor::{
-            get_parent, is_sync_subsurface, with_states, BufferAssignment, CompositorClientState,
-            CompositorHandler, CompositorState, SurfaceAttributes,
+            get_parent, is_sync_subsurface, CompositorClientState, CompositorHandler,
+            CompositorState,
         },
         shm::{ShmHandler, ShmState},
     },
 };
+
+#[cfg(feature = "bench")]
+use smithay::wayland::compositor::{with_states, BufferAssignment, SurfaceAttributes};
 
 use crate::{protocols::xdg_shell, state::AeroState};
 
@@ -32,47 +35,49 @@ impl CompositorHandler for AeroState {
     }
 
     fn commit(&mut self, surface: &WlSurface) {
-        // Métricas do protótipo do frame (i) e (ii): ler o buffer ANTES do
-        // `on_commit_buffer_handler`, que faz `attrs.buffer.take()`.
-
-        let probe_index = self
-            .frame_probes
-            .iter()
-            .position(|p| &p.surface == surface && !p.committed);
-        if let Some(index) = probe_index {
-            let buffer_size = with_states(surface, |states| {
-                match &states
-                    .cached_state
-                    .get::<SurfaceAttributes>()
-                    .current()
-                    .buffer
-                {
-                    Some(BufferAssignment::NewBuffer(buffer)) => {
-                        smithay::wayland::shm::with_buffer_contents(buffer, |_, _, data| {
-                            (data.width as u32, data.height as u32)
-                        })
-                        .ok()
+        #[cfg(feature = "bench")]
+        {
+            // Métricas do protótipo do frame (i) e (ii): ler o buffer ANTES do
+            // `on_commit_buffer_handler`, que faz `attrs.buffer.take()`.
+            let probe_index = self
+                .frame_probes
+                .iter()
+                .position(|p| &p.surface == surface && !p.committed);
+            if let Some(index) = probe_index {
+                let buffer_size = with_states(surface, |states| {
+                    match &states
+                        .cached_state
+                        .get::<SurfaceAttributes>()
+                        .current()
+                        .buffer
+                    {
+                        Some(BufferAssignment::NewBuffer(buffer)) => {
+                            smithay::wayland::shm::with_buffer_contents(buffer, |_, _, data| {
+                                (data.width as u32, data.height as u32)
+                            })
+                            .ok()
+                        }
+                        _ => None,
                     }
-                    _ => None,
-                }
-            });
-            let probe = &mut self.frame_probes[index];
-            probe.committed = true;
-            let mismatch = buffer_size
-                .map(|size| crate::frame_metrics::is_descompasso(size, probe.size))
-                .unwrap_or(false);
-            self.frame_commit_samples.push((
-                probe.serial,
-                probe.configured_at.elapsed().as_secs_f64() * 1000.0,
-            ));
-            eprintln!(
-                "FRAME_COMMIT serial={} window_id={} configure_to_commit_ms={:.3} buffer={:?} configured={:?} descompasso={mismatch}",
-                probe.serial,
-                probe.window_id,
-                probe.configured_at.elapsed().as_secs_f64() * 1000.0,
-                buffer_size,
-                probe.size
-            );
+                });
+                let probe = &mut self.frame_probes[index];
+                probe.committed = true;
+                let mismatch = buffer_size
+                    .map(|size| crate::frame_metrics::is_descompasso(size, probe.size))
+                    .unwrap_or(false);
+                self.frame_commit_samples.push((
+                    probe.serial,
+                    probe.configured_at.elapsed().as_secs_f64() * 1000.0,
+                ));
+                eprintln!(
+                    "FRAME_COMMIT serial={} window_id={} configure_to_commit_ms={:.3} buffer={:?} configured={:?} descompasso={mismatch}",
+                    probe.serial,
+                    probe.window_id,
+                    probe.configured_at.elapsed().as_secs_f64() * 1000.0,
+                    buffer_size,
+                    probe.size
+                );
+            }
         }
         on_commit_buffer_handler::<Self>(surface);
         if !is_sync_subsurface(surface) {

@@ -28,6 +28,7 @@ use smithay::{
 use crate::{cli::Options, CalloopData};
 
 /// Estado de um configure pendente, usado para as métricas do protótipo.
+#[cfg(feature = "bench")]
 #[derive(Debug, Clone)]
 pub struct FrameProbe {
     pub surface: WlSurface,
@@ -57,8 +58,10 @@ pub struct AeroState {
     /// Configurações enviadas e ainda não confirmadas (serial, instante).
     pub pending_configures: Vec<(u32, std::time::Instant)>,
     /// Sondas de configure: medem configure → commit e descompasso por passo.
+    #[cfg(feature = "bench")]
     pub frame_probes: Vec<FrameProbe>,
     /// Amostras de configure → commit (serial, ms) para agregação no fim.
+    #[cfg(feature = "bench")]
     pub frame_commit_samples: Vec<(u32, f64)>,
     /// Último serial de botão recebido (validação de move/resize).
     pub last_button_serial: Option<u32>,
@@ -148,7 +151,9 @@ impl AeroState {
             cursor_over_interactive: false,
             frames: Vec::new(),
             pending_configures: Vec::new(),
+            #[cfg(feature = "bench")]
             frame_probes: Vec::new(),
+            #[cfg(feature = "bench")]
             frame_commit_samples: Vec::new(),
             last_button_serial: None,
             last_geometry_action: None,
@@ -207,6 +212,7 @@ impl AeroState {
     }
 
     /// Agrega média e p95 de configure → commit ao encerrar.
+    #[cfg(feature = "bench")]
     pub fn log_frame_summary(&self) {
         if self.frame_commit_samples.is_empty() {
             return;
@@ -226,6 +232,7 @@ impl AeroState {
 
     /// Chamado no idle do event loop: registra uma vez cada `ack_configure`
     /// que estourou o timeout de 100 ms (métrica iii).
+    #[cfg(feature = "bench")]
     pub fn check_frame_timeouts(&mut self) {
         for probe in self.frame_probes.iter_mut() {
             if !probe.acked

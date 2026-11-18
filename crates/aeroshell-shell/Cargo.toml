@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+# Somente para a prova do registry no fluxo de produção. Fora do binário padrão.
+probe-registry = ["dep:wayland-client"]
+
 [dependencies]
 gtk4 = "=0.11"
 webkit6 = { version = "=0.6.1", features = ["v2_52", "gtk_v4_18"] }
@@ -12,3 +16,4 @@ cairo-rs.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+wayland-client = { workspace = true, optional = true }

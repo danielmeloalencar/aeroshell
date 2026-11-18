@@ -111,9 +111,12 @@ impl Dispatch<AeroFrameManagerV1, ()> for AeroState {
                     .unwrap_or((1280, 800).into());
                 let frame_state = crate::aero_frame_protocol::aero_frame_v1::State::empty();
                 manager.frame_requested(window_id, size.w, size.h, frame_state);
-                // `AERO_FRAME_STEPS`: quantos passos de resize sintéticos enviar
-                // de uma vez (N=5 / N=20 nas medições). Cada passo tem tamanho
-                // diferente para exercitar configure → commit e descompasso.
+                // Em produção: exatamente um configure, sem ler variável de ambiente.
+                #[cfg(not(feature = "bench"))]
+                let steps: u32 = 1;
+                // Só sob `bench`: quantos passos de resize sintéticos enviar de uma
+                // vez (N=5 / N=20 nas medições).
+                #[cfg(feature = "bench")]
                 let steps: u32 = std::env::var("AERO_FRAME_STEPS")
                     .ok()
                     .and_then(|v| v.parse().ok())
@@ -126,17 +129,22 @@ impl Dispatch<AeroFrameManagerV1, ()> for AeroState {
                     frame.configure(serial, w, h, frame_state);
                     let configured_at = Instant::now();
                     state.pending_configures.push((serial, configured_at));
-                    state.frame_probes.push(crate::state::FrameProbe {
-                        surface: surface.clone(),
-                        window_id,
-                        serial,
-                        configured_at,
-                        size: (w as u32, h as u32),
-                        acked: false,
-                        committed: false,
-                        timeout_logged: false,
-                    });
-                    eprintln!("FRAME_CONFIGURE serial={serial} window_id={window_id} w={w} h={h}");
+                    #[cfg(feature = "bench")]
+                    {
+                        state.frame_probes.push(crate::state::FrameProbe {
+                            surface: surface.clone(),
+                            window_id,
+                            serial,
+                            configured_at,
+                            size: (w as u32, h as u32),
+                            acked: false,
+                            committed: false,
+                            timeout_logged: false,
+                        });
+                        eprintln!(
+                            "FRAME_CONFIGURE serial={serial} window_id={window_id} w={w} h={h}"
+                        );
+                    }
                 }
                 state.frames.push((frame, window_id));
                 tracing::info!(
@@ -214,8 +222,9 @@ impl Dispatch<AeroFrameV1, u32> for AeroState {
                 state.last_geometry_action = Some(("resize".to_owned(), now));
                 tracing::info!(window_id = *window_id, serial, ?edges, "resize do frame");
 
-                // Protótipo: cada resize válido gera um novo configure com tamanho
-                // diferente, para exercitar configure → commit por passo.
+                // Só sob `bench`: cada resize válido gera um novo configure com
+                // tamanho diferente, para exercitar configure → commit por passo.
+                #[cfg(feature = "bench")]
                 if let Some(probe) = state.frame_probes.iter_mut().find(|p| p.serial == serial) {
                     let next_serial = state.pending_configures.len() as u32 + 100;
                     let w = probe.size.0.saturating_add(40);
@@ -242,6 +251,7 @@ impl Dispatch<AeroFrameV1, u32> for AeroState {
                 {
                     let (_, started) = state.pending_configures.remove(pos);
                     let ack_ms = started.elapsed().as_secs_f64() * 1000.0;
+                    #[cfg(feature = "bench")]
                     if let Some(probe) = state.frame_probes.iter_mut().find(|p| p.serial == serial)
                     {
                         probe.acked = true;
