@@ -5,6 +5,18 @@
 ### Concluído
 - Verificação de ambiente e versões (2026-11-18): Ubuntu 26.04.1, Rust 1.100.0, Bun 1.4.4,
   GTK 4.22.4, WebKitGTK 2.52.6, wayland 1.24.0, wayland-protocols 1.47.
+- Dependências do sistema agora instaladas **globalmente**: `pkg-config --modversion
+  gtk4-layer-shell-0` → `1.3.0` sem `PKG_CONFIG_PATH`/`LD_LIBRARY_PATH`/`RUSTFLAGS` customizados.
+  O aptroot temporário em `/tmp/opencode/aptroot` não é mais necessário para compilar.
+- Verificação limpa (sem env overrides):
+  - `cargo check --workspace --all-targets` → `Finished ... in 34.19s` (exit 0).
+  - `cargo test --workspace` → todos os suites `ok` (exit 0).
+  - `cargo clippy --workspace --all-targets -- -D warnings` → `Finished ... in 0.59s` (exit 0).
+  - `bun test` → 1 arquivo / 4 expects verdes.
+- `scripts/doctor.sh` criado: verifica ferramentas e pkg-configs e imprime **qual pacote apt
+  falta**; `just check` passou a chamá-lo antes do `cargo check`.
+- ADR 0002 registra a combinação validada (Ubuntu 26.04 + lib C 1.3.0 + crate 0.8.0) e que
+  Debian trixie 1.0.x ainda não foi validado (mínimo declarado do crate é 1.0).
 - Correção de spec: greetd usa `post_auth_message_response`, framing `u32` nativo + JSON.
 - `greetd_ipc` é GPL-3.0-only → implementar protocolo localmente.
 - Binding Rust do gtk4-layer-shell no apt está defasado → usar crates.io 0.8.0 + lib C 1.3.0.

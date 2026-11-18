@@ -4,13 +4,12 @@ use wayland_client::{protocol::wl_registry, Connection, Dispatch, Proxy, QueueHa
 
 mod protocol {
     mod core_interfaces {
-        use wayland_backend;
         wayland_scanner::generate_interfaces!("/usr/share/wayland/wayland.xml");
     }
 
     mod generated {
+        #[allow(clippy::single_component_path_imports)]
         use wayland_client;
-        use wayland_backend;
         #[allow(unused_imports)]
         use super::core_interfaces::*;
         pub use wayland_client::protocol::{wl_compositor, wl_seat, wl_surface};
@@ -19,8 +18,8 @@ mod protocol {
         wayland_scanner::generate_client_code!("../../protocols/aero_frame_v1.xml");
 
         pub mod xdg {
-            use wayland_client;
-            use wayland_backend;
+            #[allow(clippy::single_component_path_imports)]
+        use wayland_client;
             #[allow(unused_imports)]
             use super::super::core_interfaces::*;
             pub use wayland_client::protocol::{wl_output, wl_seat, wl_surface};

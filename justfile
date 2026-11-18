@@ -9,6 +9,7 @@ bootstrap:
       libpam0g-dev libdbus-1-dev dbus
 
 check:
+    bash scripts/doctor.sh
     cargo check --workspace --all-targets
     bun test
 

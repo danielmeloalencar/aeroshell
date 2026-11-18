@@ -102,7 +102,6 @@ pub fn run_webviews(app: &gtk4::Application, n: usize, related: bool) {
     let remaining = std::rc::Rc::new(std::cell::Cell::new(n));
     for view in &views {
         let remaining = remaining.clone();
-        let started = started;
         view.connect_load_changed(move |_, event| {
             if event == LoadEvent::Finished {
                 remaining.set(remaining.get().saturating_sub(1));

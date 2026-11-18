@@ -24,6 +24,13 @@ Ambiente validado em 2026-11-18: Ubuntu 26.04.1 (resolute), Rust 1.100.0, Bun 1.
 ### Ferramentas
 `rust-toolchain.toml` fixado em 1.100.0. Bun 1.4.4. `just` disponível; comandos também via `cargo`/`bun`.
 
+### Ambiente de build (validado sem env customizado)
+`pkg-config --modversion gtk4-layer-shell-0` → `1.3.0` (Ubuntu 26.04). Combinação validada:
+lib C 1.3.0-1 + crate Rust 0.8.0 (mínimo declarado 1.0). `cargo check`, `cargo test` e
+`cargo clippy -- -D warnings` passam sem `PKG_CONFIG_PATH`/`LD_LIBRARY_PATH`/`RUSTFLAGS`.
+Debian trixie 1.0.x ainda não validado. `scripts/doctor.sh` (chamado por `just check`) nomeia
+o pacote apt faltante antes do build.
+
 ### Correções de spec apuradas
 - greetd: campo `post_auth_message_response`; framing `u32` em **byte order nativo** + JSON UTF-8; `auth_message_type ∈ {visible, secret, info, error}`; `error_type ∈ {auth_error, error}`.
 - gtk4-layer-shell: `LD_PRELOAD` mantido como defesa; falha silenciosa **não reproduziu** na lib C 1.3.0, falta testar 1.0.x (trixie). Ver `docs/nested-dev.md`.
