@@ -43,7 +43,7 @@ def run_privileged(name, env_extra):
     cenv = ENV.copy()
     cenv["WAYLAND_SOCKET"] = str(child.fileno())
     cenv["RUST_LOG"] = "info"
-    comp, log = start_compositor(name, {"WAYLAND_SOCKET": str(child.fileno())}, pass_fds=(child.fileno(),), spawn_client="zenity --info --text=JANELA-XDG")
+    comp, log = start_compositor(name, {"AERO_PRIVILEGED_FD": str(child.fileno())}, pass_fds=(child.fileno(),), spawn_client="zenity --info --text=JANELA-XDG")
     os.set_inheritable(parent.fileno(), True)
     penv = ENV.copy()
     penv["WAYLAND_SOCKET"] = str(parent.fileno())
@@ -76,18 +76,33 @@ def main():
     assert "não é visível" in result.stdout + result.stderr, result.stdout + result.stderr
     print("OK (a): socket público nunca vê o global, mesmo com AERO_SHELL_PID forjado")
 
+    # (a2) cliente privilegiado vê o global e completa o roundtrip.
+    name = f"wayland-aero-frame-py-ok-{os.getpid()}"
+    result, out, comp_out = run_privileged(name, {"AERO_TEST_OK": "1", "AERO_FRAME_WINDOW_ID": "0"})
+    assert result.returncode == 0, out
+    assert "completou o roundtrip" in out, out
+    print("OK (a2): cliente privilegiado vê o global e completa o roundtrip")
+
     # (b) cliente privilegiado via socketpair: segundo get_frame => already_constructed.
     name = f"wayland-aero-frame-py-b-{os.getpid()}"
     result, out, comp_out = run_privileged(name, {"AERO_TEST_DOUBLE": "1", "AERO_FRAME_WINDOW_ID": "0"})
-    assert "already" in out.lower() or "construído" in out.lower() or result.returncode != 0, out
-    assert "already_constructed" in comp_out.lower() or "já tem frame" in comp_out, comp_out[-2000:]
+    assert "já tem frame" in out, out
+    assert result.returncode != 0, out
     print("OK (b): segundo get_frame gerou already_constructed")
 
-    # (c) serial falso em move é ignorado silenciosamente.
+    # (c) mesma wl_surface como xdg_toplevel e frame => erro role.
+    name = f"wayland-aero-frame-py-role-{os.getpid()}"
+    result, out, comp_out = run_privileged(name, {"AERO_TEST_ROLE": "1", "AERO_FRAME_WINDOW_ID": "0"})
+    assert "toplevel criado" in out, out
+    assert "outro role" in out.lower() or "role" in out.lower(), out
+    assert result.returncode != 0, out
+    print("OK (c): wl_surface com toplevel + frame gerou erro role")
+
+    # (d) serial falso em move é ignorado silenciosamente.
     name = f"wayland-aero-frame-py-c-{os.getpid()}"
     result, out, comp_out = run_privileged(name, {"AERO_TEST_FALSE_SERIAL": "1", "AERO_FRAME_WINDOW_ID": "0"})
     assert "move do frame" not in comp_out, comp_out[-2000:]
-    print("OK (c): move com serial falso ignorado")
+    print("OK (d): move com serial falso ignorado")
 
 
 if __name__ == "__main__":

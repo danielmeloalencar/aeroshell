@@ -116,7 +116,37 @@ remover/reinserir 1 componente 0,01 ms, buffer 1000x613 ARGB8888 = 2.452.000 byt
   como fallback documentado.
 - **NÃO implementei o desenho do frame**, conforme pedido.
 
-### Correções pedidas ao protocolo (em andamento)
+### Correções do protocolo — CONCLUÍDAS (2ª tentativa, com socketpair sem WAYLAND_SOCKET no compositor)
+Causa do abort anterior: `winit` chama `Connection::connect_to_env()`, que consome `WAYLAND_SOCKET`
+(`wayland-client/src/conn.rs:47`) e `winit/src/platform_impl/linux/mod.rs:741`. O compositor passou
+a usar `AERO_PRIVILEGED_FD`, convertido para `OwnedFd` no início do `main` e removido do ambiente;
+a ponta do socketpair é movida para `UnixStream::from(owned_fd)` e inserida com
+`ClientState { is_shell: true }`. `WAYLAND_SOCKET` existe **apenas no Command do filho**.
+
+Saída real dos testes (`tests/integration/aero_frame_protocol.sh`):
+```text
+OK (a): socket público nunca vê o global, mesmo com AERO_SHELL_PID forjado
+OK (a2): cliente privilegiado vê o global e completa o roundtrip
+OK (b): segundo get_frame gerou already_constructed
+OK (c): wl_surface com toplevel + frame gerou erro role
+OK (d): move com serial falso ignorado
+```
+
+### Métrica do protótipo do frame (DEFINIDA ANTES DE MEDIR)
+- **Métrica**: tempo, em ms, entre `frame.configure(serial, w, h)` ser enviado pelo compositor e
+  o `wl_surface.commit` do frame com o novo tamanho, **por passo de resize**.
+- Estatística: média, p95 e contagem de frames perdidos (passos sem commit até o timeout de
+  ack_configure, fixado em 100 ms).
+- Execução: build `--release`, 3 repetições, N=5 e N=20 frames, VM sem 3D (medida relativa);
+  veredito final em GPU real.
+
+### Blur: esforço
+Smithay 0.7 não tem handler para `ext-background-effect-v1`. Implementar exige gerar o protocolo,
+fazer `GlobalDispatch`/`Dispatch`, guardar a região por superfície e integrar blur no pipeline de
+render (o `RenderElement::draw` já aceita `opaque_regions`; blur real precisa shader/textura).
+É esforço grande → **adiar o blur para depois do protótipo do frame**, conforme permitido.
+
+### Correções pedidas ao protocolo (histórico)
 - `role` implementado com `smithay::wayland::compositor::give_role` + erro fatal `Role`.
 - Filtro de global reescrito: **sem PID/env**. `WAYLAND_SOCKET` inserto pelo supervisor marca
   o `ClientState.is_shell=true`; `can_view` só olha essa marca e o padrão é negar. Cliente do

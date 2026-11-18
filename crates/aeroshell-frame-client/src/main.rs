@@ -17,6 +17,20 @@ mod protocol {
 
         wayland_scanner::generate_interfaces!("../../protocols/aero_frame_v1.xml");
         wayland_scanner::generate_client_code!("../../protocols/aero_frame_v1.xml");
+
+        pub mod xdg {
+            use wayland_client;
+            use wayland_backend;
+            #[allow(unused_imports)]
+            use super::super::core_interfaces::*;
+            pub use wayland_client::protocol::{wl_output, wl_seat, wl_surface};
+            wayland_scanner::generate_interfaces!(
+                "/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml"
+            );
+            wayland_scanner::generate_client_code!(
+                "/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml"
+            );
+        }
     }
 
     pub use generated::*;
@@ -25,6 +39,11 @@ mod protocol {
 use protocol::{
     aero_frame_manager_v1::{AeroFrameManagerV1, Event as ManagerEvent},
     aero_frame_v1::{AeroFrameV1, Event as FrameEvent},
+    xdg::{
+        xdg_surface::XdgSurface,
+        xdg_toplevel::XdgToplevel,
+        xdg_wm_base::XdgWmBase,
+    },
     wl_compositor::WlCompositor,
     wl_seat::WlSeat,
     wl_surface::WlSurface,
@@ -34,6 +53,7 @@ struct State {
     compositor: Option<WlCompositor>,
     manager: Option<AeroFrameManagerV1>,
     frames: Vec<AeroFrameV1>,
+    xdg_shell: Option<XdgWmBase>,
     seat: Option<WlSeat>,
     surface: Option<WlSurface>,
     configured: u32,
@@ -55,6 +75,9 @@ impl Dispatch<wl_registry::WlRegistry, ()> for State {
             match interface.as_str() {
                 "wl_compositor" => {
                     state.compositor = Some(registry.bind::<WlCompositor, (), State>(name, version.min(5), qh, ()));
+                }
+                "xdg_wm_base" => {
+                    state.xdg_shell = Some(registry.bind::<XdgWmBase, (), State>(name, version.min(6), qh, ()));
                 }
                 "wl_seat" => {
                     state.seat = Some(registry.bind::<WlSeat, (), State>(name, version.min(9), qh, ()));
@@ -96,7 +119,7 @@ impl Dispatch<WlSurface, ()> for State {
 
 impl Dispatch<AeroFrameManagerV1, ()> for State {
     fn event(
-        state: &mut Self,
+        _state: &mut Self,
         _proxy: &AeroFrameManagerV1,
         event: ManagerEvent,
         _data: &(),
@@ -106,11 +129,45 @@ impl Dispatch<AeroFrameManagerV1, ()> for State {
         match event {
             ManagerEvent::FrameRequested { window_id, width, height, .. } => {
                 eprintln!("frame_requested window_id={window_id} {width}x{height}");
-                let surface = state.surface.clone().expect("sem wl_surface");
-                let manager = state.manager.clone().expect("sem manager");
-                manager.get_frame(&surface, window_id, qh, ());
+                let _ = qh;
             }
         }
+    }
+}
+
+impl Dispatch<XdgWmBase, ()> for State {
+    fn event(
+        _state: &mut Self,
+        _proxy: &XdgWmBase,
+        _event: protocol::xdg::xdg_wm_base::Event,
+        _data: &(),
+        _conn: &Connection,
+        _qh: &QueueHandle<Self>,
+    ) {
+    }
+}
+
+impl Dispatch<XdgSurface, ()> for State {
+    fn event(
+        _state: &mut Self,
+        _proxy: &XdgSurface,
+        _event: protocol::xdg::xdg_surface::Event,
+        _data: &(),
+        _conn: &Connection,
+        _qh: &QueueHandle<Self>,
+    ) {
+    }
+}
+
+impl Dispatch<XdgToplevel, ()> for State {
+    fn event(
+        _state: &mut Self,
+        _proxy: &XdgToplevel,
+        _event: protocol::xdg::xdg_toplevel::Event,
+        _data: &(),
+        _conn: &Connection,
+        _qh: &QueueHandle<Self>,
+    ) {
     }
 }
 
@@ -168,6 +225,7 @@ fn main() {
         compositor: None,
         manager: None,
         frames: Vec::new(),
+        xdg_shell: None,
         seat: None,
         surface: None,
         configured: 0,
@@ -188,12 +246,20 @@ fn main() {
         return;
     }
 
-    let compositor = state.compositor.take().expect("wl_compositor não anunciado");
+    let compositor = state.compositor.clone().expect("wl_compositor não anunciado");
     let surface = compositor.create_surface(&qh, ());
-    state.surface = Some(surface);
+    state.surface = Some(surface.clone());
     queue.roundtrip(&mut state).expect("roundtrip surface");
 
-    let manager = state.manager.take().expect("aero_frame_manager_v1 não anunciado");
+    if std::env::var_os("AERO_TEST_ROLE").is_some() {
+        let shell = state.xdg_shell.clone().expect("xdg_wm_base não anunciado");
+        let xdg_surface = shell.get_xdg_surface(&surface, &qh, ());
+        let _toplevel = xdg_surface.get_toplevel(&qh, ());
+        queue.roundtrip(&mut state).expect("roundtrip xdg toplevel");
+        eprintln!("toplevel criado na mesma wl_surface");
+    }
+
+    let manager = state.manager.clone().expect("aero_frame_manager_v1 não anunciado");
     let window_id: u32 = std::env::var("AERO_FRAME_WINDOW_ID")
         .ok()
         .and_then(|v| v.parse().ok())
@@ -202,7 +268,10 @@ fn main() {
     let frame = manager.get_frame(&surface, window_id, &qh, ());
     state.frames.push(frame);
     if std::env::var_os("AERO_TEST_DOUBLE").is_some() {
-        manager.get_frame(&surface, window_id, &qh, ());
+        // Superfície nova: isola `already_constructed` do erro de role.
+        let surface2 = compositor.create_surface(&qh, ());
+        queue.roundtrip(&mut state).expect("roundtrip surface2");
+        manager.get_frame(&surface2, window_id, &qh, ());
     }
     queue.roundtrip(&mut state).expect("roundtrip get_frame");
     queue.roundtrip(&mut state).expect("roundtrip configure");
@@ -215,6 +284,13 @@ fn main() {
         }
         queue.roundtrip(&mut state).expect("roundtrip false serial");
         eprintln!("move com serial falso enviado");
+    }
+
+    if std::env::var_os("AERO_TEST_OK").is_some() {
+        assert!(state.saw_manager, "cliente privilegiado deve ver o global");
+        assert_eq!(state.configured, 1, "configure não recebido");
+        assert_eq!(state.closed, 0);
+        eprintln!("OK: privilegiado viu o global e completou o roundtrip");
     }
 
     eprintln!(

@@ -10,7 +10,10 @@ mod state;
 use std::{
     error::Error,
     io::BufRead,
-    os::{fd::FromRawFd, unix::net::UnixListener, unix::net::UnixStream},
+    os::{
+        fd::{FromRawFd, OwnedFd},
+        unix::net::{UnixListener, UnixStream},
+    },
     sync::Arc,
 };
 
@@ -35,6 +38,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         tracing_subscriber::fmt().compact().with_env_filter(filter).init();
     } else {
         tracing_subscriber::fmt().compact().init();
+    }
+
+    // Converter a ponta privilegiada ANTES de qualquer biblioteca cliente Wayland:
+    // winit/wayland-client consomem WAYLAND_SOCKET e tomariam posse do mesmo fd.
+    let privileged_fd: Option<OwnedFd> = std::env::var_os("AERO_PRIVILEGED_FD")
+        .and_then(|value| value.to_str().and_then(|v| v.parse::<i32>().ok()))
+        .map(|fd| unsafe { OwnedFd::from_raw_fd(fd) });
+    if std::env::var_os("AERO_PRIVILEGED_FD").is_some() {
+        std::env::remove_var("AERO_PRIVILEGED_FD");
     }
 
     let opts = cli::parse();
@@ -83,10 +95,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // O supervisor entrega uma ponta do socketpair ao shell via WAYLAND_SOCKET.
     // Essa conexão é marcada como privilegiada; o socket público nunca é.
-    if let Ok(fd_text) = std::env::var("WAYLAND_SOCKET") {
-        let fd: i32 = fd_text.parse()?;
-        tracing::info!(fd, "WAYLAND_SOCKET recebido do supervisor");
-        let stream = unsafe { UnixStream::from_raw_fd(fd) };
+    if let Some(fd) = privileged_fd {
+        let stream = UnixStream::from(fd);
         data.display_handle.insert_client(
             stream,
             Arc::new(ClientState {
@@ -94,7 +104,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 ..Default::default()
             }),
         )?;
-        tracing::info!("shell privilegiado inserido via WAYLAND_SOCKET");
+        tracing::info!("shell privilegiado inserido via AERO_PRIVILEGED_FD");
     }
 
     backend::init(&opts, &mut event_loop, &mut data)?;
