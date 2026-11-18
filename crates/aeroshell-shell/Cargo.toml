@@ -12,8 +12,19 @@ probe-registry = ["dep:wayland-client"]
 gtk4 = "=0.11"
 webkit6 = { version = "=0.6.1", features = ["v2_52", "gtk_v4_18"] }
 gtk4-layer-shell = "=0.8.0"
+# Aprovado 2026-11-18: MIT/gtk-rs, wayland_crate expõe wl_surface()/connection()
+# na conexão do GTK (spike B / frame). Alternativa rejeitada: FFI manual.
 cairo-rs.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 wayland-client = { workspace = true, optional = true }
+
+[dev-dependencies]
+# Aprovado 2026-11-18: MIT/gtk-rs, wayland_crate expõe wl_surface()/connection()
+# na conexão do GTK (spike B / frame). Alternativa rejeitada: FFI manual.
+gdk4-wayland = { version = "=0.11.5", features = ["wayland_crate"] }
+# Só para o example frame_spike gerar o cliente do protocolo (já no workspace).
+wayland-scanner.workspace = true
+wayland-backend.workspace = true
+bitflags.workspace = true

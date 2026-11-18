@@ -61,14 +61,25 @@ impl WlrLayerShellHandler for AeroState {
             .find(|(s, _, _)| s == layer.wl_surface())
             .map(|(_, frame, window_id)| (frame.clone(), *window_id));
         if let Some((frame, window_id)) = frame_assoc {
+            // Geometria 100% do compositor: usar a janela real (zenity) quando
+            // existir, em vez do tamanho do output.
             let content = self
-                .outputs
-                .first()
-                .and_then(|o| o.current_mode())
-                .map(|m| (m.size.w, m.size.h))
+                .space
+                .elements()
+                .next()
+                .and_then(|w| self.space.element_geometry(w))
+                .map(|g| (g.size.w, g.size.h))
+                .or_else(|| {
+                    self.outputs
+                        .first()
+                        .and_then(|o| o.current_mode())
+                        .map(|m| (m.size.w, m.size.h))
+                })
                 .unwrap_or((1280, 800));
-            // Insets/shadow ainda não implementados: total == conteúdo.
-            let total = content;
+            // Insets/shadow ainda não implementados; margem diagnóstica
+            // (debug/bench) deixa o contorno visível nos testes visuais.
+            let margin = self.frame_test_margin;
+            let total = (content.0 + 2 * margin, content.1 + 2 * margin);
             layer.layer_surface().with_pending_state(|state| {
                 state.size = Some(total.into());
             });

@@ -75,6 +75,9 @@ pub struct AeroState {
     /// Último serial de botão recebido (validação de move/resize).
     pub last_button_serial: Option<u32>,
 
+    /// Margem diagnóstica do frame (só debug/bench): deixa o contorno visível
+    /// para provar que o frame existe atrás do cliente. Produção = 0.
+    pub frame_test_margin: i32,
     /// Última ação de geometry para medir latência até o frame atualizado.
     pub last_geometry_action: Option<(String, std::time::Instant)>,
     /// Permite testes de protocolo validarem IDs sem criar uma janela xdg real.
@@ -167,6 +170,20 @@ impl AeroState {
             #[cfg(feature = "bench")]
             frame_commit_samples: Vec::new(),
             last_button_serial: None,
+            frame_test_margin: {
+                #[cfg(any(debug_assertions, feature = "bench"))]
+                {
+                    std::env::var("AERO_FRAME_TEST_MARGIN")
+                        .ok()
+                        .and_then(|v| v.parse().ok())
+                        .unwrap_or(0)
+                        .max(0)
+                }
+                #[cfg(not(any(debug_assertions, feature = "bench")))]
+                {
+                    0
+                }
+            },
             last_geometry_action: None,
             test_window_count: 0,
             test_client_count: 0,

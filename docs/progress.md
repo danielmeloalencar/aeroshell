@@ -325,6 +325,42 @@ Código: `crates/aeroshell-shell/examples/frame_spike.rs`. Comando:
 **NÃO EXECUTADO:** B.3 (frame ao redor de zenity, move/resize, teclado, closed) e medições.
 Parado no B.2 conforme a regra de parada do usuário.
 
+### B.3 — loop real com GTK + `associate` (PARADO por falha de z-order)
+Código: `examples/frame_spike.rs` + `tests/integration/frame_spike_real.py`
+(compositor com `AERO_PRIVILEGED_FD`, spike com `WAYLAND_SOCKET`, zenity pelo socket público).
+
+**PROVADO (logs crus):**
+- `wl_surface=Some` no **realize** (antes do map) — spike B.3.1.
+- `manager global=5 vinculado no guest do GTK`; `associate(window_id=0) ENVIADO no realize`.
+- Compositor: `frame associado; frame_requested+configure enviados window_id=0`;
+  `frame layer_surface: duplo configure, FORA do LayerMap total_w=300 total_h=225`.
+- Spike recebeu `configure serial=1 1280x800` e `configure serial=2 300x225` (duplo configure).
+- Cursores: usuário confirmou que **sempre fica seta** no frame (não herda o Pointer do
+  LayerMap, `state.rs:185-189`).
+- Modelo de posse: Connection derivada de `wl_surface.backend().upgrade()` (MESMO guest
+  singleton de `gdk4-wayland`, `wayland_display.rs:83-107`); nenhum `roundtrip`/`dispatch`
+  bloqueante — só `MainContext::iteration` no startup + `dispatch_pending`/`flush`.
+  Objetos aero destruídos antes do drop da connection.
+
+**OBSERVAÇÕES VISUAIS CONFLITANTES (3 tentativas — PARADO):**
+1. frame cinza **por cima** do zenity, cobrindo o botão (~30 px à direita, ~4 px embaixo);
+2. após reconstruir, usuário relatou frame **por baixo**, totalmente coberto (insets=0 →
+   tamanho igual ao do cliente);
+3. teste diagnóstico com margem de 60 px (`AERO_FRAME_TEST_MARGIN`, só debug/bench;
+   `total=420x345`, posição `(-60,-60)`): usuário viu **frame pequeno e por cima**.
+
+A fonte (`smithay-0.7.0/src/desktop/space/mod.rs:696-705`) coloca `custom_elements` antes dos
+elementos do space (teoricamente atrás), mas as observações não são consistentes entre si.
+Não houve erro de import/render no log; `RENDER_DEBUG` confirmou `space=1 frames=1` e geometria
+do zenity `300x225`. **Causa do z-order: NÃO PROVADA.** Não tentei uma quarta variação —
+regra 4.1 e regra de parada do usuário. Isso exige decisão antes de qualquer novo código.
+
+**NÃO VALIDADO:** fechar zenity → `closed` → frame destruído (bloqueado pela falha de z-order);
+move/resize com serial válido; teclado nunca no frame (zenity tem só um botão e estava coberto).
+
+**Próximo passo exige decisão:** corrigir o z-order do frame (desenhá-lo num passe anterior ao
+`render_output`, em vez de `custom_elements`) — mudança nova, não tentada.
+
 ### Dívidas técnicas (pré-requisitos da Fase 1)
 - **(a) Supervisor ainda é script Python de teste.** `tests/integration/launch_manual.py` e
   `supervisor_real.py` criam o socketpair e lançam os processos **fora do repositório de código**.
@@ -349,6 +385,9 @@ Parado no B.2 conforme a regra de parada do usuário.
   incidental do GDK ao perder a conexão Wayland — **não** por um mecanismo explícito do
   supervisor. Em Fase 1 isso precisa ser garantido pelo supervisor dentro do compositor.
 - **(c) presentation-time** não implementado (métrica v).
+- **(d) socket órfão (dívida menor).** O compositor não remove o socket ao sair; sobrou
+  `/run/user/1000/wayland-aero-spike` após o spike. Corrigir com `unlink` no desligamento
+  gracioso (e tratar SIGKILL como caso separado).
 
 ### SPIKE de role: ligar WebView ao `aero_frame_v1` (pesquisa, SEM implementação)
 Pesquisa em docs/código instalados. **Nenhum XML alterado, nenhuma dependência adicionada.**

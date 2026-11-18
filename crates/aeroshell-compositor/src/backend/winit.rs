@@ -5,7 +5,8 @@ use std::time::Duration;
 use smithay::{
     backend::{
         renderer::{
-            damage::OutputDamageTracker, element::surface::WaylandSurfaceRenderElement,
+            damage::OutputDamageTracker,
+            element::{surface::WaylandSurfaceRenderElement, Kind},
             gles::GlesRenderer,
         },
         winit::{self, WinitEvent},
@@ -16,6 +17,7 @@ use smithay::{
         winit::{dpi::PhysicalSize, window::CursorIcon},
     },
     utils::{IsAlive, Transform},
+    wayland::compositor::with_states,
 };
 
 use crate::{cli::Options, CalloopData};
@@ -123,6 +125,44 @@ pub fn init_winit(
                     };
                     let rendered = match backend.bind() {
                         Ok((renderer, mut framebuffer)) => {
+                            // Frames associados (ADR 0004) ficam FORA do LayerMap:
+                            // renderiza-los como custom elements na geometria da janela.
+                            let frame_origin = state
+                                .space
+                                .elements()
+                                .next()
+                                .and_then(|w| state.space.element_geometry(w))
+                                .map(|g| g.loc)
+                                .unwrap_or_default();
+                            let mut frame_elements: Vec<WaylandSurfaceRenderElement<GlesRenderer>> =
+                                Vec::new();
+                            for layer in &state.frame_layer_surfaces {
+                                if !layer.alive() {
+                                    continue;
+                                }
+                                let surface = layer.wl_surface();
+                                let margin = state.frame_test_margin;
+                                let loc: smithay::utils::Point<f64, smithay::utils::Physical> = (
+                                    (frame_origin.x - margin) as f64,
+                                    (frame_origin.y - margin) as f64,
+                                )
+                                    .into();
+                                match with_states(surface, |states| {
+                                    WaylandSurfaceRenderElement::from_surface(
+                                        renderer,
+                                        surface,
+                                        states,
+                                        loc,
+                                        1.0,
+                                        Kind::Unspecified,
+                                    )
+                                }) {
+                                    Ok(Some(element)) => frame_elements.push(element),
+                                    Ok(None) => {}
+                                    Err(err) => tracing::warn!(?err, "import do frame falhou"),
+                                }
+                            }
+
                             // `render_output` consulta o LayerMap do output: não desenhamos
                             // layer surfaces manualmente (isso causava o painel invisível).
                             match smithay::desktop::space::render_output::<
@@ -137,7 +177,7 @@ pub fn init_winit(
                                 1.0,
                                 0,
                                 [&state.space],
-                                &[],
+                                &frame_elements,
                                 tracker,
                                 if std::env::var_os("AERO_DEBUG_CLEAR_LIGHT").is_some() {
                                     [0.95, 0.95, 0.95, 1.0]
@@ -171,6 +211,13 @@ pub fn init_winit(
                             })
                         });
                         for layer in &state.layer_surfaces {
+                            if layer.alive() {
+                                layer.send_frame(output, now, Some(Duration::ZERO), |_, _| {
+                                    Some(output.clone())
+                                });
+                            }
+                        }
+                        for layer in &state.frame_layer_surfaces {
                             if layer.alive() {
                                 layer.send_frame(output, now, Some(Duration::ZERO), |_, _| {
                                     Some(output.clone())
