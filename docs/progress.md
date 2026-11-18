@@ -290,6 +290,41 @@ registradas; nenhuma amostra descartada em silêncio.
   **não foi feita** — exigiria `gdk4wayland` (dependência nova, aguardando aprovação).
   Portanto os números acima são de protocolo puro, não de WebKit real.
 
+### Spike B — ordenação e acesso ao `wl_surface` (PARADO no B.2)
+Código: `crates/aeroshell-shell/examples/frame_spike.rs`. Comando:
+`cargo run -p aeroshell-shell --example frame_spike` num compositor nested.
+
+**PROVADO (arquivo:linha + execução):**
+- `gtk4-layer-shell-0.8.0/src/lib.rs:170-172`: `init_for_window` configura a layer surface
+  "**once it is mapped**" e deve ser chamado **antes de realize**.
+- Saída crua do spike:
+  ```
+  SPIKE realize: zwlr_layer_surface_v1=false
+  SPIKE map: zwlr_layer_surface_v1=true
+  SPIKE present chamado
+  ```
+  Logo o proxy `zwlr_layer_surface_v1` **não existe no realize**; o role aparece só no map.
+  A ordenação `init → realize → associate → present` é viável quanto ao role.
+
+**BLOQUEIO (B.2):** `gtk4_layer_shell::zwlr_layer_surface_v1()` devolve `None` no realize
+(quando `associate` precisaria ser enviado) e, mesmo no map, devolve apenas o proxy
+`zwlr_layer_surface_v1*`, sem API para obter o `wl_surface*`. Portanto **não dá** para enviar
+`associate` pela conexão do GTK usando apenas a dependência atual.
+
+**Dependência necessária (não adicionada — aguardando aprovação, regra 3.10):**
+- nome: `gdk4-wayland` (crate gtk-rs), versão `0.11` (alinhada ao `gdk4 =0.11` instalado),
+  licença MIT (família gtk-rs), motivo: expor `WaylandSurfaceExt::wl_surface()` e
+  `WaylandDisplayExt::wl_display()` para obter o `wl_surface` do GdkSurface no realize e
+  despachar `associate` na **mesma conexão** do GTK.
+- alternativa sem crate novo: FFI manual declarando
+  `gdk_wayland_surface_get_wl_surface` (`/usr/include/gtk-4.0/gdk/wayland/gdkwaylandsurface.h:44`)
+  e `gdk_wayland_display_get_wl_display` (`.../gdkwaylanddisplay.h:48`), ambos presentes na
+  lib instalada, com `// SAFETY:` em cada chamada. Ainda exigiria `wayland-client` com backend
+  foreign na feature `probe-registry`.
+
+**NÃO EXECUTADO:** B.3 (frame ao redor de zenity, move/resize, teclado, closed) e medições.
+Parado no B.2 conforme a regra de parada do usuário.
+
 ### Dívidas técnicas (pré-requisitos da Fase 1)
 - **(a) Supervisor ainda é script Python de teste.** `tests/integration/launch_manual.py` e
   `supervisor_real.py` criam o socketpair e lançam os processos **fora do repositório de código**.
