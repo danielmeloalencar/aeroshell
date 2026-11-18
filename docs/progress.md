@@ -98,6 +98,25 @@ remover/reinserir 1 componente 0,01 ms, buffer 1000x613 ARGB8888 = 2.452.000 byt
 **latência**, não memória; o ganho de memória vem de `related-view`. Smithay 0.7 já aceita
 `src` rect no `RenderElement::draw`.
 
+### S3 — concluído (2026-11-18)
+- `data-aero-interactive` → rects enviados por `window.webkit.messageHandlers.aero` → host aplica
+  `gdk_surface_set_input_region`. `MutationObserver` + `ResizeObserver` recalculam a região quando
+  o texto/tamanho do elemento muda (isso corrigiu o cursor invadindo o texto ao lado do botão).
+- Cursor: hit-test marca `cursor_over_interactive`; backend winit troca entre `Pointer` e `Default`.
+- Compositor faz hit-test de layer surfaces pela **geometry do `LayerMap`** (não `layer_under`, que
+  usa o tamanho bruto do cliente e falha quando a largura é 0 por âncora left+right); respeita a
+  input region enviada pelo cliente (confirmado: `input_region = Some(RegionAttributes { rects:
+  [(Add, Rectangle { x: 12, y: 6, width: 155, height: 36 })] })`).
+- Confirmação manual do usuário: cursor vira mão sobre o botão; contador sobe; área transparente
+  não gera mensagem de clique (log com apenas 2 cliques, ambos no botão).
+- Ferramenta de ponteiro sintético criada em `AERO_TEST_INPUT_SOCK` (`tests/integration/s3_input.sh`),
+  mas a validação final foi manual: a conversão global↔local com `Transform::Flipped180` tornou o
+  teste automatizado pouco confiável. Não foi usado como critério de aceite.
+- Limitação conhecida: clique na área transparente não altera o foco da janela de trás — a política
+  de foco/janela entra no F3.
+- `--size` + `Transform::Flipped180` desloca/espelha o painel no framebuffer 1280x800; removido dos
+  testes S3 (limitação documentada em `docs/nested-dev.md`).
+
 ### ADR 0001 aceito provisoriamente (2026-11-18)
 - `related-view` padrão com âncora oculta viva; teste real: destruir a âncora **não** matou o
   WebProcess compartilhado (pid 84087 antes e 5 s depois); a propriedade é construct-only, então

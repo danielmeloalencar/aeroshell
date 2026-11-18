@@ -19,11 +19,39 @@ const PANEL_HTML: &str = r##"
       #panel { height: 100%; width: 100%; display: flex; align-items: center;
         padding: 0 12px; background: #33dd66; color: #001100;
         font-weight: bold; font-size: 16px; }
+      #hot { padding: 6px 12px; border: 1px solid #001100; border-radius: 6px; }
     </style>
   </head>
   <body>
-    <div id="panel" data-aero-interactive>PANEL AEROSHELL S2 — verde = layer-shell + WebView</div>
+    <div id="panel">
+      <span id="hot" data-aero-interactive data-aero-cursor="pointer">CLIQUE AQUI (input)</span>
+      <span style="margin-left:16px">área transparente → passa clique</span>
+    </div>
     <script>
+      function postInteractive() {
+        const els = Array.from(document.querySelectorAll('[data-aero-interactive]'));
+        const rects = els.map(e => { const r = e.getBoundingClientRect();
+          return { x:r.left, y:r.top, w:r.width, h:r.height }; });
+        window.webkit.messageHandlers.aero.postMessage({ type:'interactive',
+          rects, cursor: els[0]?.dataset.aeroCursor || 'default' });
+      }
+      let clicks = 0;
+      document.addEventListener('click', () => {
+        clicks++;
+        const hot = document.getElementById('hot');
+        if (hot) hot.textContent = 'CLIQUE AQUI (' + clicks + ')';
+        window.webkit.messageHandlers.aero.postMessage({ type:'click', count:clicks });
+        postInteractive();
+      });
+      window.addEventListener('load', postInteractive);
+      window.addEventListener('resize', postInteractive);
+      new MutationObserver(postInteractive).observe(document.body, {
+        childList: true, subtree: true, characterData: true, attributes: true
+      });
+      if (window.ResizeObserver) {
+        const ro = new ResizeObserver(postInteractive);
+        document.querySelectorAll('[data-aero-interactive]').forEach(e => ro.observe(e));
+      }
       if (location.search.includes('legacy')) {
         document.querySelector('link[href="aero://shell-reset.css"]').remove();
         document.getElementById('panel').style.margin = '4px';

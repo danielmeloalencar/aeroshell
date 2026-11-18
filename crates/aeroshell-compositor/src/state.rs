@@ -11,7 +11,7 @@ use smithay::{
         wayland_server::{
             backend::{ClientData, ClientId, DisconnectReason},
             protocol::wl_surface::WlSurface,
-            Display, DisplayHandle,
+            Display, DisplayHandle, Resource,
         },
     },
     utils::{Logical, Point},
@@ -37,6 +37,8 @@ pub struct AeroState {
     pub outputs: Vec<Output>,
     /// Layer surfaces já embrulhadas no tipo de desktop, prontas para o `LayerMap`.
     pub layer_surfaces: Vec<smithay::desktop::LayerSurface>,
+    /// Resultado do hit-test de input region: usado pelo backend para escolher o cursor.
+    pub cursor_over_interactive: bool,
 
     pub compositor_state: CompositorState,
     pub xdg_shell_state: XdgShellState,
@@ -100,6 +102,7 @@ impl AeroState {
             loop_signal: event_loop.get_signal(),
             outputs: Vec::new(),
             layer_surfaces: Vec::new(),
+            cursor_over_interactive: false,
             compositor_state,
             xdg_shell_state,
             layer_shell_state,
@@ -112,7 +115,34 @@ impl AeroState {
         })
     }
 
+    pub fn is_interactive_layer_surface(&self, surface: &WlSurface) -> bool {
+        self.layer_surfaces
+            .iter()
+            .any(|layer| layer.wl_surface() == surface)
+    }
+
     pub fn surface_under(&self, pos: Point<f64, Logical>) -> Option<(WlSurface, Point<f64, Logical>)> {
+        // Layer surfaces (painéis/overlay) vêm antes das janelas normais; `surface_under`
+        // do Smithay respeita `wl_surface.set_input_region`.
+        for output in &self.outputs {
+            let map = smithay::desktop::layer_map_for_output(output);
+            // `layer_under` usa o tamanho bruto do cliente (que pode ser 0 quando ancorado
+            // nas duas bordas). Usamos a geometry calculada pelo LayerMap.
+            for layer_surface in map.layers().rev() {
+                let Some(geo) = map.layer_geometry(layer_surface) else {
+                    continue;
+                };
+                if !geo.to_f64().contains(pos) {
+                    continue;
+                }
+                let origin = geo.loc.to_f64();
+                let hit = layer_surface.surface_under(pos - origin, WindowSurfaceType::ALL);
+                tracing::debug!(?pos, ?origin, hit = ?hit.as_ref().map(|(s, _)| s.id()), "hit-test layer");
+                if let Some((surface, local)) = hit {
+                    return Some((surface, (local.to_f64() + origin)));
+                }
+            }
+        }
         self.space.element_under(pos).and_then(|(window, location)| {
             window
                 .surface_under(pos - location.to_f64(), WindowSurfaceType::ALL)

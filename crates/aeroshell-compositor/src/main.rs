@@ -6,7 +6,9 @@ mod input;
 mod protocols;
 mod state;
 
-use std::error::Error;
+use std::{error::Error, io::BufRead, os::unix::net::UnixListener};
+
+use calloop::channel;
 
 use smithay::reexports::{
     calloop::EventLoop,
@@ -69,6 +71,41 @@ fn main() -> Result<(), Box<dyn Error>> {
         display_handle,
     };
     backend::init(&opts, &mut event_loop, &mut data)?;
+
+    // Injeção de ponteiro sintético (S3): `motion x y`, `button press|release`.
+    if let Some(path) = std::env::var_os("AERO_TEST_INPUT_SOCK") {
+        let (sender, source) = channel::channel::<String>();
+        let listener = UnixListener::bind(&path)?;
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(stream) = stream else { continue };
+                for line in std::io::BufReader::new(stream).lines().map_while(Result::ok) {
+                    if sender.send(line).is_err() {
+                        break;
+                    }
+                }
+            }
+        });
+        event_loop.handle().insert_source(source, |event, _, data| {
+            let channel::Event::Msg(msg) = event else { return };
+            let mut parts = msg.split_whitespace();
+            match parts.next() {
+                Some("motion") => {
+                    let x = parts.next().and_then(|v| v.parse().ok()).unwrap_or(0.0);
+                    let y = parts.next().and_then(|v| v.parse().ok()).unwrap_or(0.0);
+                    data.state.inject_motion(x, y);
+                }
+                Some("button") => match parts.next() {
+                    Some("press") => data.state.inject_button(true),
+                    Some("release") => data.state.inject_button(false),
+                    _ => {}
+                },
+                _ => {}
+            }
+        })?;
+        tracing::info!(?path, "injeção de ponteiro sintético ativa");
+    }
+
     event_loop.run(None, &mut data, |_| {})?;
 
     Ok(())

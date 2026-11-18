@@ -33,6 +33,14 @@ impl SeatHandler for AeroState {
     fn cursor_image(&mut self, _seat: &Seat<Self>, _image: smithay::input::pointer::CursorImageStatus) {}
 
     fn focus_changed(&mut self, seat: &Seat<Self>, focused: Option<&WlSurface>) {
+        let is_panel = focused
+            .map(|s| self.is_interactive_layer_surface(s))
+            .unwrap_or(false);
+        tracing::info!(
+            surface = ?focused.map(|s| s.id()),
+            is_panel,
+            "TESTE foco de teclado alterado"
+        );
         let client = focused.and_then(|s| self.display_handle.get_client(s.id()).ok());
         set_data_device_focus(&self.display_handle, seat, client);
     }

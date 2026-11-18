@@ -10,7 +10,10 @@ use smithay::{
         winit::{self, WinitEvent},
     },
     output::{Mode, Output, PhysicalProperties, Scale, Subpixel},
-    reexports::{calloop::EventLoop, winit::dpi::PhysicalSize},
+    reexports::{
+        calloop::EventLoop,
+        winit::{dpi::PhysicalSize, window::CursorIcon},
+    },
     utils::{IsAlive, Transform},
 };
 
@@ -181,6 +184,11 @@ pub fn init_winit(
                     let _ = data.display_handle.flush_clients();
                 }
 
+                backend.window().set_cursor(if state.cursor_over_interactive {
+                    CursorIcon::Pointer
+                } else {
+                    CursorIcon::Default
+                });
                 backend.window().request_redraw();
             }
             WinitEvent::CloseRequested => state.loop_signal.stop(),

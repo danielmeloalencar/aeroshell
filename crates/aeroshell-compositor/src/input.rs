@@ -9,13 +9,55 @@ use smithay::{
         keyboard::FilterResult,
         pointer::{AxisFrame, ButtonEvent, MotionEvent},
     },
-    reexports::wayland_server::protocol::wl_surface::WlSurface,
+    reexports::wayland_server::{protocol::wl_surface::WlSurface, Resource},
     utils::SERIAL_COUNTER,
 };
 
 use crate::state::AeroState;
 
 impl AeroState {
+    /// Injeção de ponteiro usada pelo backend headless de teste (S3).
+    pub fn inject_motion(&mut self, x: f64, y: f64) {
+        let serial = smithay::utils::SERIAL_COUNTER.next_serial();
+        let under = self.surface_under((x, y).into());
+        self.cursor_over_interactive = under
+            .as_ref()
+            .map(|(s, _)| self.is_interactive_layer_surface(s))
+            .unwrap_or(false);
+        tracing::info!(x, y, under = ?under.as_ref().map(|(s, _)| s.id()), "TESTE ponteiro motion");
+        let pointer = self.seat.get_pointer().unwrap();
+        pointer.motion(
+            self,
+            under,
+            &MotionEvent {
+                location: (x, y).into(),
+                serial,
+                time: 0,
+            },
+        );
+        pointer.frame(self);
+    }
+
+    pub fn inject_button(&mut self, pressed: bool) {
+        let serial = smithay::utils::SERIAL_COUNTER.next_serial();
+        let pointer = self.seat.get_pointer().unwrap();
+        tracing::info!(pressed, "TESTE ponteiro button");
+        pointer.button(
+            self,
+            &ButtonEvent {
+                button: 0x110,
+                state: if pressed {
+                    smithay::backend::input::ButtonState::Pressed
+                } else {
+                    smithay::backend::input::ButtonState::Released
+                },
+                serial,
+                time: 0,
+            },
+        );
+        pointer.frame(self);
+    }
+
     pub fn process_input_event<I: InputBackend>(&mut self, event: InputEvent<I>) {
         match event {
             InputEvent::Keyboard { event, .. } => {
@@ -42,6 +84,10 @@ impl AeroState {
                 let serial = SERIAL_COUNTER.next_serial();
                 let pointer = self.seat.get_pointer().unwrap();
                 let under = self.surface_under(pos);
+                self.cursor_over_interactive = under
+                    .as_ref()
+                    .map(|(s, _)| self.is_interactive_layer_surface(s))
+                    .unwrap_or(false);
                 pointer.motion(
                     self,
                     under,

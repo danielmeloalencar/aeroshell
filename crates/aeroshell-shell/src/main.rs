@@ -3,6 +3,7 @@
 mod benchmark;
 mod bridge;
 mod host;
+mod input_region;
 mod scheme;
 
 use gtk4::prelude::*;
@@ -10,10 +11,14 @@ use webkit6::prelude::*;
 use webkit6::{WebContext, WebView};
 
 fn main() {
+    // stderr é unbuffered: importante quando o processo é encerrado por timeout em testes.
     if let Ok(filter) = tracing_subscriber::EnvFilter::try_from_default_env() {
-        tracing_subscriber::fmt().with_env_filter(filter).init();
+        tracing_subscriber::fmt()
+            .with_writer(std::io::stderr)
+            .with_env_filter(filter)
+            .init();
     } else {
-        tracing_subscriber::fmt().init();
+        tracing_subscriber::fmt().with_writer(std::io::stderr).init();
     }
 
     // GApplication rejeita opções desconhecidas antes do nosso código; use env vars.
@@ -24,11 +29,27 @@ fn main() {
         .ok()
         .and_then(|v| v.parse().ok());
 
-    let app = gtk4::Application::builder()
-        .application_id("dev.aeroshell.shell")
-        .build();
+    let app_id = if std::env::var_os("AERO_TEST_BACKDROP").is_some() {
+        "dev.aeroshell.backdrop"
+    } else {
+        "dev.aeroshell.shell"
+    };
+    let app = gtk4::Application::builder().application_id(app_id).build();
 
     app.connect_activate(move |app| {
+        if std::env::var_os("AERO_TEST_BACKDROP").is_some() {
+            let window = gtk4::ApplicationWindow::builder()
+                .application(app)
+                .title("BACKDROP atrás do painel")
+                .default_width(1280)
+                .default_height(800)
+                .build();
+            let label = gtk4::Label::new(Some("BACKDROP — clique aqui pela área transparente do painel"));
+            window.set_child(Some(&label));
+            window.present();
+            tracing::info!("BACKDROP apresentado");
+            return;
+        }
         if let Some(n) = benchmark_anchor {
             benchmark::run_anchor(app, n);
             return;
@@ -45,7 +66,7 @@ fn main() {
         host::install_transparent_css();
         let window = host::panel_window(app);
 
-        let manager = bridge::install();
+        let manager = bridge::install(&window);
         let context = WebContext::new();
         scheme::install(&context);
         let webview = WebView::builder()
@@ -91,6 +112,13 @@ fn main() {
         window.present();
 
         tracing::info!(uri = scheme::PANEL_URI, "painel layer-shell apresentado");
+
+        if let Ok(seconds) = std::env::var("AERO_SHELL_EXIT_AFTER")
+            .and_then(|v| v.parse::<u32>().map_err(|_| std::env::VarError::NotPresent))
+        {
+            let app_quit = app.clone();
+            gtk4::glib::timeout_add_seconds_local_once(seconds, move || app_quit.quit());
+        }
     });
 
     app.run();

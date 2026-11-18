@@ -54,6 +54,15 @@ impl CompositorHandler for AeroState {
             .find(|layer| layer.wl_surface() == surface)
             .cloned()
         {
+            let input_region = smithay::wayland::compositor::with_states(surface, |states| {
+                states
+                    .cached_state
+                    .get::<smithay::wayland::compositor::SurfaceAttributes>()
+                    .current()
+                    .input_region
+                    .clone()
+            });
+            tracing::debug!(?input_region, "input_region recebida do cliente layer");
             let cached = layer.cached_state();
             static LOGGED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
             if !LOGGED.swap(true, std::sync::atomic::Ordering::Relaxed) {
