@@ -50,8 +50,45 @@ impl WlrLayerShellHandler for AeroState {
         _layer: Layer,
         namespace: String,
     ) {
+        let layer = LayerSurface::new(surface, namespace.clone());
+
+        // ADR 0004: superfície associada a um frame é EXCEÇÃO ao LayerMap.
+        // Não entra no mapa nem na lista de janelas; o compositor define a
+        // geometria e envia o duplo configure na mesma transação.
+        let frame_assoc = self
+            .associated_frames
+            .iter()
+            .find(|(s, _, _)| s == layer.wl_surface())
+            .map(|(_, frame, window_id)| (frame.clone(), *window_id));
+        if let Some((frame, window_id)) = frame_assoc {
+            let content = self
+                .outputs
+                .first()
+                .and_then(|o| o.current_mode())
+                .map(|m| (m.size.w, m.size.h))
+                .unwrap_or((1280, 800));
+            // Insets/shadow ainda não implementados: total == conteúdo.
+            let total = content;
+            layer.layer_surface().with_pending_state(|state| {
+                state.size = Some(total.into());
+            });
+            let _ = layer.layer_surface().send_pending_configure();
+            let serial = self.pending_configures.len() as u32 + 1;
+            let frame_state = crate::aero_frame_protocol::aero_frame_v1::State::empty();
+            frame.configure(serial, content.0, content.1, frame_state);
+            self.pending_configures
+                .push((serial, std::time::Instant::now()));
+            self.frame_layer_surfaces.push(layer);
+            tracing::info!(
+                window_id,
+                total_w = total.0,
+                total_h = total.1,
+                "frame layer_surface: duplo configure, FORA do LayerMap"
+            );
+            return;
+        }
+
         tracing::info!(%namespace, "nova layer surface (panel/desktop/overlay)");
-        let layer = LayerSurface::new(surface, namespace);
         self.configure_layer_surface(&layer);
         layer.layer_surface().send_configure();
 

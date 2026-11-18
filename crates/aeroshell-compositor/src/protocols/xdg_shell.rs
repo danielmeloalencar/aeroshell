@@ -24,6 +24,21 @@ impl XdgShellHandler for AeroState {
     }
 
     fn new_toplevel(&mut self, surface: ToplevelSurface) {
+        // ADR 0004: superfície associada a frame NÃO entra na lista de janelas.
+        // Suporte a xdg_toplevel como frame está deferido: enviar `closed`.
+        let assoc = self
+            .associated_frames
+            .iter()
+            .find(|(s, _, _)| s == surface.wl_surface())
+            .map(|(_, frame, window_id)| (frame.clone(), *window_id));
+        if let Some((frame, window_id)) = assoc {
+            frame.closed();
+            tracing::warn!(
+                window_id,
+                "xdg_toplevel associado a frame: closed enviado (suporte deferido)"
+            );
+            return;
+        }
         tracing::info!("novo toplevel xdg-surface mapeado");
         let window = Window::new_wayland_window(surface);
         self.space.map_element(window, (0, 0), false);

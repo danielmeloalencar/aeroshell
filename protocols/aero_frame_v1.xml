@@ -7,8 +7,34 @@
       Exposto apenas ao cliente de shell privilegiado; o compositor deve
       recusar o bind para outros clientes (filtro de globais por credenciais).
       O compositor anuncia janelas que precisam de decoração; o shell responde
-      criando frames. IDs de janela (uint32) nunca são reutilizados durante a
-      sessão, para que um frame atrasado não seja associado a outra janela.
+      associando uma superfície já existente. IDs de janela (uint32) nunca são
+      reutilizados durante a sessão, para que um frame atrasado não seja
+      associado a outra janela.
+
+      REGRAS DE ASSOCIAÇÃO (v1, emenda aprovada):
+      - `associate` NÃO atribui role à superfície. Ela deve ainda não ter role
+        no momento da chamada; se já tiver, o compositor posta o erro `role`.
+      - A superfície associada pode, DEPOIS, receber o role de `layer_surface`
+        (suportado: é o caminho do frame). Se receber `xdg_toplevel`, o
+        compositor envia `closed` e o suporte fica DEFERIDO — a superfície
+        NÃO entra na lista de janelas.
+      - Uma segunda associação da MESMA superfície ou da MESMA janela é erro
+        `already_constructed`.
+      - window_id inexistente é corrida legítima: objeto criado e `closed`
+        enviado em seguida, sem erro fatal.
+
+      A superfície associada NÃO entra no LayerMap nem na lista de janelas:
+      a geometria é 100% do compositor (posição = janela − insets; tamanho =
+      conteúdo + insets + shadow_extents). Anchors, exclusive_zone e margins
+      do layer-shell são IGNORADOS; keyboard-interactivity é none; z-order fica
+      junto da janela, abaixo de panels/overlay. Isto é uma EXCEÇÃO documentada
+      à regra geral de que layer surfaces passam pelo LayerMap do Smithay.
+
+      DUPLO CONFIGURE: compositor envia `zwlr_layer_surface_v1.configure` com o
+      tamanho TOTAL (conteúdo + insets + shadow) e `aero_frame_v1.configure`
+      com o tamanho do CONTEÚDO + state na MESMA transação (mesmo lote de
+      saída). O `ack_configure` de aero continua a gatear a aplicação da
+      geometria; sem ack até 100 ms a configuração é descartada.
     </description>
 
     <enum name="error">
@@ -18,9 +44,12 @@
 
     <request name="destroy" type="destructor"/>
 
-    <request name="get_frame">
-      <description summary="cria o frame de uma janela">
-        Atribui o role aero_frame à superfície. Se o window_id não existir mais
+    <request name="associate">
+      <description summary="associa uma superfície sem role a uma janela">
+        NÃO atribui role: apenas marca a superfície como frame desta janela.
+        A superfície deve ainda não ter role (erro `role` caso contrário).
+        O role `layer_surface` é suportado depois da associação; `xdg_toplevel`
+        recebe `closed` e fica deferido. Se o window_id não existir mais
         (corrida legítima: a janela fechou após frame_requested), o compositor
         cria o objeto normalmente e envia closed em seguida — NÃO é erro fatal.
       </description>

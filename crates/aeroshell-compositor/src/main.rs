@@ -102,7 +102,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         display_handle,
     };
 
-    // Knob de benchmark: simula janelas existentes para que get_frame com
+    // Knob de benchmark: simula janelas existentes para que associate com
     // window_id=0 não seja tratado como corrida de fechamento.
     // Só existe sob a feature `bench`; o binário de produção não lê este env.
     #[cfg(feature = "bench")]
@@ -453,10 +453,10 @@ mod protocol_tests {
             self.pump();
         }
 
-        fn get_frame(&mut self, window_id: u32) -> Option<String> {
+        fn associate(&mut self, window_id: u32) -> Option<String> {
             let manager = self.client.manager.clone().unwrap();
             let surface = self.client.surface.clone().unwrap();
-            let frame = manager.get_frame(&surface, window_id, &self.queue.handle(), ());
+            let frame = manager.associate(&surface, window_id, &self.queue.handle(), ());
             self.client.frames.push(frame);
             self.pump()
         }
@@ -474,51 +474,84 @@ mod protocol_tests {
         let mut h = Harness::new(true);
         assert!(h.client.saw_manager);
         h.create_surface();
-        assert!(h.get_frame(0).is_none());
+        assert!(h.associate(0).is_none());
         assert_eq!(h.client.configured, 1);
         assert_eq!(h.client.closed, 0);
         assert_eq!(h.data.state.frames.len(), 1);
     }
 
     #[test]
-    fn second_get_frame_is_already_constructed() {
+    fn second_associate_of_window_is_already_constructed() {
         let mut h = Harness::new(true);
         h.create_surface();
-        assert!(h.get_frame(0).is_none());
+        assert!(h.associate(0).is_none());
         let compositor = h.client.compositor.clone().unwrap();
         let surface2 = compositor.create_surface(&h.queue.handle(), ());
         h.client.surface = Some(surface2);
         h.pump();
-        let _err = h.get_frame(0);
+        let _err = h.associate(0);
         assert!(
             h.protocol_error,
-            "segundo get_frame deveria gerar erro de protocolo"
+            "segunda associação da janela deveria gerar erro de protocolo"
         );
         assert_eq!(h.data.state.frames.len(), 1);
     }
 
     #[test]
-    fn surface_with_toplevel_role_is_rejected() {
+    fn second_associate_of_same_surface_is_already_constructed() {
         let mut h = Harness::new(true);
         h.create_surface();
+        assert!(h.associate(0).is_none());
+        let _err = h.associate(1);
+        assert!(
+            h.protocol_error,
+            "segunda associação da mesma superfície deveria gerar erro"
+        );
+        assert_eq!(h.data.state.frames.len(), 1);
+    }
+
+    #[test]
+    fn associate_before_role_is_ok_after_role_is_error() {
+        let mut h = Harness::new(true);
+        h.create_surface();
+        // Caminho feliz: associar ANTES de a superfície ganhar role.
+        assert!(h.associate(0).is_none());
+        assert_eq!(h.data.state.frames.len(), 1);
+        assert_eq!(h.client.configured, 1);
+
+        // Erro de role: associar uma superfície que já tem xdg_toplevel.
+        let compositor = h.client.compositor.clone().unwrap();
+        let surface2 = compositor.create_surface(&h.queue.handle(), ());
+        h.client.surface = Some(surface2);
+        h.pump();
         let shell = h.client.shell.clone().unwrap();
         let surface = h.client.surface.clone().unwrap();
         let xdg_surface = shell.get_xdg_surface(&surface, &h.queue.handle(), ());
         let _toplevel = xdg_surface.get_toplevel(&h.queue.handle(), ());
         h.pump();
-        let _err = h.get_frame(0);
-        let role_rejected = h.data.state.frames.is_empty();
+        let _err = h.associate(1);
         assert!(
-            role_rejected,
-            "superfície com toplevel não deveria virar frame"
+            h.protocol_error,
+            "associate DEPOIS do role deveria ser erro de role"
         );
+        assert_eq!(h.data.state.frames.len(), 1);
+    }
+
+    #[test]
+    fn unknown_window_associate_gets_closed() {
+        let mut h = Harness::new(true);
+        h.create_surface();
+        assert!(h.associate(999).is_none());
+        assert_eq!(h.client.closed, 1, "janela inexistente deve gerar closed");
+        assert_eq!(h.client.configured, 0);
+        assert_eq!(h.data.state.frames.len(), 1);
     }
 
     #[test]
     fn move_with_fake_serial_is_ignored() {
         let mut h = Harness::new(true);
         h.create_surface();
-        assert!(h.get_frame(0).is_none());
+        assert!(h.associate(0).is_none());
         let seat = h.client.seat.clone().unwrap();
         let frame = h.client.frames.first().unwrap().clone();
         frame._move(&seat, 0xDEAD);

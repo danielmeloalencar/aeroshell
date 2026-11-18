@@ -1,4 +1,4 @@
-//! Cliente de teste do protocolo aero_frame_v1 (S5): valida global, get_frame e eventos.
+//! Cliente de teste do protocolo aero_frame_v1 (S5): valida global, associate e eventos.
 
 #[cfg(feature = "bench")]
 use std::os::fd::AsFd;
@@ -402,15 +402,15 @@ fn main() {
         .and_then(|v| v.parse().ok())
         .unwrap_or(0);
     let surface = state.surface.clone().unwrap();
-    let frame = manager.get_frame(&surface, window_id, &qh, ());
+    let frame = manager.associate(&surface, window_id, &qh, ());
     state.frames.push(frame);
     if std::env::var_os("AERO_TEST_DOUBLE").is_some() {
         // Superfície nova: isola `already_constructed` do erro de role.
         let surface2 = compositor.create_surface(&qh, ());
         queue.roundtrip(&mut state).expect("roundtrip surface2");
-        manager.get_frame(&surface2, window_id, &qh, ());
+        manager.associate(&surface2, window_id, &qh, ());
     }
-    queue.roundtrip(&mut state).expect("roundtrip get_frame");
+    queue.roundtrip(&mut state).expect("roundtrip associate");
     queue.roundtrip(&mut state).expect("roundtrip configure");
     #[cfg(feature = "bench")]
     if std::env::var_os("AERO_FRAME_BENCH").is_some() {

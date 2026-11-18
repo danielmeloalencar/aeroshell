@@ -55,6 +55,15 @@ pub struct AeroState {
     pub cursor_over_interactive: bool,
     /// Frames do protocolo privado (S5).
     pub frames: Vec<(crate::aero_frame_protocol::aero_frame_v1::AeroFrameV1, u32)>,
+    /// Associações frame ↔ superfície. Marca SEM role: layer_surface é suportado;
+    /// xdg_toplevel recebe `closed` e fica deferido (ADR 0004).
+    pub associated_frames: Vec<(
+        WlSurface,
+        crate::aero_frame_protocol::aero_frame_v1::AeroFrameV1,
+        u32,
+    )>,
+    /// Layer surfaces que são frames: NÃO entram no LayerMap (exceção do ADR 0004).
+    pub frame_layer_surfaces: Vec<smithay::desktop::LayerSurface>,
     /// Configurações enviadas e ainda não confirmadas (serial, instante).
     pub pending_configures: Vec<(u32, std::time::Instant)>,
     /// Sondas de configure: medem configure → commit e descompasso por passo.
@@ -150,6 +159,8 @@ impl AeroState {
             layer_surfaces: Vec::new(),
             cursor_over_interactive: false,
             frames: Vec::new(),
+            associated_frames: Vec::new(),
+            frame_layer_surfaces: Vec::new(),
             pending_configures: Vec::new(),
             #[cfg(feature = "bench")]
             frame_probes: Vec::new(),

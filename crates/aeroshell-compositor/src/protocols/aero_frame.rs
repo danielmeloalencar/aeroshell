@@ -12,12 +12,10 @@ use crate::{
     },
     state::{AeroState, ClientState},
 };
-use smithay::wayland::compositor::give_role;
+use smithay::wayland::compositor::get_role;
 use wayland_server::{Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource};
 
-const AERO_FRAME_ROLE: &str = "aero_frame";
-
-/// Resultado puro da validação de um `get_frame` (testável sem objects Wayland).
+/// Resultado puro da validação de um `associate` (testável sem objetos Wayland).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FrameCheck {
     Ok,
@@ -73,13 +71,25 @@ impl Dispatch<AeroFrameManagerV1, ()> for AeroState {
         data_init: &mut DataInit<'_, Self>,
     ) {
         match request {
-            ManagerRequest::GetFrame {
+            ManagerRequest::Associate {
                 id,
                 surface,
                 window_id,
             } => {
-                if give_role(&surface, AERO_FRAME_ROLE).is_err() {
-                    manager.post_error(ManagerError::Role, "a wl_surface já possui outro role");
+                // ADR 0004: NÃO atribuir role. Apenas marcar a superfície.
+                if state
+                    .associated_frames
+                    .iter()
+                    .any(|(s, _, _)| s == &surface)
+                {
+                    manager.post_error(
+                        ManagerError::AlreadyConstructed,
+                        "esta wl_surface já está associada",
+                    );
+                    return;
+                }
+                if get_role(&surface).is_some() {
+                    manager.post_error(ManagerError::Role, "associate exige superfície sem role");
                     return;
                 }
                 let existing: Vec<u32> = state.frames.iter().map(|(_, id)| *id).collect();
@@ -95,8 +105,11 @@ impl Dispatch<AeroFrameManagerV1, ()> for AeroState {
                     FrameCheck::Closed => {
                         let frame: AeroFrameV1 = data_init.init(id, window_id);
                         frame.closed();
-                        state.frames.push((frame, window_id));
-                        tracing::info!(window_id, "get_frame após fechamento: closed enviado");
+                        state.frames.push((frame.clone(), window_id));
+                        state
+                            .associated_frames
+                            .push((surface.clone(), frame, window_id));
+                        tracing::info!(window_id, "associate após fechamento: closed enviado");
                         return;
                     }
                     FrameCheck::Ok => {}
@@ -146,11 +159,14 @@ impl Dispatch<AeroFrameManagerV1, ()> for AeroState {
                         );
                     }
                 }
-                state.frames.push((frame, window_id));
+                state.frames.push((frame.clone(), window_id));
+                state
+                    .associated_frames
+                    .push((surface.clone(), frame, window_id));
                 tracing::info!(
                     window_id,
                     steps,
-                    "frame criado; frame_requested+configure enviados"
+                    "frame associado; frame_requested+configure enviados"
                 );
             }
             ManagerRequest::Destroy => {}
@@ -265,6 +281,9 @@ impl Dispatch<AeroFrameV1, u32> for AeroState {
             }
             FrameRequest::Destroy => {
                 state.frames.retain(|(frame, _)| frame != resource);
+                state
+                    .associated_frames
+                    .retain(|(_, frame, _)| frame != resource);
             }
         }
     }
