@@ -68,7 +68,7 @@ pub struct AeroState {
 impl AeroState {
     pub fn new(
         event_loop: &mut EventLoop<CalloopData>,
-        display: &'static Display<Self>,
+        display: Display<Self>,
         opts: &Options,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let dh = display.handle();
@@ -102,9 +102,9 @@ impl AeroState {
                 .expect("failed to insert Wayland client");
         })?;
 
-        // O display é emprestado ao event loop; o chamador mantém a posse em
-        // `CalloopData::display` e despacha clientes explicitamente nos testes.
-        #[cfg(not(test))]
+        // O Display é movido para dentro do event source (padrão canônico do
+        // anvil/Smithay). Assim não há `Box::leak`, nem ponteiro bruto: o source
+        // é dono do Display e o event loop o despacha a cada iteração.
         loop_handle.insert_source(
             smithay::reexports::calloop::generic::Generic::new(
                 display,
@@ -112,14 +112,13 @@ impl AeroState {
                 smithay::reexports::calloop::Mode::Level,
             ),
             |_, display, data| {
-                let borrowed: &Display<Self> = display;
-                let display: &mut Display<Self> = unsafe { &mut *(borrowed as *const _ as *mut _) };
-                display.dispatch_clients(&mut data.state)?;
+                // SAFETY: `display` é owned pelo Generic source e permanece vivo
+                // enquanto o event loop existe. O callback é chamado com acesso
+                // exclusivo ao source, então `get_mut` é seguro aqui.
+                unsafe { display.get_mut() }.dispatch_clients(&mut data.state)?;
                 Ok(smithay::reexports::calloop::PostAction::Continue)
             },
         )?;
-        #[cfg(test)]
-        let _ = display;
 
         Ok(Self {
             start_time: Instant::now(),

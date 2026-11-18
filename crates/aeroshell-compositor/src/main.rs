@@ -31,8 +31,6 @@ pub use state::{AeroState, ClientState};
 pub struct CalloopData {
     state: AeroState,
     display_handle: DisplayHandle,
-    #[cfg(test)]
-    display: &'static mut Display<AeroState>,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -49,7 +47,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     // winit/wayland-client consomem WAYLAND_SOCKET e tomariam posse do mesmo fd.
     let privileged_fd: Option<OwnedFd> = std::env::var_os("AERO_PRIVILEGED_FD")
         .and_then(|value| value.to_str().and_then(|v| v.parse::<i32>().ok()))
-        .map(|fd| unsafe { OwnedFd::from_raw_fd(fd) });
+        .map(|fd| {
+            // SAFETY: `fd` é a ponta do socketpair herdada do supervisor, passa
+            // exatamente uma vez para `OwnedFd`, que passa a ser seu único dono.
+            unsafe { OwnedFd::from_raw_fd(fd) }
+        });
     if std::env::var_os("AERO_PRIVILEGED_FD").is_some() {
         std::env::remove_var("AERO_PRIVILEGED_FD");
     }
@@ -66,13 +68,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut event_loop: EventLoop<CalloopData> = EventLoop::try_new()?;
     let display: Display<AeroState> = Display::new()?;
     let display_handle = display.handle();
-    #[cfg(test)]
-    let display_ref: &'static Display<AeroState> = Box::leak(Box::new(display));
-    #[cfg(not(test))]
-    let display_ref: Display<AeroState> = display;
-    #[cfg(not(test))]
-    let display_ref = Box::leak(Box::new(display_ref));
-    let state = AeroState::new(&mut event_loop, display_ref, &opts)?;
+    let state = AeroState::new(&mut event_loop, display, &opts)?;
 
     // O env do host NÃO é alterado: só o processo filho recebe o socket do AeroShell.
     let socket_name = state.socket_name.clone();
@@ -99,12 +95,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    let mut data = CalloopData {
-        state,
-        display_handle,
-        #[cfg(test)]
-        display: unsafe { &mut *(display_ref as *const _ as *mut Display<AeroState>) },
-    };
+    let mut data = CalloopData { state, display_handle };
 
     // O supervisor entrega uma ponta do socketpair ao shell via WAYLAND_SOCKET.
     // Essa conexão é marcada como privilegiada; o socket público nunca é.
@@ -345,7 +336,8 @@ mod protocol_tests {
         }
     }
 
-    struct Harness {
+    struct Harness<'a> {
+        event_loop: EventLoop<'a, CalloopData>,
         data: CalloopData,
         connection: Connection,
         queue: wayland_client::EventQueue<ClientState>,
@@ -353,7 +345,7 @@ mod protocol_tests {
         protocol_error: bool,
     }
 
-    impl Harness {
+    impl<'a> Harness<'a> {
         fn new(privileged: bool) -> Self {
             static COUNTER: AtomicUsize = AtomicUsize::new(0);
             let (server, client) = UnixStream::pair().unwrap();
@@ -368,8 +360,7 @@ mod protocol_tests {
                 ),
                 ..Default::default()
             };
-            let display_ref: &'static Display<AeroState> = Box::leak(Box::new(display));
-            let state = AeroState::new(&mut event_loop, display_ref, &opts).unwrap();
+            let state = AeroState::new(&mut event_loop, display, &opts).unwrap();
             display_handle
                 .insert_client(
                     server,
@@ -379,11 +370,7 @@ mod protocol_tests {
                     }),
                 )
                 .unwrap();
-            let mut data = CalloopData {
-                state,
-                display_handle,
-                display: unsafe { &mut *(display_ref as *const _ as *mut Display<AeroState>) },
-            };
+            let mut data = CalloopData { state, display_handle };
             data.state.test_window_count = 1;
 
             let connection = Connection::from_backend(Backend::connect(client).unwrap());
@@ -391,45 +378,43 @@ mod protocol_tests {
             let qh = queue.handle();
             connection.display().get_registry(&qh, ());
             let mut harness = Self {
+                event_loop,
                 data,
                 connection,
                 queue,
                 client: ClientState::default(),
                 protocol_error: false,
             };
-            harness.protocol_error = false;
             harness.pump();
             harness
         }
 
         fn pump(&mut self) -> Option<String> {
             let error = None;
-
-            // Os clientes são despachados explicitamente: o event_loop sozinho não
-            // aciona o source `Generic` que chama `Display::dispatch_clients`.
-
             if self.queue.flush().is_err() {
                 return Some("flush falhou".to_owned());
             }
             for _ in 0..40 {
-                let display = &mut self.data.display;
-                let state = &mut self.data.state;
-                let _ = display.dispatch_clients(state);
-                let _ = display.flush_clients();
-                if self.client.protocol_error {
-                    self.client.protocol_error = false;
-                    self.protocol_error = true;
-                    break;
-                }
+                // O Display é owned pelo source `Generic` dentro do event loop;
+                // `dispatch` aciona o callback que chama `dispatch_clients`.
+                let _ = self
+                    .event_loop
+                    .dispatch(Some(Duration::from_millis(1)), &mut self.data);
+                let _ = self.data.display_handle.flush_clients();
                 if let Some(guard) = self.connection.prepare_read() {
                     let _ = guard.read();
                 }
                 match self.queue.dispatch_pending(&mut self.client) {
-                    Ok(_n) => {}
+                    Ok(_) => {}
                     Err(err) => {
                         eprintln!("TEST client dispatch error: {err:?}");
                         self.protocol_error = true;
                     }
+                }
+                if self.client.protocol_error {
+                    self.client.protocol_error = false;
+                    self.protocol_error = true;
+                    break;
                 }
                 std::thread::sleep(Duration::from_millis(1));
             }
