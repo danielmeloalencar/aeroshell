@@ -1,0 +1,43 @@
+/* AeroShell shell-reset — servido por aero://shell-reset.css e injetado em TODAS
+   as superfícies (painel, desktop, overlay, frame, lock, greeter).
+   Componentes PODEM sobrescrever explicitamente qualquer propriedade abaixo. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+  background: transparent;
+}
+
+body {
+  touch-action: none;
+}
+
+* {
+  -webkit-touch-callout: none;
+}
+
+::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+img,
+canvas,
+svg {
+  -webkit-user-drag: none;
+}

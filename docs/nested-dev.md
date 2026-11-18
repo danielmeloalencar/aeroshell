@@ -6,6 +6,13 @@ ambiente do host: o nome do socket do AeroShell é passado apenas no `env` dos p
 
 ## Backends
 - `winit`: padrão quando `WAYLAND_DISPLAY` ou `DISPLAY` existem.
+
+**Limitação do winit 0.30**: não há `Window::set_size`. `set_min_inner_size`/
+`set_max_inner_size` não redimensionam uma janela já mapeada pelo host. Portanto, ao usar
+`--size 1000x650`, a **janela host permanece 1280x800** enquanto o **output lógico do AeroShell
+é 1000x650** (`WinitEvent::Resized` é ignorado quando `--size` foi forçado). Exemplo de log:
+`requested=Some((1000,650)) window=Size { w: 1280, h: 800 } mode=Size { w: 1000, h: 650 }`.
+
 - `headless`: `aeroshell-compositor --backend headless` (CI/testes, sem renderização).
 - `udev`: sessão real; F1.
 

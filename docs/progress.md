@@ -69,6 +69,16 @@ libpam0g-dev dbus`.
 - RAM release, 1 painel (VM sem 3D): shell 198568 kB RSS, WebKitNetworkProcess 55252 kB,
   WebKitWebProcess 190528 kB; soma RSS 444348 kB, PSS 236891 kB.
 
+### Correção do scrollbar do painel
+O "1 px escuro" era **overlay scrollbar**, não margem. Causa: `#panel { height:100%; margin:4px }`
+(numos elementos 48 px) somado ao conteúdo — com overflow forçado o painel chegou a
+`scrollHeight=162 / clientHeight=48`, `scrollWidth=1300 / clientWidth=1280` e `overflow:visible`.
+Criado `assets/shell-reset.css`, servido por `aero://shell-reset.css` e injetado em todas as
+superfícies. Com reset: `overflow:hidden`, `scrollHeight=48=clientHeight` mesmo com divisor
+de 120 px forçado. Documentado em `docs/sdk-reference/shell-reset.md` e `docs/architecture.md`.
+Bug de roteamento do esquema corrigido: `aero://panel/index.html` tem host `panel`, path
+`/index.html`; o handler agora casa pela URI completa (antes devolvia corpo vazio → janela cinza).
+
 ### Micro-benchmark S5 sem protocolo (antes do S3, N WebViews, mesmo WebContext)
 | N | WebKitWebProcess | RSS soma | PSS soma | criação por WebView | destruição |
 |---|---|---|---|---|---|
@@ -76,10 +86,17 @@ libpam0g-dev dbus`.
 | 5 | 5 | 1180316 kB | 440440 kB | 300/215/205/205/207 ms | 4,61 ms |
 | 20 | 18 | 1149772 kB | 270146 kB | ~149–310 ms | 11,64 ms |
 
-Conclusão: **não há compartilhamento de processo web** entre WebViews irmãs — praticamente
-1 `WebKitWebProcess` por WebView (com cache/reaproveitamento parcial em N=20). Para 20 frames
-isso é arquiteturalmente caro; o pool de WebViews do S5 precisa ser obrigatório e a alternativa
-de superfície única recortada deve ser mantida no ADR.
+O benchmark inicial (sem `related-view`, uma repetição) foi **superseguido**: ver abaixo e
+`docs/adr/0001-go-no-go.md`.
+
+### Benchmark refeito (3 repetições, PSS, 3 s após Finished de todas as views)
+Dados brutos em `/tmp/opencode/s5-bench-results.txt`, reproduzíveis via
+`tests/bench/run_s5_bench.sh`. Sem `related-view`, N=20 → 20 `WebKitWebProcess` e PSS
+~1009–1011 MB; **com `related-view`, N=20 → 1 WebKitWebProcess e PSS ~500–505 MB**; atlas de
+1 WebView com 20 frames → 1 WebProcess, PSS ~304–310 MB, inserção de 20 componentes 0,2 ms,
+remover/reinserir 1 componente 0,01 ms, buffer 1000x613 ARGB8888 = 2.452.000 bytes. Pool reduz
+**latência**, não memória; o ganho de memória vem de `related-view`. Smithay 0.7 já aceita
+`src` rect no `RenderElement::draw`.
 
 ### Pendente
-S3, S4, S5, S6, S7 e ADR go/no-go. S3 **não iniciado** — aguardando decisão após o benchmark.
+S3, S4, S5, S6, S7. **S3 não iniciado**: ADR 0001 proposto, aguardando decisão do usuário.

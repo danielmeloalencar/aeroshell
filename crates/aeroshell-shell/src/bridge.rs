@@ -7,7 +7,7 @@ pub fn install() -> UserContentManager {
     let manager = UserContentManager::new();
     manager.register_script_message_handler("aero", None);
     manager.connect_script_message_received(Some("aero"), |_, value| {
-        tracing::debug!(?value, "mensagem recebida da WebView");
+        tracing::info!(json = ?value.to_json(0), "BENCH/METRICS: mensagem da WebView");
     });
     manager
 }
