@@ -12,7 +12,7 @@ use crate::{
     },
     state::{AeroState, ClientState},
 };
-use smithay::wayland::compositor::get_role;
+use smithay::wayland::compositor::{add_destruction_hook, get_role};
 use wayland_server::{Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource};
 
 /// Resultado puro da validação de um `associate` (testável sem objetos Wayland).
@@ -80,7 +80,7 @@ impl Dispatch<AeroFrameManagerV1, ()> for AeroState {
                 if state
                     .associated_frames
                     .iter()
-                    .any(|(s, _, _)| s == &surface)
+                    .any(|(s, _, _, _)| s == &surface)
                 {
                     manager.post_error(
                         ManagerError::AlreadyConstructed,
@@ -106,9 +106,17 @@ impl Dispatch<AeroFrameManagerV1, ()> for AeroState {
                         let frame: AeroFrameV1 = data_init.init(id, window_id);
                         frame.closed();
                         state.frames.push((frame.clone(), window_id));
-                        state
-                            .associated_frames
-                            .push((surface.clone(), frame, window_id));
+                        let client_surface = state
+                            .space
+                            .elements()
+                            .nth(window_id as usize)
+                            .and_then(|w| w.toplevel().map(|t| t.wl_surface().clone()));
+                        state.associated_frames.push((
+                            surface.clone(),
+                            frame,
+                            window_id,
+                            client_surface,
+                        ));
                         tracing::info!(window_id, "associate após fechamento: closed enviado");
                         return;
                     }
@@ -160,9 +168,39 @@ impl Dispatch<AeroFrameManagerV1, ()> for AeroState {
                     }
                 }
                 state.frames.push((frame.clone(), window_id));
-                state
-                    .associated_frames
-                    .push((surface.clone(), frame, window_id));
+                let client_surface = state
+                    .space
+                    .elements()
+                    .nth(window_id as usize)
+                    .and_then(|w| w.toplevel().map(|t| t.wl_surface().clone()));
+                state.associated_frames.push((
+                    surface.clone(),
+                    frame,
+                    window_id,
+                    client_surface.clone(),
+                ));
+                // Quando a janela cliente morre, o frame recebe `closed` (ADR 0004).
+                if let Some(client) = client_surface {
+                    add_destruction_hook::<crate::state::AeroState, _>(&client, |state, dead| {
+                        if let Some(pos) = state
+                            .associated_frames
+                            .iter()
+                            .position(|(_, _, _, cs)| cs.as_ref() == Some(dead))
+                        {
+                            let (frame_surface, frame, window_id, _) =
+                                state.associated_frames.remove(pos);
+                            frame.closed();
+                            state.frame_geometries.remove(&frame_surface);
+                            state
+                                .frame_layer_surfaces
+                                .retain(|l| l.wl_surface() != &frame_surface);
+                            tracing::info!(
+                                window_id,
+                                "janela cliente destruída: closed enviado ao frame"
+                            );
+                        }
+                    });
+                }
                 tracing::info!(
                     window_id,
                     steps,
@@ -192,14 +230,15 @@ impl Dispatch<AeroFrameV1, u32> for AeroState {
                 right,
                 bottom,
             } => {
-                tracing::info!(
-                    window_id = *window_id,
-                    left,
-                    top,
-                    right,
-                    bottom,
-                    "insets pendentes"
-                )
+                if let Some((surface, _, _, _)) = state
+                    .associated_frames
+                    .iter()
+                    .find(|(_, _, id, _)| id == window_id)
+                {
+                    let geo = state.frame_geometries.entry(surface.clone()).or_default();
+                    geo.insets = (left, top, right, bottom);
+                }
+                tracing::info!(window_id = *window_id, left, top, right, bottom, "insets");
             }
             FrameRequest::SetShadowExtents {
                 left,
@@ -207,14 +246,15 @@ impl Dispatch<AeroFrameV1, u32> for AeroState {
                 right,
                 bottom,
             } => {
-                tracing::info!(
-                    window_id = *window_id,
-                    left,
-                    top,
-                    right,
-                    bottom,
-                    "sombra pendente"
-                )
+                if let Some((surface, _, _, _)) = state
+                    .associated_frames
+                    .iter()
+                    .find(|(_, _, id, _)| id == window_id)
+                {
+                    let geo = state.frame_geometries.entry(surface.clone()).or_default();
+                    geo.shadow = (left, top, right, bottom);
+                }
+                tracing::info!(window_id = *window_id, left, top, right, bottom, "sombra");
             }
             FrameRequest::Move { seat, serial } => {
                 if !serial_valid(state.last_button_serial, serial) {
@@ -283,7 +323,7 @@ impl Dispatch<AeroFrameV1, u32> for AeroState {
                 state.frames.retain(|(frame, _)| frame != resource);
                 state
                     .associated_frames
-                    .retain(|(_, frame, _)| frame != resource);
+                    .retain(|(_, frame, _, _)| frame != resource);
             }
         }
     }

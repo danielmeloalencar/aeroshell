@@ -58,8 +58,8 @@ impl WlrLayerShellHandler for AeroState {
         let frame_assoc = self
             .associated_frames
             .iter()
-            .find(|(s, _, _)| s == layer.wl_surface())
-            .map(|(_, frame, window_id)| (frame.clone(), *window_id));
+            .find(|(s, _, _, _)| s == layer.wl_surface())
+            .map(|(_, frame, window_id, _)| (frame.clone(), *window_id));
         if let Some((frame, window_id)) = frame_assoc {
             // Geometria 100% do compositor: usar a janela real (zenity) quando
             // existir, em vez do tamanho do output.
@@ -76,14 +76,22 @@ impl WlrLayerShellHandler for AeroState {
                         .map(|m| (m.size.w, m.size.h))
                 })
                 .unwrap_or((1280, 800));
-            // Insets/shadow ainda não implementados; margem diagnóstica
-            // (debug/bench) deixa o contorno visível nos testes visuais.
-            let margin = self.frame_test_margin;
-            let total = (content.0 + 2 * margin, content.1 + 2 * margin);
+            // Geometria real: total = conteúdo + insets + shadow_extents.
+            // O spike envia set_insets(0,30,0,0) para formar a titlebar.
+            let geo = self
+                .frame_geometries
+                .get(layer.wl_surface())
+                .copied()
+                .unwrap_or_default();
+            let total = (content.0 + geo.extra_w(), content.1 + geo.extra_h());
+            tracing::info!(window_id, insets = ?geo.insets, shadow = ?geo.shadow, "geometria do frame");
             layer.layer_surface().with_pending_state(|state| {
                 state.size = Some(total.into());
             });
-            let _ = layer.layer_surface().send_pending_configure();
+            // `send_pending_configure()` só envia se houver mudança pendente;
+            // usar `send_configure()` explícito, como no caminho do painel (S2),
+            // para garantir que o GTK aplique o tamanho total.
+            let _ = layer.layer_surface().send_configure();
             let serial = self.pending_configures.len() as u32 + 1;
             let frame_state = crate::aero_frame_protocol::aero_frame_v1::State::empty();
             frame.configure(serial, content.0, content.1, frame_state);

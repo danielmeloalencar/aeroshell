@@ -26,12 +26,11 @@ cenv = base.copy()
 cenv.update(
     AERO_PRIVILEGED_FD=str(cfd),
     WAYLAND_DISPLAY=base.get("WAYLAND_DISPLAY", "wayland-0"),
-    RUST_LOG="info",
-    AERO_FRAME_TEST_MARGIN=os.environ.get("AERO_FRAME_TEST_MARGIN", "60"),
+    RUST_LOG="debug",
 )
 comp = subprocess.Popen(
     [COMP, "--backend", "winit", "--socket", SOCK,
-     "--command", "zenity --info --text=JanelaDeTeste"],
+     "--command", f"AERO_SPIKE_BLUE_CLIENT=1 {SPIKE}"],
     env=cenv, pass_fds=(cfd,),
     stdout=open(LOG_COMP, "w"), stderr=subprocess.STDOUT,
 )
@@ -50,7 +49,9 @@ if "novo toplevel xdg-surface mapeado" not in open(LOG_COMP, errors="ignore").re
     print("FALHA: zenity não mapeou antes do associate")
     comp.terminate()
     raise SystemExit(1)
-print("zenity mapeado; lançando spike")
+# Esperar o cliente azul comitar buffer (geometry 0x0 até o primeiro commit).
+time.sleep(2)
+print("cliente azul com buffer; lançando spike")
 
 senv = base.copy()
 senv.update(
@@ -72,8 +73,26 @@ if os.environ.get("AERO_SPIKE_MANUAL"):
     print("NAO encerrar: usuario testa e fecha a janela do compositor.")
     raise SystemExit(0)
 
+# Modo automático: matar o cliente azul para provar closed → frame destrói.
+time.sleep(7)
+import re
+clog = re.sub(r"\x1b\[[0-9;]*m", "", open(LOG_COMP, errors="ignore").read())
+m = re.findall(r"cliente inicial iniciado.*?pid[=: ]+(\d+)", clog)
+if m:
+    sh_pid = int(m[-1])
+    children = subprocess.run(
+        ["ps", "-o", "pid=", "--ppid", str(sh_pid)],
+        capture_output=True, text=True,
+    ).stdout.split()
+    for child in children or [str(sh_pid)]:
+        print(f"matando cliente azul pid={child}")
+        try:
+            os.kill(int(child), 15)
+        except ProcessLookupError:
+            pass
+    time.sleep(1)
 try:
-    spike.wait(timeout=25)
+    spike.wait(timeout=3)
 except subprocess.TimeoutExpired:
     spike.kill()
 time.sleep(0.5)

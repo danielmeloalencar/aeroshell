@@ -35,6 +35,38 @@ impl CompositorHandler for AeroState {
     }
 
     fn commit(&mut self, surface: &WlSurface) {
+        // Medir o buffer REAL commitado pelo frame vs. o tamanho configurado.
+        #[cfg(debug_assertions)]
+        if self
+            .associated_frames
+            .iter()
+            .any(|(s, _, _, _)| s == surface)
+        {
+            let committed = smithay::wayland::compositor::with_states(surface, |states| {
+                match &states
+                    .cached_state
+                    .get::<smithay::wayland::compositor::SurfaceAttributes>()
+                    .current()
+                    .buffer
+                {
+                    Some(smithay::wayland::compositor::BufferAssignment::NewBuffer(buffer)) => {
+                        smithay::wayland::shm::with_buffer_contents(buffer, |_, _, data| {
+                            (data.width, data.height)
+                        })
+                        .ok()
+                    }
+                    _ => None,
+                }
+            });
+            let configured = self
+                .frame_geometries
+                .get(surface)
+                .map(|g| (g.insets.0 + g.insets.2, g.insets.1 + g.insets.3));
+            eprintln!(
+                "FRAME_BUFFER_COMMIT buffer={:?} insets_extra={:?}",
+                committed, configured
+            );
+        }
         #[cfg(feature = "bench")]
         {
             // Métricas do protótipo do frame (i) e (ii): ler o buffer ANTES do

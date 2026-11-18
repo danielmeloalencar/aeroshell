@@ -6,7 +6,7 @@ use smithay::{
     backend::{
         renderer::{
             damage::OutputDamageTracker,
-            element::{surface::WaylandSurfaceRenderElement, Kind},
+            element::{surface::WaylandSurfaceRenderElement, AsRenderElements, Kind},
             gles::GlesRenderer,
         },
         winit::{self, WinitEvent},
@@ -16,8 +16,8 @@ use smithay::{
         calloop::EventLoop,
         winit::{dpi::PhysicalSize, window::CursorIcon},
     },
-    utils::{IsAlive, Transform},
-    wayland::compositor::with_states,
+    utils::{IsAlive, Scale as UtilsScale, Transform},
+    wayland::{compositor::with_states, shell::wlr_layer::Layer},
 };
 
 use crate::{cli::Options, CalloopData};
@@ -125,60 +125,138 @@ pub fn init_winit(
                     };
                     let rendered = match backend.bind() {
                         Ok((renderer, mut framebuffer)) => {
-                            // Frames associados (ADR 0004) ficam FORA do LayerMap:
-                            // renderiza-los como custom elements na geometria da janela.
-                            let frame_origin = state
-                                .space
-                                .elements()
-                                .next()
-                                .and_then(|w| state.space.element_geometry(w))
-                                .map(|g| g.loc)
-                                .unwrap_or_default();
-                            let mut frame_elements: Vec<WaylandSurfaceRenderElement<GlesRenderer>> =
+                            // ADR 0004: a lista é FRENTE-PARA-TRÁS (primeiro = topo).
+                            // Smithay 0.7: space_render_elements põe Top/Overlay primeiro e
+                            // Background/Bottom por último. O frame associado vai LOGO APÓS
+                            // o render_element do seu cliente (ou seja, ABAIXO dele), mantendo
+                            // o OutputDamageTracker — nada de draw direto no framebuffer.
+                            let output_scale = output.current_scale().fractional_scale();
+                            let mut elements: Vec<WaylandSurfaceRenderElement<GlesRenderer>> =
                                 Vec::new();
-                            for layer in &state.frame_layer_surfaces {
-                                if !layer.alive() {
-                                    continue;
+                            {
+                                let layer_map = smithay::desktop::layer_map_for_output(output);
+                                let (lower, upper): (Vec<_>, Vec<_>) = layer_map
+                                    .layers()
+                                    .rev()
+                                    .partition(|s| matches!(s.layer(), Layer::Background | Layer::Bottom));
+
+                                for layer in upper {
+                                    if let Some(geo) = layer_map.layer_geometry(layer) {
+                                        elements.extend(AsRenderElements::render_elements::<
+                                            WaylandSurfaceRenderElement<GlesRenderer>,
+                                        >(
+                                            layer,
+                                            renderer,
+                                            geo.loc.to_physical_precise_round(output_scale),
+                                            UtilsScale::from(output_scale),
+                                            1.0,
+                                        ));
+                                    }
                                 }
-                                let surface = layer.wl_surface();
-                                let margin = state.frame_test_margin;
-                                let loc: smithay::utils::Point<f64, smithay::utils::Physical> = (
-                                    (frame_origin.x - margin) as f64,
-                                    (frame_origin.y - margin) as f64,
-                                )
-                                    .into();
-                                match with_states(surface, |states| {
-                                    WaylandSurfaceRenderElement::from_surface(
+
+                                let mut placed_frames = Vec::new();
+                                for window in state.space.elements_for_output(output).rev() {
+                                    let Some(geo) = state.space.element_geometry(window) else {
+                                        continue;
+                                    };
+                                    elements.extend(AsRenderElements::render_elements::<
+                                        WaylandSurfaceRenderElement<GlesRenderer>,
+                                    >(
+                                        window,
                                         renderer,
-                                        surface,
-                                        states,
-                                        loc,
+                                        geo.loc.to_physical_precise_round(output_scale),
+                                        UtilsScale::from(output_scale),
                                         1.0,
-                                        Kind::Unspecified,
-                                    )
-                                }) {
-                                    Ok(Some(element)) => frame_elements.push(element),
-                                    Ok(None) => {}
-                                    Err(err) => tracing::warn!(?err, "import do frame falhou"),
+                                    ));
+
+                                    // Frame deste cliente: depois do cliente = abaixo dele.
+                                    let client_surface = window.toplevel().map(|t| t.wl_surface());
+                                    if let Some((frame_surface, _, _, _)) = state
+                                        .associated_frames
+                                        .iter()
+                                        .find(|(_, _, _, cs)| cs.as_ref() == client_surface)
+                                    {
+                                        let fgeo = state
+                                            .frame_geometries
+                                            .get(frame_surface)
+                                            .copied()
+                                            .unwrap_or_default();
+                                        let (dx, dy) = fgeo.offset();
+                                        let loc: smithay::utils::Point<i32, smithay::utils::Physical> = smithay::utils::Point::<i32, smithay::utils::Logical>::new(
+                                            geo.loc.x + dx,
+                                            geo.loc.y + dy,
+                                        )
+                                        .to_physical_precise_round(output_scale);
+                                        let f = smithay::utils::Point::<f64, smithay::utils::Physical>::from((
+                                            loc.x as f64,
+                                            loc.y as f64,
+                                        ));
+                                        let element = with_states(frame_surface, |states| {
+                                            WaylandSurfaceRenderElement::from_surface(
+                                                renderer,
+                                                frame_surface,
+                                                states,
+                                                f,
+                                                1.0,
+                                                Kind::Unspecified,
+                                            )
+                                        });
+                                        match element {
+                                            Ok(Some(el)) => {
+                                                elements.push(el);
+                                                placed_frames.push(frame_surface.clone());
+                                            }
+                                            Ok(None) => {}
+                                            Err(err) => {
+                                                tracing::warn!(?err, "import do frame falhou")
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Frames sem cliente mapeado: abaixo de todas as janelas.
+                                for layer in &state.frame_layer_surfaces {
+                                    if !layer.alive() || placed_frames.contains(layer.wl_surface()) {
+                                        continue;
+                                    }
+                                    let f = smithay::utils::Point::<f64, smithay::utils::Physical>::from((
+                                        0.0,
+                                        0.0,
+                                    ));
+                                    if let Ok(Some(el)) = with_states(layer.wl_surface(), |states| {
+                                        WaylandSurfaceRenderElement::from_surface(
+                                            renderer,
+                                            layer.wl_surface(),
+                                            states,
+                                            f,
+                                            1.0,
+                                            Kind::Unspecified,
+                                        )
+                                    }) {
+                                        elements.push(el);
+                                    }
+                                }
+
+                                for layer in lower {
+                                    if let Some(geo) = layer_map.layer_geometry(layer) {
+                                        elements.extend(AsRenderElements::render_elements::<
+                                            WaylandSurfaceRenderElement<GlesRenderer>,
+                                        >(
+                                            layer,
+                                            renderer,
+                                            geo.loc.to_physical_precise_round(output_scale),
+                                            UtilsScale::from(output_scale),
+                                            1.0,
+                                        ));
+                                    }
                                 }
                             }
 
-                            // `render_output` consulta o LayerMap do output: não desenhamos
-                            // layer surfaces manualmente (isso causava o painel invisível).
-                            match smithay::desktop::space::render_output::<
-                                _,
-                                WaylandSurfaceRenderElement<GlesRenderer>,
-                                _,
-                                _,
-                            >(
-                                output,
+                            match tracker.render_output(
                                 renderer,
                                 &mut framebuffer,
-                                1.0,
                                 0,
-                                [&state.space],
-                                &frame_elements,
-                                tracker,
+                                &elements,
                                 if std::env::var_os("AERO_DEBUG_CLEAR_LIGHT").is_some() {
                                     [0.95, 0.95, 0.95, 1.0]
                                 } else {

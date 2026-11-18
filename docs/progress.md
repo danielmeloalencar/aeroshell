@@ -358,11 +358,31 @@ são desenhados na frente dos elementos do space nesta composição, apesar de
 O frame também ficou menor que o `total=420x345` configurado — o GTK não aplicou o
 `zwlr_layer_surface.configure` completo (não medido ao certo; estou supondo).
 
-**CONCLUSÃO:** z-order do frame é bug confirmado, não observação ambígua. Causa raiz da ordem de
-desenho **não determinada**. Parei sem nova variação (regra 4.1 / regra de parada).
-Correções possíveis a decidir: (1) desenhar o frame num passe manual ANTERIOR ao
-`render_output` (`RenderElement::draw` direto no framebuffer); (2) renderizar o cliente
-também como custom element depois do frame. Nenhuma foi tentada.
+**CORREÇÃO APLICADA (aceita pelo usuário, rejeitando draw direto e space-as-custom):**
+a lista de render é composta frente-para-trás com as APIs do Smithay — `layer_map` upper
+(Top/Overlay) primeiro, cada janela via `AsRenderElements::render_elements` e o render_element
+do seu frame **logo após** (abaixo), lower (Background/Bottom) por último — e passada ao
+`OutputDamageTracker::render_output`. Fonte: `smithay-0.7.0/src/desktop/space/mod.rs:578-665`
+e `element/mod.rs:404-418`. Nenhum draw direto, geometria preservada, damage mantido.
+
+**VALIDADO (gate objetivo, cores):**
+- sobreposição = **AZUL** (cliente na frente); vermelho aparece só atrás/na borda — usuário
+  confirmou. Z-order correto.
+- `set_insets` de verdade: `insets=(0,30,0,0)`, `shadow=0`, `total=320x270` (cliente 320x240
+  + 30). Margem diagnóstica removida.
+- **Fechar cliente → `closed` → frame destrói:** validado. Hook de destruição do wl_surface do
+  cliente (`add_destruction_hook`) envia `closed`, remove o frame/insets/layer surface. Logs:
+  `janela cliente destruída: closed enviado ao frame` e `SPIKE: closed recebido`.
+
+**NÃO RESOLVIDO (2 tentativas — PARADO):** tamanho do buffer commitado pelo frame.
+Dados: `FRAME_BUFFER_COMMIT buffer=Some((320, 200))` enquanto o
+`zwlr_layer_surface.configure` enviado foi `320x270`. Tentei `send_configure()` explícito e
+`anchor Top|Left` no spike; ambos mantiveram 320x200. Causa provável (suposição): GTK4
+layer-shell ignora configure de tamanho neste caminho. Sem quarta variação (regra 4.1).
+**Não medido:** move/resize com serial válido; teclado nunca no frame (cliente azul não tem
+campo de texto).
+
+**Não iniciado:** C (WebView real, related-view/pool, métricas, presentation-time).
 
 **NÃO VALIDADO:** fechar zenity → `closed` → frame destruído (bloqueado pela falha de z-order);
 move/resize com serial válido; teclado nunca no frame (zenity tem só um botão e estava coberto).

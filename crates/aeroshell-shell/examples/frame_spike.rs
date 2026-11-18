@@ -133,13 +133,22 @@ fn dispatch_nonblocking() {
 }
 
 fn main() {
-    let app = gtk4::Application::builder()
-        .application_id("dev.aeroshell.frame-spike")
-        .build();
-    app.connect_activate(|app| {
-        // Teste controlado: frame VERMELHO para distinguir do cliente (zenity cinza).
+    let blue_client = std::env::var_os("AERO_SPIKE_BLUE_CLIENT").is_some();
+    let app_id = if blue_client {
+        "dev.aeroshell.blue-client"
+    } else {
+        "dev.aeroshell.frame-spike"
+    };
+    let app = gtk4::Application::builder().application_id(app_id).build();
+    app.connect_activate(move |app| {
+        // Teste controlado: frame VERMELHO / cliente AZUL para medir por pixel.
         let provider = gtk4::CssProvider::new();
-        provider.load_from_string("window { background-color: #ff0000; }");
+        let css = if blue_client {
+            "window { background-color: #0000ff; }"
+        } else {
+            "window { background-color: #ff0000; }"
+        };
+        provider.load_from_string(css);
         if let Some(display) = gtk4::gdk::Display::default() {
             gtk4::style_context_add_provider_for_display(
                 &display,
@@ -147,6 +156,18 @@ fn main() {
                 gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
             );
         }
+        if blue_client {
+            let client = gtk4::ApplicationWindow::builder()
+                .application(app)
+                .default_width(320)
+                .default_height(240)
+                .title("cliente azul")
+                .build();
+            client.present();
+            eprintln!("SPIKE: cliente AZUL apresentado (xdg_toplevel, sem layer-shell)");
+            return;
+        }
+
         let window = gtk4::ApplicationWindow::builder()
             .application(app)
             .default_width(320)
@@ -157,6 +178,10 @@ fn main() {
         // init ANTES de realize (gtk4-layer-shell lib.rs:170-172).
         window.init_layer_shell();
         window.set_namespace(Some("aeroshell-frame-spike"));
+        // Com âncora, o GTK aceita o tamanho que o compositor configura;
+        // sem âncora a layer surface é flutuante e o cliente escolhe o tamanho.
+        window.set_anchor(gtk4_layer_shell::Edge::Top, true);
+        window.set_anchor(gtk4_layer_shell::Edge::Left, true);
 
         window.connect_realize(|w| {
             let gdk_surface = w.surface().expect("janela sem GdkSurface");
@@ -189,8 +214,10 @@ fn main() {
             eprintln!("SPIKE: manager no guest = {}", state.manager.is_some());
             if let Some(manager) = &state.manager {
                 let frame = manager.associate(&wl_surface, 0, &qh, ());
+                // Titlebar de 30 px: o frame deve aparecer SÓ nessa faixa.
+                frame.set_insets(0, 30, 0, 0);
                 let _ = queue.flush();
-                eprintln!("SPIKE: associate(window_id=0) ENVIADO no realize");
+                eprintln!("SPIKE: associate(window_id=0) + set_insets(0,30,0,0) ENVIADOS");
                 RUNTIME.with(|cell| {
                     *cell.borrow_mut() = Some(Runtime {
                         queue,

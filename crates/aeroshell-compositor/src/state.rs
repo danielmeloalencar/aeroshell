@@ -1,6 +1,6 @@
 //! Estado global do compositor. Não conhece o backend concreto.
 
-use std::{ffi::OsString, sync::Arc, time::Instant};
+use std::{collections::HashMap, ffi::OsString, sync::Arc, time::Instant};
 
 use smithay::{
     desktop::{PopupManager, Space, Window, WindowSurfaceType},
@@ -26,6 +26,32 @@ use smithay::{
 };
 
 use crate::{cli::Options, CalloopData};
+
+/// Geometria declarada pelo cliente para um frame (ADR 0004): insets movem o
+/// conteúdo; shadow_extents são apenas visuais e não movem o conteúdo.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct FrameGeometry {
+    /// left, top, right, bottom
+    pub insets: (i32, i32, i32, i32),
+    /// left, top, right, bottom
+    pub shadow: (i32, i32, i32, i32),
+}
+
+impl FrameGeometry {
+    pub fn extra_w(&self) -> i32 {
+        self.insets.0 + self.insets.2 + self.shadow.0 + self.shadow.2
+    }
+    pub fn extra_h(&self) -> i32 {
+        self.insets.1 + self.insets.3 + self.shadow.1 + self.shadow.3
+    }
+    /// Deslocamento do frame em relação à origem do cliente.
+    pub fn offset(&self) -> (i32, i32) {
+        (
+            -(self.insets.0 + self.shadow.0),
+            -(self.insets.1 + self.shadow.1),
+        )
+    }
+}
 
 /// Estado de um configure pendente, usado para as métricas do protótipo.
 #[cfg(feature = "bench")]
@@ -61,7 +87,10 @@ pub struct AeroState {
         WlSurface,
         crate::aero_frame_protocol::aero_frame_v1::AeroFrameV1,
         u32,
+        Option<WlSurface>,
     )>,
+    /// Geometria declarada por cada frame (indexada pela superfície do frame).
+    pub frame_geometries: HashMap<WlSurface, FrameGeometry>,
     /// Layer surfaces que são frames: NÃO entram no LayerMap (exceção do ADR 0004).
     pub frame_layer_surfaces: Vec<smithay::desktop::LayerSurface>,
     /// Configurações enviadas e ainda não confirmadas (serial, instante).
@@ -75,9 +104,6 @@ pub struct AeroState {
     /// Último serial de botão recebido (validação de move/resize).
     pub last_button_serial: Option<u32>,
 
-    /// Margem diagnóstica do frame (só debug/bench): deixa o contorno visível
-    /// para provar que o frame existe atrás do cliente. Produção = 0.
-    pub frame_test_margin: i32,
     /// Última ação de geometry para medir latência até o frame atualizado.
     pub last_geometry_action: Option<(String, std::time::Instant)>,
     /// Permite testes de protocolo validarem IDs sem criar uma janela xdg real.
@@ -170,20 +196,7 @@ impl AeroState {
             #[cfg(feature = "bench")]
             frame_commit_samples: Vec::new(),
             last_button_serial: None,
-            frame_test_margin: {
-                #[cfg(any(debug_assertions, feature = "bench"))]
-                {
-                    std::env::var("AERO_FRAME_TEST_MARGIN")
-                        .ok()
-                        .and_then(|v| v.parse().ok())
-                        .unwrap_or(0)
-                        .max(0)
-                }
-                #[cfg(not(any(debug_assertions, feature = "bench")))]
-                {
-                    0
-                }
-            },
+            frame_geometries: HashMap::new(),
             last_geometry_action: None,
             test_window_count: 0,
             test_client_count: 0,

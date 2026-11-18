@@ -29,8 +29,8 @@ impl XdgShellHandler for AeroState {
         let assoc = self
             .associated_frames
             .iter()
-            .find(|(s, _, _)| s == surface.wl_surface())
-            .map(|(_, frame, window_id)| (frame.clone(), *window_id));
+            .find(|(s, _, _, _)| s == surface.wl_surface())
+            .map(|(_, frame, window_id, _)| (frame.clone(), *window_id));
         if let Some((frame, window_id)) = assoc {
             frame.closed();
             tracing::warn!(
