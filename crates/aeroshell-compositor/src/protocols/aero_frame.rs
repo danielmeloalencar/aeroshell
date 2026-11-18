@@ -1,27 +1,19 @@
 //! Handlers do protocolo privado `aero_frame_v1` (lado compositor).
 //! Nenhuma superfície é desenhada nesta fase: apenas protocolo, segurança e testes.
 
-use std::{
-    collections::HashSet,
-    sync::{Arc, Mutex},
-    time::Instant,
-};
+use std::time::Instant;
 
 use crate::{
     aero_frame_protocol::{
-        aero_frame_manager_v1::{AeroFrameManagerV1, Request as ManagerRequest},
+        aero_frame_manager_v1::{AeroFrameManagerV1, Error as ManagerError, Request as ManagerRequest},
         aero_frame_v1::{AeroFrameV1, Request as FrameRequest},
     },
-    state::AeroState,
+    state::{AeroState, ClientState},
 };
+use smithay::wayland::compositor::give_role;
 use wayland_server::{Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource};
 
-/// Dados do global: contêm o handle necessário para ler credenciais no `can_view`.
-pub struct FrameGlobalData {
-    pub allowed_pid: Option<u32>,
-    /// Clientes cujas credenciais casaram com `allowed_pid` no momento do insert.
-    pub privileged: Mutex<HashSet<wayland_server::backend::ClientId>>,
-}
+const AERO_FRAME_ROLE: &str = "aero_frame";
 
 /// Resultado puro da validação de um `get_frame` (testável sem objects Wayland).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,27 +39,23 @@ pub fn serial_valid(expected: Option<u32>, got: u32) -> bool {
     expected == Some(got)
 }
 
-impl GlobalDispatch<AeroFrameManagerV1, Arc<FrameGlobalData>> for AeroState {
+impl GlobalDispatch<AeroFrameManagerV1, ()> for AeroState {
     fn bind(
         _state: &mut Self,
         _handle: &DisplayHandle,
         _client: &Client,
         resource: New<AeroFrameManagerV1>,
-        _global_data: &Arc<FrameGlobalData>,
+        _global_data: &(),
         data_init: &mut DataInit<'_, Self>,
     ) {
         tracing::info!("cliente privilegiado vinculou aero_frame_manager_v1");
         let _ = data_init.init(resource, ());
     }
 
-    fn can_view(client: Client, global_data: &Arc<FrameGlobalData>) -> bool {
-        if global_data.allowed_pid.is_none() {
-            return false;
-        }
-        global_data
-            .privileged
-            .lock()
-            .map(|set| set.contains(&client.id()))
+    fn can_view(client: Client, _global_data: &()) -> bool {
+        client
+            .get_data::<ClientState>()
+            .map(|state| state.is_shell)
             .unwrap_or(false)
     }
 }
@@ -85,15 +73,22 @@ impl Dispatch<AeroFrameManagerV1, ()> for AeroState {
         match request {
             ManagerRequest::GetFrame {
                 id,
-                surface: _,
+                surface,
                 window_id,
             } => {
+                if give_role(&surface, AERO_FRAME_ROLE).is_err() {
+                    manager.post_error(
+                        ManagerError::Role,
+                        "a wl_surface já possui outro role",
+                    );
+                    return;
+                }
                 let existing: Vec<u32> = state.frames.iter().map(|(_, id)| *id).collect();
                 let window_count = state.space.elements().count();
                 match check_frame(&existing, window_id, window_count) {
                     FrameCheck::AlreadyConstructed => {
                         manager.post_error(
-                            crate::aero_frame_protocol::aero_frame_manager_v1::Error::AlreadyConstructed,
+                            ManagerError::AlreadyConstructed,
                             format!("janela {window_id} já tem frame"),
                         );
                         return;
@@ -147,9 +142,6 @@ impl Dispatch<AeroFrameV1, u32> for AeroState {
             }
             FrameRequest::SetShadowExtents { left, top, right, bottom } => {
                 tracing::info!(window_id = *window_id, left, top, right, bottom, "sombra pendente")
-            }
-            FrameRequest::SetBlurRegion { region } => {
-                tracing::info!(window_id = *window_id, has_region = region.is_some(), "blur region")
             }
             FrameRequest::Move { seat, serial } => {
                 if !serial_valid(state.last_button_serial, serial) {

@@ -13,7 +13,7 @@ mod protocol {
         use wayland_backend;
         #[allow(unused_imports)]
         use super::core_interfaces::*;
-        pub use wayland_client::protocol::{wl_compositor, wl_region, wl_seat, wl_surface};
+        pub use wayland_client::protocol::{wl_compositor, wl_seat, wl_surface};
 
         wayland_scanner::generate_interfaces!("../../protocols/aero_frame_v1.xml");
         wayland_scanner::generate_client_code!("../../protocols/aero_frame_v1.xml");
@@ -26,12 +26,15 @@ use protocol::{
     aero_frame_manager_v1::{AeroFrameManagerV1, Event as ManagerEvent},
     aero_frame_v1::{AeroFrameV1, Event as FrameEvent},
     wl_compositor::WlCompositor,
+    wl_seat::WlSeat,
     wl_surface::WlSurface,
 };
 
 struct State {
     compositor: Option<WlCompositor>,
     manager: Option<AeroFrameManagerV1>,
+    frames: Vec<AeroFrameV1>,
+    seat: Option<WlSeat>,
     surface: Option<WlSurface>,
     configured: u32,
     closed: u32,
@@ -51,8 +54,10 @@ impl Dispatch<wl_registry::WlRegistry, ()> for State {
             eprintln!("global {name}: {interface} v{version}");
             match interface.as_str() {
                 "wl_compositor" => {
-                    eprintln!("bind wl_compositor global={name} v={}", version.min(5));
                     state.compositor = Some(registry.bind::<WlCompositor, (), State>(name, version.min(5), qh, ()));
+                }
+                "wl_seat" => {
+                    state.seat = Some(registry.bind::<WlSeat, (), State>(name, version.min(9), qh, ()));
                 }
                 "aero_frame_manager_v1" => {
                     eprintln!("bind manager global={name} v={} iface={}", version.min(1), AeroFrameManagerV1::interface().name);
@@ -109,6 +114,18 @@ impl Dispatch<AeroFrameManagerV1, ()> for State {
     }
 }
 
+impl Dispatch<WlSeat, ()> for State {
+    fn event(
+        _state: &mut Self,
+        _proxy: &WlSeat,
+        _event: protocol::wl_seat::Event,
+        _data: &(),
+        _conn: &Connection,
+        _qh: &QueueHandle<Self>,
+    ) {
+    }
+}
+
 impl Dispatch<AeroFrameV1, ()> for State {
     fn event(
         state: &mut Self,
@@ -150,6 +167,8 @@ fn main() {
     let mut state = State {
         compositor: None,
         manager: None,
+        frames: Vec::new(),
+        seat: None,
         surface: None,
         configured: 0,
         closed: 0,
@@ -180,9 +199,23 @@ fn main() {
         .and_then(|v| v.parse().ok())
         .unwrap_or(0);
     let surface = state.surface.clone().unwrap();
-    manager.get_frame(&surface, window_id, &qh, ());
+    let frame = manager.get_frame(&surface, window_id, &qh, ());
+    state.frames.push(frame);
+    if std::env::var_os("AERO_TEST_DOUBLE").is_some() {
+        manager.get_frame(&surface, window_id, &qh, ());
+    }
     queue.roundtrip(&mut state).expect("roundtrip get_frame");
     queue.roundtrip(&mut state).expect("roundtrip configure");
+
+    if std::env::var_os("AERO_TEST_FALSE_SERIAL").is_some() {
+        let seat = state.seat.clone().expect("wl_seat não anunciado");
+        if let Some(frame) = state.frames.first() {
+            // serial 0xDEAD nunca foi gerado por um clique no frame.
+            frame._move(&seat, 0xDEAD);
+        }
+        queue.roundtrip(&mut state).expect("roundtrip false serial");
+        eprintln!("move com serial falso enviado");
+    }
 
     eprintln!(
         "configured={} closed={} saw_manager={}",

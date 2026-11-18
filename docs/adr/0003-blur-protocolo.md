@@ -1,36 +1,35 @@
-# ADR 0003 — Blur-behind: protocolo padrão vs request privado
+# ADR 0003 — Blur-behind: apenas ext-background-effect-v1
 
 - Status: aceito (F0/S5)
-- Data: 2026-11-18
+- Data: 2026-11-18 (revisado após correção do usuário)
 
 ## Contexto
-O `aero_frame_v1` original propunha `set_blur_region(x,y,w,h)` privado. Antes de manter isso,
-verifiquei o que já existe no wayland-protocols instalado.
+A versão anterior do `aero_frame_v1` tinha `set_blur_region` privado e dizia "usar o padrão
+quando disponível, privado como fallback". Isso é inválido num compositor próprio: **nós**
+decidimos o que está disponível; duas rotas significam dois códigos para testar e manter.
 
 ## Evidência
 ```
 $ pkg-config --modversion wayland-protocols
 1.47
-$ find /usr/share/wayland-protocols -iname '*background*' -o -iname '*blur*'
+$ find /usr/share/wayland-protocols -iname '*background*'
 /usr/share/wayland-protocols/staging/ext-background-effect/ext-background-effect-v1.xml
-$ grep -n '<interface\|<request' .../ext-background-effect-v1.xml
-<interface name="ext_background_effect_manager_v1" version="1">
-<request name="get_background_effect">
-<interface name="ext_background_effect_surface_v1" version="1">
-<request name="destroy" type="destructor">
-<request name="set_blur_region">
+$ grep -rn "background_effect\|BackgroundEffect" smithay-0.7.0/src   # vazio
 ```
-
-Existe, portanto, um protocolo padrão em *staging*: `ext-background-effect-v1`, com
-`set_blur_region`. Ele é a escolha correta quando disponível.
+O Smithay 0.7.0 **não** tem handler pronto para `ext_background_effect_v1`.
 
 ## Decisão
-- Manter `set_blur_region(region: wl_region)` no `aero_frame_v1` **apenas como fallback**.
-- O compositor deve preferir `ext_background_effect_manager_v1` quando o cliente o suportar;
-  o request privado existe para versões sem o protocolo padrão.
-- O XML documenta isso no description do request.
+- `set_blur_region` foi **removido** de `aero_frame_v1` (XML v1 revisado).
+- O único caminho é `ext_background_effect_v1`. O compositor implementará o handler
+  (`ext_background_effect_manager_v1` + `ext_background_effect_surface_v1`) no F1/F7.
+- O shell (GTK4) obtém a `wl_surface` via `gdk4wayland::WaylandSurfaceExt::wayland_surface()`
+  (crate `gdk4wayland`, mesma versão 0.11 do GTK4) e cria o
+  `ext_background_effect_surface_v1` sobre ela.
+- O protocolo está em **staging**: mudanças futuras são risco registrado, não motivo para
+  manter um segundo caminho. Se mudar, atualizamos um único handler.
 
-## Consequência
-Quando o suporte ao protocolo padrão for implementado (F1/F7), o shell negocia
-`ext-background-effect-v1` e deixa de usar o request privado; nenhuma mudança de API do
-`aero_frame_v1` é necessária além de parar de chamar o fallback.
+## Esforço estimado
+Gerar o código com `wayland-scanner`, implementar `GlobalDispatch` + `Dispatch` no compositor,
+armazenar a região por superfície e aplicá-la no pipeline de render (Smithay já aceita
+`opaque_regions` no `RenderElement::draw`; blur real exigirá shader/textura adicional). Fora do
+escopo do protótipo mínimo do frame.

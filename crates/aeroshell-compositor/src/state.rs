@@ -45,10 +45,7 @@ pub struct AeroState {
     pub pending_configures: Vec<(u32, std::time::Instant)>,
     /// Último serial de botão recebido (validação de move/resize).
     pub last_button_serial: Option<u32>,
-    /// PID do cliente shell privilegiado (None = nega todos).
-    pub allowed_shell_pid: Option<u32>,
-    /// Dados do global aero_frame_manager_v1 (filtro de clientes).
-    pub frame_global_data: Arc<crate::protocols::aero_frame::FrameGlobalData>,
+
     /// Última ação de geometry para medir latência até o frame atualizado.
     pub last_geometry_action: Option<(String, std::time::Instant)>,
 
@@ -74,18 +71,11 @@ impl AeroState {
         let compositor_state = CompositorState::new::<Self>(&dh);
         let xdg_shell_state = XdgShellState::new::<Self>(&dh);
         let layer_shell_state = WlrLayerShellState::new::<Self>(&dh);
-        let allowed_shell_pid = std::env::var("AERO_SHELL_PID")
-            .ok()
-            .and_then(|v| v.parse().ok());
-        let frame_global_data = Arc::new(crate::protocols::aero_frame::FrameGlobalData {
-            allowed_pid: allowed_shell_pid,
-            privileged: Default::default(),
-        });
         let _aero_frame_global = dh.create_global::<
             Self,
             crate::aero_frame_protocol::aero_frame_manager_v1::AeroFrameManagerV1,
-            Arc<crate::protocols::aero_frame::FrameGlobalData>,
-        >(1, frame_global_data.clone());
+            (),
+        >(1, ());
         let shm_state = ShmState::new::<Self>(&dh, vec![]);
         let output_manager_state = OutputManagerState::new_with_xdg_output::<Self>(&dh);
         let mut seat_state = SeatState::new();
@@ -98,24 +88,12 @@ impl AeroState {
         let socket = ListeningSocketSource::with_name(&opts.socket)?;
         let socket_name = socket.socket_name().to_os_string();
         let loop_handle = event_loop.handle();
-        let frame_global_data_for_source = frame_global_data.clone();
         loop_handle.insert_source(socket, move |client_stream, _, data| {
-            tracing::info!("cliente Wayland conectado ao socket do AeroShell");
-            let client = data
+            tracing::info!("cliente Wayland conectado ao socket público do AeroShell");
+            let _client = data
                 .display_handle
                 .insert_client(client_stream, Arc::new(ClientState::default()))
                 .expect("failed to insert Wayland client");
-            if let (Some(allowed), Ok(credentials)) = (
-                frame_global_data_for_source.allowed_pid,
-                client.get_credentials(&data.display_handle),
-            ) {
-                if credentials.pid == allowed as i32 {
-                    if let Ok(mut privileged) = frame_global_data_for_source.privileged.lock() {
-                        privileged.insert(client.id());
-                        tracing::info!("cliente marcado como shell privilegiado");
-                    }
-                }
-            }
         })?;
 
         loop_handle.insert_source(
@@ -143,8 +121,6 @@ impl AeroState {
             frames: Vec::new(),
             pending_configures: Vec::new(),
             last_button_serial: None,
-            allowed_shell_pid,
-            frame_global_data,
             last_geometry_action: None,
             compositor_state,
             xdg_shell_state,
@@ -197,6 +173,8 @@ impl AeroState {
 #[derive(Default)]
 pub struct ClientState {
     pub compositor_state: CompositorClientState,
+    /// Marca do supervisor: cliente conectado pela ponta privada do socketpair.
+    pub is_shell: bool,
 }
 
 impl ClientData for ClientState {

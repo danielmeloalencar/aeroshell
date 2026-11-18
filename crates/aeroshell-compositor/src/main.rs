@@ -7,7 +7,12 @@ mod input;
 mod protocols;
 mod state;
 
-use std::{error::Error, io::BufRead, os::unix::net::UnixListener};
+use std::{
+    error::Error,
+    io::BufRead,
+    os::{fd::FromRawFd, unix::net::UnixListener, unix::net::UnixStream},
+    sync::Arc,
+};
 
 use calloop::channel;
 
@@ -18,7 +23,7 @@ use smithay::reexports::{
 pub use wayland_server;
 pub use wayland_server::protocol::{wl_seat, wl_surface};
 
-pub use state::AeroState;
+pub use state::{AeroState, ClientState};
 
 pub struct CalloopData {
     state: AeroState,
@@ -54,6 +59,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             .arg("-c")
             .arg(command)
             .env("WAYLAND_DISPLAY", &socket_name)
+            // A ponta privilegiada do socketpair NUNCA é herdada por clientes comuns.
+            .env_remove("WAYLAND_SOCKET")
             // Sem remover DISPLAY, GTK3 abre no X11 do host em vez do nosso compositor.
             .env_remove("DISPLAY")
             .env("GDK_BACKEND", "wayland")
@@ -73,6 +80,23 @@ fn main() -> Result<(), Box<dyn Error>> {
         state,
         display_handle,
     };
+
+    // O supervisor entrega uma ponta do socketpair ao shell via WAYLAND_SOCKET.
+    // Essa conexão é marcada como privilegiada; o socket público nunca é.
+    if let Ok(fd_text) = std::env::var("WAYLAND_SOCKET") {
+        let fd: i32 = fd_text.parse()?;
+        tracing::info!(fd, "WAYLAND_SOCKET recebido do supervisor");
+        let stream = unsafe { UnixStream::from_raw_fd(fd) };
+        data.display_handle.insert_client(
+            stream,
+            Arc::new(ClientState {
+                is_shell: true,
+                ..Default::default()
+            }),
+        )?;
+        tracing::info!("shell privilegiado inserido via WAYLAND_SOCKET");
+    }
+
     backend::init(&opts, &mut event_loop, &mut data)?;
 
     // Injeção de ponteiro sintético (S3): `motion x y`, `button press|release`.

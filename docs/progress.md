@@ -116,6 +116,23 @@ remover/reinserir 1 componente 0,01 ms, buffer 1000x613 ARGB8888 = 2.452.000 byt
   como fallback documentado.
 - **NÃO implementei o desenho do frame**, conforme pedido.
 
+### Correções pedidas ao protocolo (em andamento)
+- `role` implementado com `smithay::wayland::compositor::give_role` + erro fatal `Role`.
+- Filtro de global reescrito: **sem PID/env**. `WAYLAND_SOCKET` inserto pelo supervisor marca
+  o `ClientState.is_shell=true`; `can_view` só olha essa marca e o padrão é negar. Cliente do
+  socket público nunca vê o global (teste (a) passa, inclusive com `AERO_SHELL_PID` forjado).
+- **BLOQUEIO**: ao inserir a ponta do socketpair via `UnixStream::from_raw_fd(WAYLAND_SOCKET)`,
+  o compositor aborta com `fatal runtime error: IO Safety violation: owned file descriptor
+  already closed` após `message too short, object (1), message error(ous)`. Testes (b) e (c)
+  não passaram; necessário depurar a posse do fd antes de seguir.
+- `set_blur_region` removido do XML; ADR 0003 agora prescribe apenas `ext-background-effect-v1`.
+
+### S3 — STATUS: CONCLUÍDO (commit `8b97ad8`, validado manualmente)
+- Input regions derivadas do DOM (`data-aero-interactive`), `MutationObserver`/`ResizeObserver`,
+  cursor `Pointer`/`Default`, hit-test via `LayerMap`. Confirmação visual do usuário: cursor mão
+  no botão, contador de clique, área transparente não captura clique. Latência de precisão não
+  foi medida com número (validação foi funcional/manual), conforme registrado no próprio S3.
+
 ### S3 — concluído (2026-11-18)
 - `data-aero-interactive` → rects enviados por `window.webkit.messageHandlers.aero` → host aplica
   `gdk_surface_set_input_region`. `MutationObserver` + `ResizeObserver` recalculam a região quando
