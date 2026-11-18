@@ -42,6 +42,12 @@ struct SpikeState {
     manager: Option<AeroFrameManagerV1>,
     configures: usize,
     closed: usize,
+    /// Janela GTK do frame: o tamanho é dirigido pelo aero_frame.configure.
+    window: Option<gtk4::ApplicationWindow>,
+    /// insets (left, top, right, bottom) que este shell declarou via set_insets.
+    insets: (i32, i32, i32, i32),
+    /// shadow_extents (left, top, right, bottom) declarados via set_shadow_extents.
+    shadow: (i32, i32, i32, i32),
 }
 
 impl Dispatch<wl_registry::WlRegistry, ()> for SpikeState {
@@ -87,7 +93,7 @@ impl Dispatch<AeroFrameManagerV1, ()> for SpikeState {
 impl Dispatch<AeroFrameV1, ()> for SpikeState {
     fn event(
         state: &mut Self,
-        _frame: &AeroFrameV1,
+        frame: &AeroFrameV1,
         event: FrameEvent,
         _data: &(),
         _conn: &wayland_client::Connection,
@@ -101,7 +107,22 @@ impl Dispatch<AeroFrameV1, ()> for SpikeState {
                 ..
             } => {
                 state.configures += 1;
-                eprintln!("SPIKE: configure serial={serial} {width}x{height}");
+                // O shell governa o tamanho: total = conteúdo + insets + shadow.
+                // NÃO dependemos de o GTK honrar o zwlr_layer_surface.configure
+                // (a lib C só o aplica em eixos esticados; ver layer-surface.c
+                // v1.3.0). set_default_size dispara notify::default-width/height
+                // → a lib reconfigura a superfície com o tamanho preferido.
+                let (l, t, r, b) = state.insets;
+                let (sl, st, sr, sb) = state.shadow;
+                let total_w = width + l + r + sl + sr;
+                let total_h = height + t + b + st + sb;
+                eprintln!(
+                    "SPIKE: configure serial={serial} conteudo={width}x{height} -> set_default_size {total_w}x{total_h}"
+                );
+                if let Some(window) = &state.window {
+                    window.set_default_size(total_w, total_h);
+                }
+                frame.ack_configure(serial);
             }
             FrameEvent::Closed => {
                 state.closed += 1;
@@ -165,23 +186,32 @@ fn main() {
                 .build();
             client.present();
             eprintln!("SPIKE: cliente AZUL apresentado (xdg_toplevel, sem layer-shell)");
+            // Gate de resize: o cliente muda de tamanho sozinho para provar que
+            // o frame SEGUE o conteúdo (AERO_SPIKE_RESIZE=WxH).
+            if let Ok(size) = std::env::var("AERO_SPIKE_RESIZE") {
+                if let Some((w, h)) = size.split_once('x') {
+                    if let (Ok(w), Ok(h)) = (w.parse::<i32>(), h.parse::<i32>()) {
+                        gtk4::glib::timeout_add_seconds_local_once(5, move || {
+                            eprintln!("SPIKE: cliente AZUL resize -> {w}x{h}");
+                            client.set_default_size(w, h);
+                        });
+                    }
+                }
+            }
             return;
         }
 
+        // Sem tamanho fixo: a janela é dimensionada pelo aero_frame.configure
+        // (total = conteúdo + insets + shadow). Um default fixo aqui era a causa
+        // do buffer 320x200 ignorar o configure 320x270.
         let window = gtk4::ApplicationWindow::builder()
             .application(app)
-            .default_width(320)
-            .default_height(200)
             .title("frame spike — associate")
             .build();
 
         // init ANTES de realize (gtk4-layer-shell lib.rs:170-172).
         window.init_layer_shell();
         window.set_namespace(Some("aeroshell-frame-spike"));
-        // Com âncora, o GTK aceita o tamanho que o compositor configura;
-        // sem âncora a layer surface é flutuante e o cliente escolhe o tamanho.
-        window.set_anchor(gtk4_layer_shell::Edge::Top, true);
-        window.set_anchor(gtk4_layer_shell::Edge::Left, true);
 
         window.connect_realize(|w| {
             let gdk_surface = w.surface().expect("janela sem GdkSurface");
@@ -203,7 +233,11 @@ fn main() {
             let mut queue: wayland_client::EventQueue<SpikeState> = connection.new_event_queue();
             let qh = queue.handle();
             connection.display().get_registry(&qh, ());
-            let mut state = SpikeState::default();
+            let mut state = SpikeState {
+                window: Some(w.clone()),
+                insets: (0, 30, 0, 0),
+                ..Default::default()
+            };
 
             // Startup: deixar o GLib bombear o read e só então esvaziar a fila.
             for _ in 0..30 {

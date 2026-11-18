@@ -39,6 +39,63 @@ pub fn serial_valid(expected: Option<u32>, got: u32) -> bool {
     expected == Some(got)
 }
 
+impl AeroState {
+    /// Envia aero_frame.configure com o tamanho de CONTEÚDO e o duplo configure
+    /// da layer surface do frame com o total (conteúdo + insets + shadow).
+    /// O shell dimensiona a janela GTK a partir do configure (a lib C do
+    /// gtk4-layer-shell ignora o tamanho do zwlr configure em eixos não esticados).
+    pub fn send_frame_configure(&mut self, window_id: u32, content: (i32, i32)) {
+        let Some((frame_surface, frame, _, _)) = self
+            .associated_frames
+            .iter()
+            .find(|(_, _, id, _)| *id == window_id)
+            .cloned()
+        else {
+            return;
+        };
+        self.frame_configure_serial += 1;
+        let serial = self.frame_configure_serial;
+        let frame_state = crate::aero_frame_protocol::aero_frame_v1::State::empty();
+        frame.configure(serial, content.0, content.1, frame_state);
+        self.pending_configures
+            .push((serial, std::time::Instant::now()));
+        self.frame_configured_content
+            .insert(frame_surface.clone(), content);
+        let geo = self
+            .frame_geometries
+            .get(&frame_surface)
+            .copied()
+            .unwrap_or_default();
+        let total = (content.0 + geo.extra_w(), content.1 + geo.extra_h());
+        if let Some(layer) = self
+            .frame_layer_surfaces
+            .iter()
+            .find(|l| l.wl_surface() == &frame_surface)
+        {
+            layer
+                .layer_surface()
+                .with_pending_state(|state| state.size = Some(total.into()));
+            let _ = layer.layer_surface().send_configure();
+        }
+        tracing::info!(
+            window_id,
+            serial,
+            content_w = content.0,
+            content_h = content.1,
+            total_w = total.0,
+            total_h = total.1,
+            "frame configure (conteúdo do cliente)"
+        );
+    }
+
+    /// Tamanho de conteúdo real da janela cliente, se já mapeada e com buffer.
+    pub fn client_content_size(&self, window_id: u32) -> Option<(i32, i32)> {
+        let window = self.space.elements().nth(window_id as usize)?;
+        let geo = self.space.element_geometry(window)?;
+        (geo.size.w > 0 && geo.size.h > 0).then_some((geo.size.w, geo.size.h))
+    }
+}
+
 impl GlobalDispatch<AeroFrameManagerV1, ()> for AeroState {
     fn bind(
         _state: &mut Self,
@@ -132,41 +189,6 @@ impl Dispatch<AeroFrameManagerV1, ()> for AeroState {
                     .unwrap_or((1280, 800).into());
                 let frame_state = crate::aero_frame_protocol::aero_frame_v1::State::empty();
                 manager.frame_requested(window_id, size.w, size.h, frame_state);
-                // Em produção: exatamente um configure, sem ler variável de ambiente.
-                #[cfg(not(feature = "bench"))]
-                let steps: u32 = 1;
-                // Só sob `bench`: quantos passos de resize sintéticos enviar de uma
-                // vez (N=5 / N=20 nas medições).
-                #[cfg(feature = "bench")]
-                let steps: u32 = std::env::var("AERO_FRAME_STEPS")
-                    .ok()
-                    .and_then(|v| v.parse().ok())
-                    .unwrap_or(1)
-                    .max(1);
-                for step in 0..steps {
-                    let serial = step + 1;
-                    let w = size.w + (step as i32) * 24;
-                    let h = size.h + (step as i32) * 16;
-                    frame.configure(serial, w, h, frame_state);
-                    let configured_at = Instant::now();
-                    state.pending_configures.push((serial, configured_at));
-                    #[cfg(feature = "bench")]
-                    {
-                        state.frame_probes.push(crate::state::FrameProbe {
-                            surface: surface.clone(),
-                            window_id,
-                            serial,
-                            configured_at,
-                            size: (w as u32, h as u32),
-                            acked: false,
-                            committed: false,
-                            timeout_logged: false,
-                        });
-                        eprintln!(
-                            "FRAME_CONFIGURE serial={serial} window_id={window_id} w={w} h={h}"
-                        );
-                    }
-                }
                 state.frames.push((frame.clone(), window_id));
                 let client_surface = state
                     .space
@@ -191,6 +213,7 @@ impl Dispatch<AeroFrameManagerV1, ()> for AeroState {
                                 state.associated_frames.remove(pos);
                             frame.closed();
                             state.frame_geometries.remove(&frame_surface);
+                            state.frame_configured_content.remove(&frame_surface);
                             state
                                 .frame_layer_surfaces
                                 .retain(|l| l.wl_surface() != &frame_surface);
@@ -201,9 +224,49 @@ impl Dispatch<AeroFrameManagerV1, ()> for AeroState {
                         }
                     });
                 }
+                // Em produção: exatamente um configure, com o conteúdo REAL do
+                // cliente (sem variável de ambiente).
+                #[cfg(not(feature = "bench"))]
+                {
+                    let content = state
+                        .client_content_size(window_id)
+                        .unwrap_or((size.w, size.h));
+                    state.send_frame_configure(window_id, content);
+                }
+                // Só sob `bench`: quantos passos de resize sintéticos enviar de uma
+                // vez (N=5 / N=20 nas medições).
+                #[cfg(feature = "bench")]
+                {
+                    let frame = state.frames.last().expect("frame recém-inserido").0.clone();
+                    let steps: u32 = std::env::var("AERO_FRAME_STEPS")
+                        .ok()
+                        .and_then(|v| v.parse().ok())
+                        .unwrap_or(1)
+                        .max(1);
+                    for step in 0..steps {
+                        let serial = step + 1;
+                        let w = size.w + (step as i32) * 24;
+                        let h = size.h + (step as i32) * 16;
+                        frame.configure(serial, w, h, frame_state);
+                        let configured_at = Instant::now();
+                        state.pending_configures.push((serial, configured_at));
+                        state.frame_probes.push(crate::state::FrameProbe {
+                            surface: surface.clone(),
+                            window_id,
+                            serial,
+                            configured_at,
+                            size: (w as u32, h as u32),
+                            acked: false,
+                            committed: false,
+                            timeout_logged: false,
+                        });
+                        eprintln!(
+                            "FRAME_CONFIGURE serial={serial} window_id={window_id} w={w} h={h}"
+                        );
+                    }
+                }
                 tracing::info!(
                     window_id,
-                    steps,
                     "frame associado; frame_requested+configure enviados"
                 );
             }
@@ -320,10 +383,19 @@ impl Dispatch<AeroFrameV1, u32> for AeroState {
                 }
             }
             FrameRequest::Destroy => {
-                state.frames.retain(|(frame, _)| frame != resource);
-                state
+                if let Some(pos) = state
                     .associated_frames
-                    .retain(|(_, frame, _, _)| frame != resource);
+                    .iter()
+                    .position(|(_, frame, _, _)| frame == resource)
+                {
+                    let (surface, _, _, _) = state.associated_frames.remove(pos);
+                    state.frame_geometries.remove(&surface);
+                    state.frame_configured_content.remove(&surface);
+                    state
+                        .frame_layer_surfaces
+                        .retain(|l| l.wl_surface() != &surface);
+                }
+                state.frames.retain(|(frame, _)| frame != resource);
             }
         }
     }

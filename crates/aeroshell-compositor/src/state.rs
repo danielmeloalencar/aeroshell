@@ -91,6 +91,10 @@ pub struct AeroState {
     )>,
     /// Geometria declarada por cada frame (indexada pela superfície do frame).
     pub frame_geometries: HashMap<WlSurface, FrameGeometry>,
+    /// Último tamanho de CONTEÚDO enviado em aero_frame.configure por frame.
+    pub frame_configured_content: HashMap<WlSurface, (i32, i32)>,
+    /// Serial monotônico dos aero_frame.configure (não reutiliza serial ackado).
+    pub frame_configure_serial: u32,
     /// Layer surfaces que são frames: NÃO entram no LayerMap (exceção do ADR 0004).
     pub frame_layer_surfaces: Vec<smithay::desktop::LayerSurface>,
     /// Configurações enviadas e ainda não confirmadas (serial, instante).
@@ -197,6 +201,8 @@ impl AeroState {
             frame_commit_samples: Vec::new(),
             last_button_serial: None,
             frame_geometries: HashMap::new(),
+            frame_configured_content: HashMap::new(),
+            frame_configure_serial: 0,
             last_geometry_action: None,
             test_window_count: 0,
             test_client_count: 0,

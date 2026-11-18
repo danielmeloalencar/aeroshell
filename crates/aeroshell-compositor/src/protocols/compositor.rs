@@ -58,13 +58,18 @@ impl CompositorHandler for AeroState {
                     _ => None,
                 }
             });
-            let configured = self
-                .frame_geometries
-                .get(surface)
-                .map(|g| (g.insets.0 + g.insets.2, g.insets.1 + g.insets.3));
+            let expected = self.frame_configured_content.get(surface).map(|(w, h)| {
+                let geo = self
+                    .frame_geometries
+                    .get(surface)
+                    .copied()
+                    .unwrap_or_default();
+                (w + geo.extra_w(), h + geo.extra_h())
+            });
+            let ok = committed.is_some() && committed == expected;
             eprintln!(
-                "FRAME_BUFFER_COMMIT buffer={:?} insets_extra={:?}",
-                committed, configured
+                "FRAME_BUFFER_COMMIT buffer={:?} expected={:?} ok={ok}",
+                committed, expected
             );
         }
         #[cfg(feature = "bench")]
@@ -117,13 +122,27 @@ impl CompositorHandler for AeroState {
             while let Some(parent) = get_parent(&root) {
                 root = parent;
             }
-            if let Some(window) = self
+            let committed_window = self
                 .space
                 .elements()
                 .find(|w| w.toplevel().map(|t| t.wl_surface()) == Some(&root))
-                .cloned()
-            {
+                .cloned();
+            if let Some(window) = committed_window {
                 window.on_commit();
+                // O frame SEGUE o conteúdo: se a janela cliente mudou de tamanho,
+                // reenvia aero_frame.configure + zwlr configure com o novo total.
+                let assoc = self
+                    .associated_frames
+                    .iter()
+                    .find(|(_, _, _, cs)| cs.as_ref() == Some(&root))
+                    .map(|(s, _, id, _)| (s.clone(), *id));
+                if let Some((frame_surface, window_id)) = assoc {
+                    if let Some(content) = self.client_content_size(window_id) {
+                        if self.frame_configured_content.get(&frame_surface) != Some(&content) {
+                            self.send_frame_configure(window_id, content);
+                        }
+                    }
+                }
             }
         }
         xdg_shell::handle_commit(&mut self.popups, &self.space, surface);
