@@ -20,12 +20,19 @@ fn main() {
     let benchmark_n = std::env::var("AERO_BENCH").ok().and_then(|v| v.parse().ok());
     let benchmark_related = std::env::var_os("AERO_BENCH_RELATED").is_some();
     let benchmark_atlas = std::env::var_os("AERO_BENCH_ATLAS").is_some();
+    let benchmark_anchor = std::env::var("AERO_BENCH_ANCHOR")
+        .ok()
+        .and_then(|v| v.parse().ok());
 
     let app = gtk4::Application::builder()
         .application_id("dev.aeroshell.shell")
         .build();
 
     app.connect_activate(move |app| {
+        if let Some(n) = benchmark_anchor {
+            benchmark::run_anchor(app, n);
+            return;
+        }
         if let Some(n) = benchmark_n {
             tracing::info!(n, related = benchmark_related, "modo benchmark A (sem aero_frame_v1)");
             benchmark::run_webviews(app, n, benchmark_related);

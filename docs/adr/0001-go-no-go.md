@@ -1,6 +1,6 @@
 # ADR 0001 — Go/No-Go do S5 e arquitetura de frames
 
-- Status: proposto (aguardando decisão; S3 **não iniciado**)
+- Status: **aceito provisoriamente pelo usuário em 2026-11-18** (S3 liberado após os ajustes abaixo)
 - Data: 2026-11-18
 - Ambiente: VirtualBox sem 3D, build `--release`, WebKitGTK 2.52.6, Smithay 0.7.0,
   gtk4-layer-shell 0.8.0 / lib C 1.3.0. **Números de VM não são representativos em GPU real.**
@@ -14,22 +14,27 @@ O compositor **não** entrou nas somas (apenas `aeroshell-shell` + filhos WebKit
 Experimento A: N WebViews. Experimento B: 1 WebView com 20 componentes de frame (barra de
 título + bordas em faixas, grade sem sobreposição), simulando um atlas.
 
-## Dados (PSS em kB; 3 repetições)
+## Método final (v2)
+`tests/bench/run_s5_bench.sh`: espera `load-changed=Finished` de todas as views, faz polling de
+PSS até 3 leituras consecutivas com variação < 2%, e registra o tempo de estabilização
+(1–3 s nas execuções). Amostra vazia/falha é **registrada e repetida** — nunca descartada em
+silêncio: `N20-related rep=1 tentativa=1` teve 80 leituras vazias, foi marcada `FALHA` e
+`REPETINDO`, e a tentativa 2 estabilizou em 2 s com PSS 508554 kB.
+
+## Dados (PSS em kB; 3 repetições, método v2)
 
 | Configuração | WebKitWebProcess | PSS rep1 / rep2 / rep3 | Criação de frame | Risco / complexidade |
 |---|---|---|---|---|
-| N=1 sem related-view | 1 | 276041 / 276025 / 276035 | 286–295 ms (1ª view) | baixo / trivial |
-| N=5 sem related-view | 5 | 439141 / 440132 / 440134 | 138–276 ms por view | médio (5 processos) |
-| N=20 sem related-view | 20 | ver nota / 1008996 / 1011027 | 145–286 ms por view | **alto (20 processos)** |
-| N=1 com related-view | 1 | 275883 / 277478 / 276140 | 242–282 ms | baixo / trivial |
-| N=5 com related-view | 1 | 322738 / 325244 / 327746 | 118–311 ms (1ª) + 117–152 ms | baixo |
-| N=20 com related-view | **1** | 506795 / 499574 / 504705 | 1ª 229–334 ms; demais 50–175 ms | baixo / trivial |
-| Atlas 1 WebView, 20 frames | **1** | 310021 / 304482 / 303983 | inserir 20: 0,2 ms; remover/reinserir 1: 0,01 ms | médio (precisa src-rect) |
+| N=1 sem related-view | 1 | 275937 / 275967 / 276173 | 286–295 ms (1ª view) | baixo / trivial |
+| N=5 sem related-view | 5 | 439349 / 439614 / 439418 | 138–276 ms por view | médio (5 processos) |
+| N=20 sem related-view | 20 | 1009834 / 1011756 / 1010505 | 145–286 ms por view | **alto (20 processos)** |
+| N=1 com related-view | 1 | 276047 / 276095 / 275912 | 242–282 ms | baixo / trivial |
+| N=5 com related-view | 1 | 325401 / 327848 / 325536 | 118–311 ms (1ª) + 117–152 ms | baixo |
+| N=20 com related-view | **1** | 508554 / 511498 / 504604 | 1ª 229–334 ms; demais 50–175 ms | baixo / trivial |
+| Atlas 1 WebView, 20 frames | **1** | 308178 / 308071 / 308259 | inserir 20: 0,2–0,4 ms; 1 frame: 0–0,01 ms | médio (precisa src-rect) |
 
-Nota: a repetição 1 de N=20 sem related-view amostrou 0 processos no instante da leitura
-(amostragem fora da janela estável); as repetições 2 e 3 são as válidas. PSS por processo
-exemplo (N=20 com related, rep2): `aeroshell-shell 187455`, `WebKitNetworkProcess 19100`,
-`WebKitWebProcess 293020` → soma `499575`.
+PSS por processo exemplo (N=20 com related, v1 rep2): `aeroshell-shell 187455`,
+`WebKitNetworkProcess 19100`, `WebKitWebProcess 293020` → soma `499575`.
 
 Superfície do atlas: `1000x613`, 4 bytes/px → **2.452.000 bytes** de buffer (sem cópia de CPU
 por frame; o atlas é uma única textura).
@@ -50,6 +55,27 @@ por frame; o atlas é uma única textura).
    e `WaylandSurfaceRenderElement` repassa esse `src` a `render_texture_from_to`
    (`.../element/surface.rs:381-398`). **Não implementado.**
 
+## Baseline do `aeroshell-shell` (smaps por mapeamento, painel aberto)
+PSS total do processo = **109744 kB** nesta execução (o valor ~187 MB visto antes incluía
+20 WebViews related). Composição:
+
+```text
+   27583 kB  libLLVM (Mesa/WebKit)
+   26644 kB  heap próprio
+   18329 kB  WebKit/JSC
+   14872 kB  Mesa/GL/Vulkan
+    9536 kB  anon/deleted
+    6616 kB  outras libs compartilhadas
+    5348 kB  GTK/GLib
+     816 kB  binário
+```
+
+Bibliotecas compartilhadas ≈ **73 MB**; heap+anon ≈ **36 MB**. O maior bloco isolado é
+`libLLVM.so.21.1` (~27,6 MB), puxado pelo stack Mesa/Vulkan (inclui lavapipe); não há forma
+simples de removê-lo sem recompilar WebKitGTK/Mesa, e neste VM `WebKitGPUProcess = 0`.
+Heap próprio é majoritariamente alocação de objetos GTK/WebKit; abrir o `WebContext` sob
+demanda pode reduzir alguns MB, mas não é relevante frente a 500 MB do WebProcess em N=20.
+
 ## Recomendação proposta (NÃO ratificada)
 - **Adotar `related-view` para todas as WebViews de frame** — é a decisão de maior impacto e
   custo de implementação quase zero (uma propriedade no builder).
@@ -61,5 +87,25 @@ por frame; o atlas é uma única textura).
   GPU real antes de fechar o desenho de frames. Se lá o PSS/latência satisfizerem, follow-up
   é S5 com protocolo e pool; se não, reabrir o atlas.
 
-## Decisão
-Aguardando o usuário. S3 permanece bloqueado.
+## Decisão do usuário (provisória) e ajustes obrigatórios
+
+1. **`related-view` é o padrão de frames.** Uma **view-âncora oculta** deve ser mantida viva
+   durante toda a sessão para que novos frames possam ser criados com o mesmo processo.
+   Teste real (`AERO_BENCH_ANCHOR=5`): antes de destruir a âncora, 1 `WebKitWebProcess`
+   (pid 84087); 5 s **depois** de `anchor_window.close()`, o mesmo pid 84087 continuava vivo e
+   as 5 views related seguiam funcionando. Interpretação: `related-view` é
+   **construct-only** — a âncora precisa existir no momento da criação de cada view; destruí-la
+   **não** mata as views já criadas, mas impede criar novas views relacionadas a ela. Por isso
+   a âncora é mantida viva até o fim da sessão, não por dependência das views existentes.
+2. **Pool pequeno com pré-aquecimento (2–4 frames ociosos)** para mascarar latência de criação.
+   O pool **não** é descrito como redução de memória; essa é papel de `related-view`.
+3. **Atlas é Plano B**, com gatilho objetivo a medir em **GPU real**:
+   - PSS adicional dos frames com **10 janelas abertas** > **150 MB** (linha de base do atlas
+     medida no VM: ~304 MB para 20 componentes); e/ou
+   - latência de resize de janela com frame (do resize do cliente até o frame atualizado)
+     **p95 > 16,7 ms** (1 frame de 60 fps) na mesma condição.
+   Se qualquer gatilho disparar em hardware real (ou VM trixie com 3D), reavaliar o atlas.
+4. **Aviso obrigatório**: dados de **VM sem 3D**; `WebKitGPUProcess = 0`; revalidar em hardware
+   real ou VM trixie com 3D antes de fechar o desenho de frames.
+
+Status: aceito provisoriamente; S3 liberado. O ADR será revisitado após S5 com o protocolo.

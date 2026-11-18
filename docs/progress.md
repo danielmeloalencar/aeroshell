@@ -98,5 +98,16 @@ remover/reinserir 1 componente 0,01 ms, buffer 1000x613 ARGB8888 = 2.452.000 byt
 **latência**, não memória; o ganho de memória vem de `related-view`. Smithay 0.7 já aceita
 `src` rect no `RenderElement::draw`.
 
+### ADR 0001 aceito provisoriamente (2026-11-18)
+- `related-view` padrão com âncora oculta viva; teste real: destruir a âncora **não** matou o
+  WebProcess compartilhado (pid 84087 antes e 5 s depois); a propriedade é construct-only, então
+  a âncora só é necessária para criar novas views.
+- Pool 2–4 frames pré-aquecidos, **latência**, não memória; atlas como Plano B com gatilho em
+  GPU real: PSS adicional dos frames com 10 janelas > 150 MB e/ou p95 de resize > 16,7 ms.
+- Benchmark v2 com polling de estabilização (<2% em 3 leituras): falha registrada e repetida,
+  nunca descartada. Números finais no ADR.
+- Baseline `aeroshell-shell`: PSS 109744 kB, dos quais ~73 MB libs compartilhadas e ~36 MB
+  heap/anon; maior bloco libLLVM 27583 kB.
+
 ### Pendente
-S3, S4, S5, S6, S7. **S3 não iniciado**: ADR 0001 proposto, aguardando decisão do usuário.
+S3 (liberado), S4, S5, S6, S7.

@@ -132,6 +132,64 @@ pub fn run_webviews(app: &gtk4::Application, n: usize, related: bool) {
     });
 }
 
+/// Teste do ADR 0001: âncora oculta + N views related; destrói a âncora e observa o processo.
+pub fn run_anchor(app: &gtk4::Application, n: usize) {
+    let context = WebContext::new();
+    let manager = manager();
+
+    let anchor_window = gtk4::ApplicationWindow::builder()
+        .application(app)
+        .default_width(1)
+        .default_height(1)
+        .build();
+    let anchor = WebView::builder()
+        .user_content_manager(&manager)
+        .web_context(&context)
+        .build();
+    anchor.load_html(FRAME_HTML, Some("aero://bench/anchor"));
+    anchor_window.set_child(Some(&anchor));
+    anchor_window.present();
+    tracing::info!("BENCH ANCHOR: âncora oculta criada");
+
+    let mut views = Vec::with_capacity(n);
+    for _ in 0..n {
+        let view = WebView::builder()
+            .user_content_manager(&manager)
+            .web_context(&context)
+            .related_view(&anchor)
+            .build();
+        view.load_html(FRAME_HTML, Some("aero://bench/related"));
+        views.push(view);
+    }
+    // Manter as views vivas: um window por view.
+    let mut windows = Vec::with_capacity(n);
+    for view in views {
+        let window = gtk4::ApplicationWindow::builder()
+            .application(app)
+            .default_width(320)
+            .default_height(200)
+            .build();
+        window.set_child(Some(&view));
+        window.present();
+        windows.push(window);
+    }
+    tracing::info!(n, "BENCH ANCHOR: views related criadas");
+
+    let app_owned = app.clone();
+    glib::timeout_add_seconds_local_once(5, move || {
+        tracing::info!("BENCH ANCHOR: destruindo a âncora");
+        anchor_window.close();
+        glib::timeout_add_seconds_local_once(5, move || {
+            tracing::info!("BENCH ANCHOR: pós-destruição (5 s)");
+            for window in &windows {
+                window.close();
+            }
+            let app_quit = app_owned.clone();
+            glib::timeout_add_seconds_local_once(2, move || app_quit.quit());
+        });
+    });
+}
+
 pub fn run_atlas(app: &gtk4::Application) {
     let window = gtk4::ApplicationWindow::builder()
         .application(app)
