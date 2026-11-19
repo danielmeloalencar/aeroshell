@@ -305,7 +305,7 @@ const TITLEBAR_HTML: &str = r#"<!doctype html>
     <button id="close" title="fechar">&#10005;</button>
   </div>
   <script>
-    const send = (action) => window.webkit.messageHandlers.aero.postMessage(JSON.stringify({action}));
+    const send = (action) => window.webkit.messageHandlers.aero.postMessage({ action });
     document.getElementById('close').addEventListener('click', () => send('close'));
     document.getElementById('max').addEventListener('click', () => send('maximize'));
   </script>

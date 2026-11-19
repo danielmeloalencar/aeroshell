@@ -673,3 +673,58 @@ S3 (liberado), S4, S5, S6, S7.
   serial entregue ao cliente é o mesmo gravado em `last_button_serial`.
 - Pendências do marco: botões fechar/maximizar (passo 2), runtime Bun + SDK (passo 3),
   painel React/TSX (passo 4).
+
+### Atraso da decoração no resize — 3 causas candidatas (modo spike, 2026-11-19)
+- Assimetria estrutural (lida no código): a POSIÇÃO do frame é recalculada a cada redraw a
+  partir da geometria do cliente + `fgeo.offset()` (`backend/winit.rs:193-202`) — por isso
+  mover não atrasa; o TAMANHO só muda via protocolo (`configure` → `set_default_size` no GTK →
+  repaint do WebKit → commit). O frame depende da cadência de commit do próprio cliente frame.
+- Causa 1 (timer fixo de 20 ms, `frame_webview.rs:410-413`): confirmada, mas a substituição
+  pedida (`glib::unix_fd_add_local`) NÃO existe no glib fixado 0.22.11 (só `g_source_add_unix_fd`
+  comentado no glib-sys). Alternativa viável no crate: `gio::DatagramBased::create_source`, que
+  exige `OwnedFd` (dup do fd da conexão) → dependência nova (`libc` 0.2.191 MIT ou `rustix`
+  0.38.44/1.1.6 MIT, ambos já transitivos em `Cargo.lock`). Aguarda aprovação; nada foi adicionado.
+- Causa 2: JÁ implementada — o compositor reenvia o `configure` do frame a partir da geometria
+  COMMITADA do cliente no handler de commit (`protocols/compositor.rs:140-149`,
+  `client_content_size` → `element_geometry` → `Window::geometry` = estado cacheado do último
+  commit). Evidência no teste: pedido +40/+30, obtido +36/+26 (arredondamento da grade do foot);
+  o frame recebeu o tamanho real commitado. Nada alterado.
+- Causa 3: `html/body` já era transparente (`assets/shell-reset.css`) e a WebView já tinha fundo
+  transparente (`frame_webview.rs:374`). Faltava o fundo do widget GTK: adicionado via
+  `CssProvider` + `style_context_add_provider_for_display` (commit 2cf354d). Verificação visual pendente.
+- Se o atraso persistir, as duas alternativas de desenho (não implementadas, aguardam decisão):
+  1. Nove fatias no compositor: frame como grade de 3x3 superfícies, cada faixa de borda
+     independentemente redimensionável, sem depender do repaint do WebKit.
+  2. Buffer sobredimensionado com recorte por `src-rect`: o frame commita um buffer grande
+     (ex.: +512 px por lado) e o compositor mostra só o `src-rect` do tamanho real, eliminando
+     o round-trip de redimensionamento do cliente frame.
+  3. Nenhuma das duas foi medida: o atraso atual não foi quantificado após as correções baratas
+     (só a reprodução do teste de arestas, sem regressão).
+  4. Para quantificar: medir `configure → commit` do frame durante um grab contínuo, com o
+     `frame_probes` (feature `bench`) já existente, em GPU real.
+  5. Decisão adiada porque o custo (complexidade de hit-test por fatia ou gestão de src-rect)
+     não se justifica sem o número; o caminho barato pendente é o despacho imediato (causa 1).
+
+### Passo 2 — botões da barra HTML (2026-11-19, caminho executado pela 1ª vez)
+- Caminho medido OK: JS da WebView → `script-message-received` → IPC do compositor. Teste manual
+  `tests/integration/frame_buttons.py`, `VEREDITO: OK` — hit-test dos 3 botões resolve para o
+  surface do frame (`wl_surface@32`, origem `(54,50)`) e não para o do cliente (`wl_surface@18`);
+  o handler de ponteiro do frame_host viu o press nos 3 cliques; `maximize` → conteúdo
+  `(696,494)`→`(800,600)`, `maximize` de novo → `(696,494)`, `close` → `list` via IPC = `['.']` e
+  `FRAMEWEB: closed recebido`.
+- Causas REAIS do fracasso inicial (medidas, não presumidas): (1) `postMessage(JSON.stringify(...))`
+  dupla-codifica — `JSCValue::to_json(0)` devolve `"{\"action\":\"ready\"}"`, `serde_json::from_str`
+  produz `Value::String` e `.get("action")` falha; corrigido postando objeto JS. (2) o teste enviava
+  só `button press`; o `click` do DOM exige press+release. (3) o regex do teste não casava o JSON
+  escapado.
+- Hipótese retratada (não provada): conectar o sinal sem detail. Reexecutado com `Some("aero")` e o
+  teste corrigido dá OK; nada no código mudou além do `postMessage` — o restante está como no
+  commit `2cf354d`.
+- Interferência do usuário: a primeira medição (`press=False`, sem linha de IPC) é compatível com a
+  janela ter sido movida com o mouse real durante a run. Nada foi descartado: o teste foi reexecutado
+  sem entrada real e deu `press=True` nos três cliques.
+- Limitações não corrigidas: `maximize` não reposiciona o cliente na origem do output
+  (`window_ipc.rs:56-125` só muda tamanho); `restore` envia `size = None` (o cliente escolhe); o
+  `window_id` do handler vem de `entries.first()` (uma janela no spike).
+- NÃO testado: atraso da decoração depois das correções baratas (causa 3 sem verificação visual,
+  causa 1 bloqueada por dependência). `bash scripts/check.sh` verde.
