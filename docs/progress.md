@@ -469,6 +469,52 @@ Escopo **shell apenas**; lock/greeter seguem para F5/F6. Nenhuma fase avançada.
 - O `PDEATHSIG` cobre a morte do compositor; a morte de um filho intermediário (ex.: `sh -c`
   sem `exec`) pode orphanar netos — o harness usa `exec` onde isso importa.
 
+### Pendências menores registradas (2026-11-19 — SEM implementar agora)
+
+**1. Auditoria do closure `pre_exec` (linha a linha).** Código atual
+(`crates/aeroshell-compositor/src/supervisor.rs:116-148`):
+```rust
+cmd.pre_exec(move || {
+    parent_death_guard(parent_pid)?;                 // getppid + prctl(PR_SET_PDEATHSIG)
+    let fd = BorrowedFd::borrow_raw(raw_fd);          // wrap de i32, sem syscall
+    fcntl_setfd(fd, FdFlags::empty())                 // fcntl(F_SETFD)
+        .map_err(|e| io::Error::from_raw_os_error(e.raw_os_error()))?;
+    Ok(())
+});
+// ...
+fn parent_death_guard(parent_pid: Pid) -> io::Result<()> {
+    if getppid() != Some(parent_pid) {
+        return Err(io::Error::from_raw_os_error(3)); // ESRCH
+    }
+    set_parent_process_death_signal(Some(Signal::KILL))
+        .map_err(|e| io::Error::from_raw_os_error(e.raw_os_error()))
+}
+```
+Conclusão: **async-signal-safe**. Só syscalls `getppid`/`prctl`/`fcntl` (wrappers finos rustix:
+`process/id.rs:137`, `process/prctl.rs:66-68` → `prctl_2args(PR_SET_PDEATHSIG, …)`,
+`io/fcntl.rs:68`); wraps de tipos `Copy` (`Pid`, `RawFd`, `BorrowedFd`); nenhum `String`/`Vec`/
+`Box` capturado. Caminho de erro usa `io::Error::from_raw_os_error`, que empacota o código OS
+inteiro com tabela estática — **sem payload Custom/Box** (fonte std `io/error.rs:76-82`:
+`const FUNCTIONS: &'static OsFunctions`, "not created at runtime"). Os construtores que alocam
+são `Error::new`/`other` (variante Custom), **não usados**. Sem lock de userspace, sem caminho de
+pânico (tudo retorna `Result`). Ressalva: `rust-src` não instalado; a variante `Os` inline é o
+contrato da API std, não abri o `enum ErrorData` nesta versão.
+
+**2. Dívida: `--command` via `sh -c` pode orphanar netos.** O PDEATHSIG atinge o `sh`; se o
+comando não usar `exec`, o neto (ex.: um daemon que o shell forkou) pode sobreviver. Mitigação
+futura: lançamento direto (sem `sh`) quando não há shell-expand, ou exigir `exec`. **Registrado,
+não implementado.** Os harnesses já usam `exec` onde isso importa (`supervisor_lifecycle.py`).
+
+**3. Bench: VM ruidosa, sem conclusão.** A inversão N=20 (21.9 ms) < N=5 (26.3 ms) e a variação
+7–10 ms vs 20–26 ms entre execuções são ruído da VM sem 3D (VMware SVGA3D/LLVM). **Nenhuma
+conclusão de desempenho** a partir destes números; latência do ponteiro não estabilizou
+(<2% em 3 leituras), registrada como "não medido". Medição válida só em GPU real.
+
+**4. Higiene do commit (verificado).** `git diff origin/master..HEAD --name-status -- docs/adr`
+→ apenas `A docs/adr/0005-supervisor-interno-ciclo-de-vida.md` (nenhum ADR aceito 0001–0004
+editado). `git diff origin/master..HEAD --name-only | grep target/|/tmp` → vazio (nenhum
+artefato de build ou temporário commitado).
+
 ### Dívidas técnicas (pré-requisitos da Fase 1)
 - **(a) Supervisor ainda é script Python de teste.** — **RESOLVIDO (2026-11-18, ADR 0005).**
   Supervisor dentro do compositor (`supervisor.rs`); `AERO_PRIVILEGED_FD` removido; harnesses
@@ -504,6 +550,12 @@ Escopo **shell apenas**; lock/greeter seguem para F5/F6. Nenhuma fase avançada.
   gracioso (e tratar SIGKILL como caso separado).
 
 ### SPIKE de role: ligar WebView ao `aero_frame_v1` (pesquisa, SEM implementação)
+**Status: CONCLUÍDO e implementado.** A opção B abaixo foi aceita como **ADR 0004** e o
+`associate` sem role já está em `protocols/aero_frame.rs:136` ("NÃO atribuir role. Apenas
+marcar"), validado no B.3. Evidência (arquivo:linha) **reconferida nas versões instaladas em
+2026-11-19**: `gdkwaylandsurface.h:44`, `GdkWayland-4.0.gir:446/725`, `Gdk-4.0.gir:32419/32448`,
+`gtk4-layer-shell-0.8.0/src/manual.rs:13-26`, `wayland.xml:1418-1423`,
+`smithay-0.7.0/src/wayland/compositor/tree.rs:170-177`. Nenhuma mudança de XML; sem `gdk4-wayland`.
 Pesquisa em docs/código instalados. **Nenhum XML alterado, nenhuma dependência adicionada.**
 Hipótese do usuário confirmada: `get_frame` dá `give_role(aero_frame)` em
 `protocols/aero_frame.rs:81`, mas o GDK4/Smithay já deram outro role à superfície ao mapear.
