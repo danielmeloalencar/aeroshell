@@ -27,7 +27,7 @@ mod aero {
         use crate::wayland_client;
         #[allow(clippy::single_component_path_imports)]
         use wayland_backend;
-        pub use wayland_client::protocol::{wl_seat, wl_surface};
+        pub use wayland_client::protocol::{wl_pointer, wl_seat, wl_surface};
         wayland_scanner::generate_interfaces!("../../protocols/aero_frame_v1.xml");
         wayland_scanner::generate_client_code!("../../protocols/aero_frame_v1.xml");
     }
@@ -35,19 +35,34 @@ mod aero {
 }
 
 use aero::aero_frame_manager_v1::AeroFrameManagerV1;
-use aero::aero_frame_v1::{AeroFrameV1, Event as FrameEvent};
+use aero::aero_frame_v1::{AeroFrameV1, Event as FrameEvent, ResizeEdge};
+use aero::{wl_pointer, wl_seat};
+
+/// Um frame associado: proxy aero + superfície + janela GTK + geometria declarada.
+struct FrameEntry {
+    frame: AeroFrameV1,
+    wl_surface: aero::wl_surface::WlSurface,
+    window: gtk4::ApplicationWindow,
+    insets: (i32, i32, i32, i32),
+    shadow: (i32, i32, i32, i32),
+    total: (i32, i32),
+}
 
 #[derive(Default)]
 struct SpikeState {
     manager: Option<AeroFrameManagerV1>,
     configures: usize,
     closed: usize,
-    /// Janela GTK do frame: o tamanho é dirigido pelo aero_frame.configure.
-    window: Option<gtk4::ApplicationWindow>,
-    /// insets (left, top, right, bottom) que este shell declarou via set_insets.
-    insets: (i32, i32, i32, i32),
-    /// shadow_extents (left, top, right, bottom) declarados via set_shadow_extents.
-    shadow: (i32, i32, i32, i32),
+    /// Frames associados (um por janela cliente). O tamanho de cada janela GTK
+    /// é dirigido pelo aero_frame.configure do seu próprio frame.
+    entries: Vec<FrameEntry>,
+    /// Seat/pointer do compositor para enviar move/resize com serial real.
+    seat: Option<wl_seat::WlSeat>,
+    pointer: Option<wl_pointer::WlPointer>,
+    /// Índice do frame cuja superfície recebeu o último enter do ponteiro.
+    active: usize,
+    /// Última posição local do ponteiro na superfície do frame ativo.
+    last_local: (f64, f64),
 }
 
 impl Dispatch<wl_registry::WlRegistry, ()> for SpikeState {
@@ -74,6 +89,100 @@ impl Dispatch<wl_registry::WlRegistry, ()> for SpikeState {
                 ));
                 eprintln!("SPIKE: manager global={name} vinculado no guest do GTK");
             }
+            if interface == "wl_seat" {
+                state.seat = Some(registry.bind::<wl_seat::WlSeat, (), SpikeState>(
+                    name,
+                    version.min(7),
+                    qh,
+                    (),
+                ));
+                eprintln!("SPIKE: wl_seat global={name} vinculado");
+            }
+        }
+    }
+}
+
+impl Dispatch<wl_seat::WlSeat, ()> for SpikeState {
+    fn event(
+        state: &mut Self,
+        seat: &wl_seat::WlSeat,
+        event: wl_seat::Event,
+        _data: &(),
+        _conn: &wayland_client::Connection,
+        qh: &QueueHandle<Self>,
+    ) {
+        if let wl_seat::Event::Capabilities { capabilities } = event {
+            if let Ok(capabilities) = capabilities.into_result() {
+                if capabilities.contains(wl_seat::Capability::Pointer) && state.pointer.is_none() {
+                    state.pointer = Some(seat.get_pointer(qh, ()));
+                    eprintln!("SPIKE: wl_pointer obtido do seat");
+                }
+            }
+        }
+    }
+}
+
+impl Dispatch<wl_pointer::WlPointer, ()> for SpikeState {
+    fn event(
+        state: &mut Self,
+        _pointer: &wl_pointer::WlPointer,
+        event: wl_pointer::Event,
+        _data: &(),
+        _conn: &wayland_client::Connection,
+        _qh: &QueueHandle<Self>,
+    ) {
+        match event {
+            wl_pointer::Event::Enter {
+                surface,
+                surface_x,
+                surface_y,
+                ..
+            } => {
+                if let Some(i) = state.entries.iter().position(|e| e.wl_surface == surface) {
+                    state.active = i;
+                }
+                state.last_local = (surface_x, surface_y);
+            }
+            wl_pointer::Event::Motion {
+                surface_x,
+                surface_y,
+                ..
+            } => {
+                state.last_local = (surface_x, surface_y);
+            }
+            wl_pointer::Event::Button {
+                serial, state: btn, ..
+            } => {
+                if !matches!(btn.into_result(), Ok(wl_pointer::ButtonState::Pressed)) {
+                    return;
+                }
+                let (x, y) = state.last_local;
+                let Some(entry) = state.entries.get(state.active) else {
+                    return;
+                };
+                let (tw, _th) = entry.total;
+                let frame = entry.frame.clone();
+                let Some(seat) = state.seat.clone() else {
+                    return;
+                };
+                // Titlebar (faixa superior de 30 px): esquerda -> move; últimos
+                // 16 px à direita -> resize. Com insets só no topo, o canto
+                // inferior direito do frame cai DENTRO do conteúdo do cliente
+                // (que roteia o input primeiro), então a alça de resize vive na
+                // titlebar. Serial real deste clique.
+                if y < 30.0 {
+                    if x > (tw - 16) as f64 {
+                        eprintln!("SPIKE: clique na alça de resize ({x:.0},{y:.0}) -> resize serial={serial}");
+                        frame.resize(&seat, serial, ResizeEdge::BottomRight);
+                    } else {
+                        eprintln!(
+                            "SPIKE: clique na titlebar ({x:.0},{y:.0}) -> move serial={serial}"
+                        );
+                        frame._move(&seat, serial);
+                    }
+                }
+            }
+            _ => {}
         }
     }
 }
@@ -112,16 +221,18 @@ impl Dispatch<AeroFrameV1, ()> for SpikeState {
                 // (a lib C só o aplica em eixos esticados; ver layer-surface.c
                 // v1.3.0). set_default_size dispara notify::default-width/height
                 // → a lib reconfigura a superfície com o tamanho preferido.
-                let (l, t, r, b) = state.insets;
-                let (sl, st, sr, sb) = state.shadow;
+                let Some(entry) = state.entries.iter_mut().find(|e| &e.frame == frame) else {
+                    return;
+                };
+                let (l, t, r, b) = entry.insets;
+                let (sl, st, sr, sb) = entry.shadow;
                 let total_w = width + l + r + sl + sr;
                 let total_h = height + t + b + st + sb;
+                entry.total = (total_w, total_h);
                 eprintln!(
                     "SPIKE: configure serial={serial} conteudo={width}x{height} -> set_default_size {total_w}x{total_h}"
                 );
-                if let Some(window) = &state.window {
-                    window.set_default_size(total_w, total_h);
-                }
+                entry.window.set_default_size(total_w, total_h);
                 frame.ack_configure(serial);
             }
             FrameEvent::Closed => {
@@ -140,7 +251,6 @@ thread_local! {
 struct Runtime {
     queue: wayland_client::EventQueue<SpikeState>,
     state: SpikeState,
-    frame: Option<AeroFrameV1>,
 }
 
 fn dispatch_nonblocking() {
@@ -150,6 +260,33 @@ fn dispatch_nonblocking() {
             let _ = rt.queue.dispatch_pending(&mut rt.state);
             let _ = rt.queue.flush();
         }
+    });
+}
+
+/// Associa a superfície de uma janela GTK a um window_id no MESMO guest/queue.
+/// Pressupõe RUNTIME já inicializado (manager vinculado). Titlebar de 30 px.
+fn associate_frame(
+    wl_surface: aero::wl_surface::WlSurface,
+    window: gtk4::ApplicationWindow,
+    window_id: u32,
+) {
+    RUNTIME.with(|cell| {
+        let mut borrow = cell.borrow_mut();
+        let rt = borrow.as_mut().expect("RUNTIME não inicializado");
+        let qh = rt.queue.handle();
+        let manager = rt.state.manager.clone().expect("manager ausente");
+        let frame = manager.associate(&wl_surface, window_id, &qh, ());
+        frame.set_insets(0, 30, 0, 0);
+        let _ = rt.queue.flush();
+        rt.state.entries.push(FrameEntry {
+            frame,
+            wl_surface,
+            window,
+            insets: (0, 30, 0, 0),
+            shadow: (0, 0, 0, 0),
+            total: (0, 0),
+        });
+        eprintln!("SPIKE: associate(window_id={window_id}) + set_insets(0,30,0,0) ENVIADOS");
     });
 }
 
@@ -178,23 +315,31 @@ fn main() {
             );
         }
         if blue_client {
-            let client = gtk4::ApplicationWindow::builder()
-                .application(app)
-                .default_width(320)
-                .default_height(240)
-                .title("cliente azul")
-                .build();
-            client.present();
-            eprintln!("SPIKE: cliente AZUL apresentado (xdg_toplevel, sem layer-shell)");
-            // Gate de resize: o cliente muda de tamanho sozinho para provar que
-            // o frame SEGUE o conteúdo (AERO_SPIKE_RESIZE=WxH).
-            if let Ok(size) = std::env::var("AERO_SPIKE_RESIZE") {
-                if let Some((w, h)) = size.split_once('x') {
-                    if let (Ok(w), Ok(h)) = (w.parse::<i32>(), h.parse::<i32>()) {
-                        gtk4::glib::timeout_add_seconds_local_once(5, move || {
-                            eprintln!("SPIKE: cliente AZUL resize -> {w}x{h}");
-                            client.set_default_size(w, h);
-                        });
+            // AERO_SPIKE_BLUE_N>1 abre várias janelas no mesmo cliente (sanidade
+            // de 2 janelas empilhadas, cada uma com seu frame).
+            let n: usize = std::env::var("AERO_SPIKE_BLUE_N")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(1);
+            for i in 0..n {
+                let client = gtk4::ApplicationWindow::builder()
+                    .application(app)
+                    .default_width(320)
+                    .default_height(240)
+                    .title(format!("cliente azul {i}"))
+                    .build();
+                client.present();
+                eprintln!("SPIKE: cliente AZUL {i} apresentado (xdg_toplevel, sem layer-shell)");
+                // Gate de resize: o cliente muda de tamanho sozinho para provar que
+                // o frame SEGUE o conteúdo (AERO_SPIKE_RESIZE=WxH).
+                if let Ok(size) = std::env::var("AERO_SPIKE_RESIZE") {
+                    if let Some((w, h)) = size.split_once('x') {
+                        if let (Ok(w), Ok(h)) = (w.parse::<i32>(), h.parse::<i32>()) {
+                            gtk4::glib::timeout_add_seconds_local_once(5, move || {
+                                eprintln!("SPIKE: cliente AZUL {i} resize -> {w}x{h}");
+                                client.set_default_size(w, h);
+                            });
+                        }
                     }
                 }
             }
@@ -233,11 +378,7 @@ fn main() {
             let mut queue: wayland_client::EventQueue<SpikeState> = connection.new_event_queue();
             let qh = queue.handle();
             connection.display().get_registry(&qh, ());
-            let mut state = SpikeState {
-                window: Some(w.clone()),
-                insets: (0, 30, 0, 0),
-                ..Default::default()
-            };
+            let mut state = SpikeState::default();
 
             // Startup: deixar o GLib bombear o read e só então esvaziar a fila.
             for _ in 0..30 {
@@ -246,19 +387,36 @@ fn main() {
                 std::thread::sleep(std::time::Duration::from_millis(2));
             }
             eprintln!("SPIKE: manager no guest = {}", state.manager.is_some());
-            if let Some(manager) = &state.manager {
-                let frame = manager.associate(&wl_surface, 0, &qh, ());
-                // Titlebar de 30 px: o frame deve aparecer SÓ nessa faixa.
-                frame.set_insets(0, 30, 0, 0);
-                let _ = queue.flush();
-                eprintln!("SPIKE: associate(window_id=0) + set_insets(0,30,0,0) ENVIADOS");
+            if state.manager.is_some() {
                 RUNTIME.with(|cell| {
-                    *cell.borrow_mut() = Some(Runtime {
-                        queue,
-                        state,
-                        frame: Some(frame),
-                    });
+                    *cell.borrow_mut() = Some(Runtime { queue, state });
                 });
+                associate_frame(wl_surface, w.clone(), 0);
+
+                // Sanidade de 2 janelas: um segundo frame para window_id=1,
+                // criado só depois que o RUNTIME (conexão/manager) existe.
+                if std::env::var_os("AERO_SPIKE_FRAME2").is_some() {
+                    let w0 = w.clone();
+                    gtk4::glib::idle_add_local_once(move || {
+                        let app = w0.application().expect("janela sem application");
+                        let win1 = gtk4::ApplicationWindow::builder()
+                            .application(&app)
+                            .title("frame spike 2")
+                            .build();
+                        win1.init_layer_shell();
+                        win1.set_namespace(Some("aeroshell-frame-spike-2"));
+                        win1.connect_realize(|w1| {
+                            let Some(s1) = w1.surface() else { return };
+                            let Some(ws1) = s1.downcast_ref::<WaylandSurface>() else {
+                                return;
+                            };
+                            let Some(wl1) = ws1.wl_surface() else { return };
+                            associate_frame(wl1, w1.clone(), 1);
+                        });
+                        win1.present();
+                        eprintln!("SPIKE: segundo frame (window_id=1) apresentado");
+                    });
+                }
             }
         });
 
@@ -281,9 +439,9 @@ fn main() {
             // Destruir objetos aero ANTES de dropar a connection guest.
             RUNTIME.with(|cell| {
                 if let Some(rt) = cell.borrow_mut().as_mut() {
-                    rt.frame.take();
+                    rt.state.entries.clear();
                     eprintln!(
-                        "SPIKE: frame destruído; configures={} closed={}",
+                        "SPIKE: frames destruídos; configures={} closed={}",
                         rt.state.configures, rt.state.closed
                     );
                 }

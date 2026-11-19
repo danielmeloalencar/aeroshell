@@ -5,7 +5,10 @@ use smithay::{
     desktop::{
         find_popup_root_surface, get_popup_toplevel_coords, PopupKind, PopupManager, Space, Window,
     },
-    reexports::wayland_server::protocol::{wl_seat, wl_surface::WlSurface},
+    reexports::wayland_server::{
+        protocol::{wl_seat, wl_surface::WlSurface},
+        Resource,
+    },
     utils::Serial,
     wayland::{
         compositor::with_states,
@@ -41,7 +44,18 @@ impl XdgShellHandler for AeroState {
         }
         tracing::info!("novo toplevel xdg-surface mapeado");
         let window = Window::new_wayland_window(surface);
-        self.space.map_element(window, (0, 0), false);
+        // Margem para a decoração do frame (insets superiores) ficar visível e
+        // cascata para janelas empilhadas não coincidirem exatamente.
+        let n = self.space.elements().count() as i32;
+        let loc = (60 + n * 40, 80 + n * 40);
+        self.space.map_element(window, loc, false);
+        if let Some(window) = self.space.elements().last() {
+            tracing::info!(
+                surface = ?window.toplevel().map(|t| t.wl_surface().id()),
+                geometry = ?self.space.element_geometry(window),
+                "toplevel mapeado no space"
+            );
+        }
     }
 
     fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {

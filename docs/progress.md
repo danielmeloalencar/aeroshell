@@ -325,7 +325,7 @@ Código: `crates/aeroshell-shell/examples/frame_spike.rs`. Comando:
 **NÃO EXECUTADO:** B.3 (frame ao redor de zenity, move/resize, teclado, closed) e medições.
 Parado no B.2 conforme a regra de parada do usuário.
 
-### B.3 — loop real com GTK + `associate` (PARADO por falha de z-order)
+### B.3 — loop real com GTK + `associate` (CONCLUÍDO)
 Código: `examples/frame_spike.rs` + `tests/integration/frame_spike_real.py`
 (compositor com `AERO_PRIVILEGED_FD`, spike com `WAYLAND_SOCKET`, zenity pelo socket público).
 
@@ -374,21 +374,42 @@ e `element/mod.rs:404-418`. Nenhum draw direto, geometria preservada, damage man
   cliente (`add_destruction_hook`) envia `closed`, remove o frame/insets/layer surface. Logs:
   `janela cliente destruída: closed enviado ao frame` e `SPIKE: closed recebido`.
 
-**NÃO RESOLVIDO (2 tentativas — PARADO):** tamanho do buffer commitado pelo frame.
-Dados: `FRAME_BUFFER_COMMIT buffer=Some((320, 200))` enquanto o
-`zwlr_layer_surface.configure` enviado foi `320x270`. Tentei `send_configure()` explícito e
-`anchor Top|Left` no spike; ambos mantiveram 320x200. Causa provável (suposição): GTK4
-layer-shell ignora configure de tamanho neste caminho. Sem quarta variação (regra 4.1).
-**Não medido:** move/resize com serial válido; teclado nunca no frame (cliente azul não tem
-campo de texto).
+**RESOLVIDO — tamanho do buffer (commit `6eab2c9`):** a causa era o `default_size` fixo do
+GTK + `gtk4-layer-shell` só aplicar `zwlr_layer_surface.configure` em eixos esticados
+(`layer-surface.c` v1.3.0). Correção: o **shell governa o tamanho** — no `aero_frame.configure`
+o spike calcula `total = conteúdo + insets + shadow` e chama `set_default_size(total)`, que
+dispara `notify::default-width/height` e reconfigura a superfície. Gate objetivo em **2 tamanhos**:
+`FRAME_BUFFER_COMMIT buffer=Some((320, 270)) expected=Some((320, 270)) ok=true` (cliente 320x240)
+e `buffer=Some((480, 350)) ... ok=true` após resize do cliente para 480x320 (`AERO_SPIKE_RESIZE`).
+
+**VALIDADO — move/resize com serial válido, teclado, 2 janelas (cliente real, não unitário):**
+- `tests/integration/frame_spike_real.py` (ponteiro sintético via `AERO_TEST_INPUT_SOCK`):
+  `OK move: clique real na titlebar -> serial válido aceito` (serial=6);
+  `OK resize: clique real na alça -> serial válido aceito` (serial=9, `ResizeEdge::BottomRight`);
+  `OK teclado: foco foi ao cliente @16, nunca ao frame @17`;
+  `OK closed: compositor enviou e spike recebeu`. `GATE DE TAMANHO: PASSOU (2 tamanhos + closed)`.
+  A alça de resize vive na titlebar (últimos 16 px à direita): com insets só no topo, o canto
+  inferior direito do frame cai dentro do conteúdo do cliente, que roteia o input primeiro.
+- Correção de mecanismo no `surface_under` (frame): o ponto do tuple de foco deve ser a
+  **origem global** da superfície, não o hit local — Smithay calcula `event.location - loc`
+  (`smithay-0.7.0/src/input/pointer/mod.rs:795`). Sem isso o move não iniciava.
+- `tests/integration/frame_spike_two.py` (2 clientes azuis `AERO_SPIKE_BLUE_N=2` + 2 frames
+  `AERO_SPIKE_FRAME2=1`): `SANIDADE 2 JANELAS: PASSOU`.
+  (a) 2 associates + 2 buffers `(320, 270) ok=true`;
+  (b) ordem frente->trás `[client@43, frame@45, client@16, frame@17]` — cada frame LOGO APÓS
+  (abaixo) do seu cliente;
+  (c) raise do cliente 0 → `[client@16, frame@17, client@43, frame@45]`; raise do cliente 1 →
+  volta. O frame **segue** o seu cliente no empilhamento;
+  (d) `focus_true=['16','43']` — teclado nunca nos frames `@17,@45`.
+- Ordem de render logada só quando muda (`backend/winit.rs`, `state.last_render_order`).
+
+**Verificação:** `bash scripts/check.sh` → `OK: scripts/check.sh passou`
+(clippy `-D warnings`, `cargo test` 14 testes no compositor incl. 7 de protocolo, `bun test` 1 pass).
 
 **Não iniciado:** C (WebView real, related-view/pool, métricas, presentation-time).
 
-**NÃO VALIDADO:** fechar zenity → `closed` → frame destruído (bloqueado pela falha de z-order);
-move/resize com serial válido; teclado nunca no frame (zenity tem só um botão e estava coberto).
-
-**Próximo passo exige decisão:** corrigir o z-order do frame (desenhá-lo num passe anterior ao
-`render_output`, em vez de `custom_elements`) — mudança nova, não tentada.
+**Ressalva de ambiente:** tudo acima em nested (winit) no VirtualBox **sem 3D**; valida
+FUNCIONAMENTO, não desempenho. Latências S5 (~11–13 ms) são indicativas, não benchmark de GPU real.
 
 ### Dívidas técnicas (pré-requisitos da Fase 1)
 - **(a) Supervisor ainda é script Python de teste.** `tests/integration/launch_manual.py` e

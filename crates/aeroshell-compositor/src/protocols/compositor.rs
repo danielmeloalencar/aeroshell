@@ -139,6 +139,12 @@ impl CompositorHandler for AeroState {
                 if let Some((frame_surface, window_id)) = assoc {
                     if let Some(content) = self.client_content_size(window_id) {
                         if self.frame_configured_content.get(&frame_surface) != Some(&content) {
+                            tracing::info!(
+                                bbox = ?window.bbox(),
+                                geometry = ?window.geometry(),
+                                elem_geo = ?self.space.element_geometry(&window),
+                                "geometria real do cliente (bbox vs window geometry)"
+                            );
                             self.send_frame_configure(window_id, content);
                         }
                     }

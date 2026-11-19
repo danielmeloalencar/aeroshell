@@ -35,7 +35,7 @@ impl AeroState {
                 u32::from(serial)
             );
         }
-        tracing::info!(x, y, under = ?under.as_ref().map(|(s, _)| s.id()), "TESTE ponteiro motion");
+        tracing::info!(x, y, under = ?under.as_ref().map(|(s, p)| (s.id(), p)), "TESTE ponteiro motion");
         let pointer = self.seat.get_pointer().unwrap();
         pointer.motion(
             self,
@@ -53,6 +53,7 @@ impl AeroState {
         let serial = smithay::utils::SERIAL_COUNTER.next_serial();
         if pressed {
             self.last_button_serial = Some(u32::from(serial));
+            self.focus_on_press(serial);
         }
         let pointer = self.seat.get_pointer().unwrap();
         tracing::info!(pressed, "TESTE ponteiro button");
@@ -70,6 +71,34 @@ impl AeroState {
             },
         );
         pointer.frame(self);
+    }
+
+    /// Foco de teclado no clique: vai para a janela do space sob o ponteiro, ou
+    /// None. O frame NUNCA recebe foco — não é janela do space e sua layer surface
+    /// tem keyboard_interactivity None. Compartilhado pelo caminho real e sintético.
+    fn focus_on_press(&mut self, serial: smithay::utils::Serial) {
+        let pointer = self.seat.get_pointer().unwrap();
+        let keyboard = self.seat.get_keyboard().unwrap();
+        if pointer.is_grabbed() {
+            return;
+        }
+        if let Some((window, _)) = self
+            .space
+            .element_under(pointer.current_location())
+            .map(|(w, l)| (w.clone(), l))
+        {
+            self.space.raise_element(&window, true);
+            if let Some(toplevel) = window.toplevel() {
+                keyboard.set_focus(self, Some(toplevel.wl_surface().clone()), serial);
+            }
+            self.space.elements().for_each(|w| {
+                if let Some(t) = w.toplevel() {
+                    t.send_pending_configure();
+                }
+            });
+        } else {
+            keyboard.set_focus(self, Option::<WlSurface>::None, serial);
+        }
     }
 
     pub fn process_input_event<I: InputBackend>(&mut self, event: InputEvent<I>) {
@@ -115,28 +144,11 @@ impl AeroState {
             }
             InputEvent::PointerButton { event, .. } => {
                 let pointer = self.seat.get_pointer().unwrap();
-                let keyboard = self.seat.get_keyboard().unwrap();
                 let serial = SERIAL_COUNTER.next_serial();
                 let button_state = event.state();
 
-                if ButtonState::Pressed == button_state && !pointer.is_grabbed() {
-                    if let Some((window, _)) = self
-                        .space
-                        .element_under(pointer.current_location())
-                        .map(|(w, l)| (w.clone(), l))
-                    {
-                        self.space.raise_element(&window, true);
-                        if let Some(toplevel) = window.toplevel() {
-                            keyboard.set_focus(self, Some(toplevel.wl_surface().clone()), serial);
-                        }
-                        self.space.elements().for_each(|w| {
-                            if let Some(t) = w.toplevel() {
-                                t.send_pending_configure();
-                            }
-                        });
-                    } else {
-                        keyboard.set_focus(self, Option::<WlSurface>::None, serial);
-                    }
+                if ButtonState::Pressed == button_state {
+                    self.focus_on_press(serial);
                 }
 
                 pointer.button(

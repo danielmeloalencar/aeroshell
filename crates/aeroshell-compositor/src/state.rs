@@ -110,6 +110,8 @@ pub struct AeroState {
 
     /// Última ação de geometry para medir latência até o frame atualizado.
     pub last_geometry_action: Option<(String, std::time::Instant)>,
+    /// Última ordem de render (frente->trás) logada; evita spam a cada redraw.
+    pub last_render_order: Vec<String>,
     /// Permite testes de protocolo validarem IDs sem criar uma janela xdg real.
     pub test_window_count: usize,
     /// Lista de clientes inseridos (usada só para sinalizar prontidão em testes).
@@ -204,6 +206,7 @@ impl AeroState {
             frame_configured_content: HashMap::new(),
             frame_configure_serial: 0,
             last_geometry_action: None,
+            last_render_order: Vec::new(),
             test_window_count: 0,
             test_client_count: 0,
             compositor_state,
@@ -249,13 +252,56 @@ impl AeroState {
                 }
             }
         }
-        self.space
-            .element_under(pos)
-            .and_then(|(window, location)| {
-                window
-                    .surface_under(pos - location.to_f64(), WindowSurfaceType::ALL)
-                    .map(|(s, p)| (s, (p + location).to_f64()))
-            })
+        if let Some((window, location)) = self.space.element_under(pos) {
+            if let Some((s, p)) =
+                window.surface_under(pos - location.to_f64(), WindowSurfaceType::ALL)
+            {
+                return Some((s, (p + location).to_f64()));
+            }
+        }
+        // Frames: a região de decoração (total menos o conteúdo do cliente)
+        // roteia para a superfície do frame. O conteúdo já foi tratado acima.
+        for (frame_surface, _, _, client_surface) in &self.associated_frames {
+            let Some(cs) = client_surface else { continue };
+            let Some(window) = self
+                .space
+                .elements()
+                .find(|w| w.toplevel().map(|t| t.wl_surface()) == Some(cs))
+            else {
+                continue;
+            };
+            let Some(geo) = self.space.element_geometry(window) else {
+                continue;
+            };
+            let fgeo = self
+                .frame_geometries
+                .get(frame_surface)
+                .copied()
+                .unwrap_or_default();
+            let content = self
+                .frame_configured_content
+                .get(frame_surface)
+                .copied()
+                .unwrap_or((geo.size.w, geo.size.h));
+            let (dx, dy) = fgeo.offset();
+            let frame_loc = Point::new(geo.loc.x + dx, geo.loc.y + dy);
+            let frame_rect = smithay::utils::Rectangle::new(
+                frame_loc,
+                (content.0 + fgeo.extra_w(), content.1 + fgeo.extra_h()).into(),
+            );
+            if !frame_rect.to_f64().contains(pos) {
+                continue;
+            }
+            let content_rect = smithay::utils::Rectangle::new(geo.loc, geo.size);
+            if content_rect.to_f64().contains(pos) {
+                continue;
+            }
+            // Smithay (input/pointer/mod.rs:795) calcula o local do cliente como
+            // `event.location - loc`: o ponto devolvido aqui é a ORIGEM GLOBAL da
+            // superfície (não o hit local), para que enter/motion cheguem certos.
+            return Some((frame_surface.clone(), frame_loc.to_f64()));
+        }
+        None
     }
 
     /// Agrega média e p95 de configure → commit ao encerrar.

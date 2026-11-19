@@ -14,6 +14,7 @@ use smithay::{
     output::{Mode, Output, PhysicalProperties, Scale, Subpixel},
     reexports::{
         calloop::EventLoop,
+        wayland_server::Resource,
         winit::{dpi::PhysicalSize, window::CursorIcon},
     },
     utils::{IsAlive, Scale as UtilsScale, Transform},
@@ -155,22 +156,30 @@ pub fn init_winit(
                                 }
 
                                 let mut placed_frames = Vec::new();
+                                let mut render_order: Vec<String> = Vec::new();
                                 for window in state.space.elements_for_output(output).rev() {
                                     let Some(geo) = state.space.element_geometry(window) else {
                                         continue;
                                     };
+                                    // Render canônico do Smithay: a superfície é desenhada em
+                                    // render_location = location - geometry.loc, para que o
+                                    // conteúdo VISÍVEL (descontada a sombra CSD) caia em `location`.
+                                    // Passar geo.loc direto desloca o conteúdo em geometry.loc.
+                                    // Fonte: smithay-0.7.0/src/desktop/space/mod.rs:403,464.
+                                    let render_loc = geo.loc - window.geometry().loc;
                                     elements.extend(AsRenderElements::render_elements::<
                                         WaylandSurfaceRenderElement<GlesRenderer>,
                                     >(
                                         window,
                                         renderer,
-                                        geo.loc.to_physical_precise_round(output_scale),
+                                        render_loc.to_physical_precise_round(output_scale),
                                         UtilsScale::from(output_scale),
                                         1.0,
                                     ));
 
                                     // Frame deste cliente: depois do cliente = abaixo dele.
                                     let client_surface = window.toplevel().map(|t| t.wl_surface());
+                                    render_order.push(format!("client@{:?}", client_surface.map(|s| s.id())));
                                     if let Some((frame_surface, _, _, _)) = state
                                         .associated_frames
                                         .iter()
@@ -205,6 +214,7 @@ pub fn init_winit(
                                             Ok(Some(el)) => {
                                                 elements.push(el);
                                                 placed_frames.push(frame_surface.clone());
+                                                render_order.push(format!("frame@{:?}", frame_surface.id()));
                                             }
                                             Ok(None) => {}
                                             Err(err) => {
@@ -212,6 +222,12 @@ pub fn init_winit(
                                             }
                                         }
                                     }
+                                }
+
+                                // Loga a ordem frente->trás só quando muda (map/raise/associate).
+                                if render_order != state.last_render_order {
+                                    tracing::info!(order = ?render_order, "ordem de render (frente->tras)");
+                                    state.last_render_order = render_order;
                                 }
 
                                 // Frames sem cliente mapeado: abaixo de todas as janelas.

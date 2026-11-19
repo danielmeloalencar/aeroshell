@@ -267,6 +267,7 @@ impl Dispatch<AeroFrameManagerV1, ()> for AeroState {
                 }
                 tracing::info!(
                     window_id,
+                    frame_surface = ?surface.id(),
                     "frame associado; frame_requested+configure enviados"
                 );
             }
