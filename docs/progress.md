@@ -411,13 +411,77 @@ e `buffer=Some((480, 350)) ... ok=true` após resize do cliente para 480x320 (`A
 **Ressalva de ambiente:** tudo acima em nested (winit) no VirtualBox **sem 3D**; valida
 FUNCIONAMENTO, não desempenho. Latências S5 (~11–13 ms) são indicativas, não benchmark de GPU real.
 
+### Supervisor interno + ciclo de vida dos filhos — CONCLUÍDO (2026-11-18)
+
+Dívidas (a) e (b) abaixo resolvidas. ADR 0005 registra a decisão (rustix 1.1.6; rota única).
+Escopo **shell apenas**; lock/greeter seguem para F5/F6. Nenhuma fase avançada.
+
+**O que foi feito**
+- `crates/aeroshell-compositor/src/supervisor.rs` (novo): cria o `UnixStream::pair()` dentro do
+  compositor, insere a ponta servidor com `is_shell=true` e entrega a ponta do filho via
+  `WAYLAND_SOCKET`. Privilégio pela ponta do socket, nunca por PID/env (§3.5).
+- `PDEATHSIG=SIGKILL` no `pre_exec` de cada filho (rustix), com guarda contra a corrida
+  fork/morte-do-pai (`getppid() != parent_pid` → `_exit`). CLOEXEC limpo só no filho privilegiado.
+- `--command` (cliente público) também rastreado pelo supervisor com `configure_lifecycle`
+  (PDEATHSIG sem privilégio). Shutdown gracioso: SIGTERM → poll → SIGKILL → reap.
+- CLI `--shell`/`--shell-arg`/`--shell-env`; `AERO_PRIVILEGED_FD` removido do compositor.
+- Harnesses migrados para a rota única: `frame_spike_real.py`, `frame_spike_two.py`,
+  `supervisor_real.py`, `launch_manual.py`, `run_frame_bench.py`. Novo `supervisor_lifecycle.py`.
+
+**Verificações (comando → saída → interpretação)**
+- `bash scripts/check.sh` → `OK: scripts/check.sh passou` (doctor + fmt + clippy `-D warnings` +
+  `cargo test --workspace` [17 testes de protocolo ok] + `bun test` [1 pass]). Gate verde.
+  A 1ª execução do `bun test` falhou por carga (12.2 s, vários compositores ativos); repetido
+  isolado passou (4.3 s) — flake de timing registrado, não descartado.
+- `cargo test -p aeroshell-compositor supervisor::` → `3 passed; 0 failed`
+  (fd sobrevive ao exec; env isolado `DISPLAY`/`AERO_PRIVILEGED_FD` removidos; shutdown reap).
+- `python3 tests/integration/supervisor_lifecycle.py` → `SUPERVISOR: PASSOU`. Fase 1: shell vê
+  `aero_frame_manager_v1`, cliente público não vê. Fases 2 e 3: `kill -9` no compositor mata
+  tanto o shell (`--shell`) quanto o cliente público (`--command`) via PDEATHSIG.
+  **Teste escrito primeiro e visto falhando**: antes do roteamento do `--command`, a Fase 3
+  reportou `cliente --command 20620 SOBREVIVEU ao kill -9 do compositor (orphan)`.
+- `python3 tests/integration/frame_spike_real.py` → `GATE DE TAMANHO: PASSOU (2 tamanhos + closed)`
+  (320x270 e 480x350 com `buffer == expected ok=true`; move/resize com serial válido; teclado
+  nunca no frame; closed após morte do cliente).
+- `python3 tests/integration/frame_spike_two.py` → `SANIDADE 2 JANELAS: PASSOU` (2 associates,
+  2 buffers ok=true; cada frame logo abaixo do seu cliente; raise mantém o par; teclado nos
+  clientes @16/@43, nunca nos frames @17/@45).
+- `python3 tests/integration/supervisor_real.py` → `OK: fluxo real validado` (shell real com
+  `--features probe-registry`: registry `aero_frame_manager_v1 <<< privileged` via WAYLAND_SOCKET;
+  painel layer-shell; S3 hit-test). O teste passou a compilar o shell com a feature do probe.
+- `python3 tests/bench/run_frame_bench.py` (release) → N=5: 15 amostras, `frames_ok=15`,
+  `descompasso=0 timeouts=0`, mean 26.255 ms / p95 30.651 ms; N=20: 60 amostras, `frames_ok=60`,
+  mean 21.923 ms / p95 27.480 ms. Provas: (iii) ack 150 ms → `FRAME_TIMEOUT=1`; (ii) conteúdo
+  menor → `descompasso=true em 1 commit`. **Rota única funciona no bench.**
+
+**Não foi feito / não foi testado**
+- Latência do ponteiro no bench **não estabilizou** (variação < 2% em 3 leituras nunca atingida
+  em 12 polls); `ponteiro_ms=None`, amostras registradas. "Não medido" nesta VM sem 3D.
+- Números de desempenho são **relativos à VM sem 3D** (VMware SVGA3D/LLVM), não comparáveis a
+  GPU real. A inversão N=20 (21.9 ms) < N=5 (26.3 ms) não foi explicada — não concluir nada
+  sobre desempenho a partir desta execução.
+- Lock/greeter (processos autônomos) permanecem em F5/F6; o supervisor atual cobre o shell.
+- Dívida (c) presentation-time e (d) socket órfão continuam pendentes.
+
+**Riscos / incertezas**
+- Estou supondo que o `pre_exec` async-signal-safe é suficiente; o caminho de erro não aloca
+  (`io::Error::from_raw_os_error`), mas isso não foi auditado sob sinal real concorrente.
+- O `PDEATHSIG` cobre a morte do compositor; a morte de um filho intermediário (ex.: `sh -c`
+  sem `exec`) pode orphanar netos — o harness usa `exec` onde isso importa.
+
 ### Dívidas técnicas (pré-requisitos da Fase 1)
-- **(a) Supervisor ainda é script Python de teste.** `tests/integration/launch_manual.py` e
+- **(a) Supervisor ainda é script Python de teste.** — **RESOLVIDO (2026-11-18, ADR 0005).**
+  Supervisor dentro do compositor (`supervisor.rs`); `AERO_PRIVILEGED_FD` removido; harnesses
+  migrados para `--shell`. Ver seção "Supervisor interno + ciclo de vida dos filhos" acima.
+  Histórico: `tests/integration/launch_manual.py` e
   `supervisor_real.py` criam o socketpair e lançam os processos **fora do repositório de código**.
   O desenho final é o **supervisor dentro do compositor**, sem variáveis de ambiente para
   privilégio. Enquanto isso não existir, o caminho de produção é validado, mas não é o desenho
   final.
-- **(b) Ciclo de vida dos filhos.** Se o compositor morre ou a conexão cai, os filhos devem
+- **(b) Ciclo de vida dos filhos.** — **RESOLVIDO (2026-11-18, ADR 0005).** PDEATHSIG=SIGKILL
+  explícito (rustix) para shell e cliente `--command`; prova `supervisor_lifecycle.py` Fases 2/3
+  (kill -9 no compositor mata os filhos). Deixou de ser comportamento incidental do GDK.
+  Se o compositor morre ou a conexão cai, os filhos devem
   terminar (fail-secure de sessão). Teste executado: `launch_manual.py` (compositor 160117,
   shell 160120, backdrop 160121, mais WebKitNetworkProcess/WebKitWebProcess), depois
   `kill 160117` (simula fechar a janela). Saída:

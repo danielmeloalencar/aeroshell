@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Caminho de produção REAL: supervisor -> socketpair -> compositor + shell.
+"""Caminho de produção REAL com o supervisor INTERNO (rota única).
 
-Sem harness in-process: o compositor e o shell são processos separados. A ponta
-privilegiada do socketpair vai para o compositor via AERO_PRIVILEGED_FD e a
-outra vai para o shell via WAYLAND_SOCKET. Verifica:
-  (a) log do shell enumerando aero_frame_manager_v1 no registry;
+O compositor lança o shell real (aeroshell-shell) como filho privilegiado via
+--shell: o socketpair é criado dentro do compositor, sem AERO_PRIVILEGED_FD nem
+socketpair externo. Os logs do shell saem no stdout do compositor (LOG_COMP).
+Verifica:
+  (a) log do shell enumerando aero_frame_manager_v1 no registry (<<< privileged);
   (b) painel layer-shell + S3 (input region + hit-test de clique);
-  (c) ps mostrando os fds recebidos.
+  (c) ps mostrando o shell como filho do compositor.
 """
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -21,8 +23,12 @@ SHELL = os.path.join(ROOT, "target/debug/aeroshell-shell")
 SOCK_NAME = "wayland-aero-supervisor-real"
 INPUT_SOCK = f"/tmp/aero-supervisor-input-{os.getpid()}.sock"
 LOG_COMP = f"/tmp/aero-supervisor-comp-{os.getpid()}.log"
-LOG_SHELL = f"/tmp/aero-supervisor-shell-{os.getpid()}.log"
-LOG_BACKDROP = f"/tmp/aero-supervisor-backdrop-{os.getpid()}.log"
+
+# O probe do registry só existe com a feature `probe-registry`: garantir o binário.
+subprocess.run(
+    ["cargo", "build", "-p", "aeroshell-shell", "--features", "probe-registry"],
+    cwd=ROOT, check=True,
+)
 
 for path in (INPUT_SOCK,):
     try:
@@ -30,31 +36,34 @@ for path in (INPUT_SOCK,):
     except FileNotFoundError:
         pass
 
-# Um único socketpair: duas pontas, uma para cada processo.
-a, b = socket.socketpair()
-comp_fd, shell_fd = a.fileno(), b.fileno()
+ansi = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def comp_log():
+    return ansi.sub("", open(LOG_COMP, errors="ignore").read())
+
 
 host_display = os.environ.get("WAYLAND_DISPLAY", "wayland-0")
 base = os.environ.copy()
-base.pop("WAYLAND_SOCKET", None)
-base.pop("AERO_PRIVILEGED_FD", None)
+for key in ("WAYLAND_SOCKET", "AERO_PRIVILEGED_FD"):
+    base.pop(key, None)
 
 comp_env = base.copy()
 comp_env.update(
-    AERO_PRIVILEGED_FD=str(comp_fd),
     WAYLAND_DISPLAY=host_display,
     RUST_LOG="info",
     AERO_TEST_INPUT_SOCK=INPUT_SOCK,
 )
 comp = subprocess.Popen(
-    [COMP, "--backend", "winit", "--socket", SOCK_NAME],
+    [COMP, "--backend", "winit", "--socket", SOCK_NAME,
+     "--shell", SHELL,
+     "--shell-env", "LD_PRELOAD=libgtk4-layer-shell.so.0",
+     "--shell-env", "AERO_SHELL_EXIT_AFTER=9",
+     "--shell-env", "RUST_LOG=info"],
     env=comp_env,
-    pass_fds=(comp_fd,),
     stdout=open(LOG_COMP, "w"),
     stderr=subprocess.STDOUT,
 )
-# O compositor transforma o fd em OwnedFd; a ponta Python pode fechar.
-a.close()
 
 sock_path = f"/run/user/1000/{SOCK_NAME}"
 for _ in range(80):
@@ -63,71 +72,46 @@ for _ in range(80):
     time.sleep(0.1)
 if not os.path.exists(sock_path):
     print("FALHA: compositor não criou o socket público")
-    print(open(LOG_COMP).read())
+    print(comp_log())
     comp.terminate()
     sys.exit(1)
 
-shell_env = base.copy()
-shell_env.update(
-    WAYLAND_SOCKET=str(shell_fd),
-    WAYLAND_DISPLAY=SOCK_NAME,
-    GDK_BACKEND="wayland",
-    LD_PRELOAD="libgtk4-layer-shell.so.0",
-    AERO_SHELL_EXIT_AFTER="9",
-    RUST_LOG="info",
-)
-shell = subprocess.Popen(
-    [SHELL],
-    env=shell_env,
-    pass_fds=(shell_fd,),
-    stdout=open(LOG_SHELL, "w"),
-    stderr=subprocess.STDOUT,
-)
-b.close()
-
-# --- (c) ps: confirmar fds recebidos -------------------------------------
+# --- (c) ps: shell é filho do compositor ---------------------------------
 ps = subprocess.run(
-    ["ps", "-o", "pid,ppid,args", "-p", str(comp.pid), "-p", str(shell.pid)],
-    capture_output=True,
-    text=True,
+    ["ps", "-o", "pid,ppid,args", "-p", str(comp.pid), "--ppid", str(comp.pid)],
+    capture_output=True, text=True,
 ).stdout
-print("===== (c) ps: processos do fluxo real =====")
+print("===== (c) ps: compositor + shell filho =====")
 print(ps.strip())
 
-# Esperar o painel e o registry probe.
+# Esperar o painel e o registry probe (logs do shell no stdout do compositor).
 for _ in range(120):
-    shell_log = open(LOG_SHELL, errors="ignore").read()
-    if "painel layer-shell apresentado" in shell_log and "registry do shell" in shell_log:
+    log = comp_log()
+    if "painel layer-shell apresentado" in log and "registry do shell" in log:
         break
     time.sleep(0.1)
-shell_log = open(LOG_SHELL, errors="ignore").read()
-comp_log = open(LOG_COMP, errors="ignore").read()
+log = comp_log()
 
 print("===== (a) log do shell: registry via WAYLAND_SOCKET =====")
-for line in shell_log.splitlines():
+for line in log.splitlines():
     if "registry do shell" in line or "conectou via WAYLAND_SOCKET" in line:
         print(line)
 
 print("===== (b) painel + S3 =====")
-for line in shell_log.splitlines():
+for line in log.splitlines():
     if any(k in line for k in ("painel layer-shell", "WebView com fundo", "input region aplicada")):
         print(line)
-for line in comp_log.splitlines():
+for line in log.splitlines():
     if any(k in line for k in ("nova layer surface", "Exclusive(48)", "TESTE ponteiro")):
         print(line)
 
 # --- S3: clique dentro/fora da região interativa -------------------------
 for _ in range(60):
-    if "input region aplicada" in open(LOG_SHELL, errors="ignore").read():
+    if "input region aplicada" in comp_log():
         break
     time.sleep(0.1)
-shell_log = open(LOG_SHELL, errors="ignore").read()
-comp_log = open(LOG_COMP, errors="ignore").read()
-import re
-ansi = re.compile(r"\x1b\[[0-9;]*m")
-shell_plain = ansi.sub("", shell_log)
-comp_plain = ansi.sub("", comp_log)
-m = re.findall(r"rects\s*=\s*\[?\(?(\d+),\s*(\d+),\s*(\d+),\s*(\d+)\)?", shell_plain)
+log = comp_log()
+m = re.findall(r"rects\s*=\s*\[?\(?(\d+),\s*(\d+),\s*(\d+),\s*(\d+)\)?", log)
 if m:
     rx, ry, rw, rh = map(int, m[-1])
     gx, gy = 0, 602
@@ -142,20 +126,19 @@ if m:
         time.sleep(0.3)
     s.close()
     time.sleep(0.5)
-    comp_log = open(LOG_COMP, errors="ignore").read()
     print("===== (b) S3: hit-test do clique =====")
-    for line in comp_log.splitlines():
+    for line in comp_log().splitlines():
         if "TESTE ponteiro" in line:
             print(line)
 
+log = comp_log()
 ok = True
-ok &= "aero_frame_manager_v1" in shell_log and "privileged" in shell_log
-ok &= "painel layer-shell apresentado" in shell_log
-ok &= "nova layer surface" in comp_log
+ok &= "aero_frame_manager_v1" in log and "privileged" in log
+ok &= "painel layer-shell apresentado" in log
+ok &= "nova layer surface" in log
 print(("OK: fluxo real validado" if ok else "FALHA: verificar logs acima"))
-print(f"logs: {LOG_COMP}  {LOG_SHELL}")
+print(f"logs: {LOG_COMP}")
 
-shell.wait(timeout=15)
 comp.terminate()
 try:
     comp.wait(timeout=5)

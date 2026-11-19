@@ -8,16 +8,9 @@ mod frame_metrics;
 mod input;
 mod protocols;
 mod state;
+mod supervisor;
 
-use std::{
-    error::Error,
-    io::BufRead,
-    os::{
-        fd::{FromRawFd, OwnedFd},
-        unix::net::{UnixListener, UnixStream},
-    },
-    sync::Arc,
-};
+use std::{error::Error, io::BufRead, os::unix::net::UnixListener};
 
 use calloop::channel;
 
@@ -45,19 +38,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         tracing_subscriber::fmt().compact().init();
     }
 
-    // Converter a ponta privilegiada ANTES de qualquer biblioteca cliente Wayland:
-    // winit/wayland-client consomem WAYLAND_SOCKET e tomariam posse do mesmo fd.
-    let privileged_fd: Option<OwnedFd> = std::env::var_os("AERO_PRIVILEGED_FD")
-        .and_then(|value| value.to_str().and_then(|v| v.parse::<i32>().ok()))
-        .map(|fd| {
-            // SAFETY: `fd` é a ponta do socketpair herdada do supervisor, passa
-            // exatamente uma vez para `OwnedFd`, que passa a ser seu único dono.
-            unsafe { OwnedFd::from_raw_fd(fd) }
-        });
-    if std::env::var_os("AERO_PRIVILEGED_FD").is_some() {
-        std::env::remove_var("AERO_PRIVILEGED_FD");
-    }
-
     let opts = cli::parse();
     let selected_backend = backend::current(&opts);
     tracing::info!(
@@ -74,25 +54,22 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // O env do host NÃO é alterado: só o processo filho recebe o socket do AeroShell.
     let socket_name = state.socket_name.clone();
+    let mut supervisor = supervisor::Supervisor::new();
     if let Some(command) = &opts.command {
         // `sh -c` permite `--command "zenity --info --text=..."` com argumentos.
-        let status = std::process::Command::new("sh")
-            .arg("-c")
+        let mut cmd = std::process::Command::new("sh");
+        cmd.arg("-c")
             .arg(command)
             .env("WAYLAND_DISPLAY", &socket_name)
             // A ponta privilegiada do socketpair NUNCA é herdada por clientes comuns.
             .env_remove("WAYLAND_SOCKET")
             // Sem remover DISPLAY, GTK3 abre no X11 do host em vez do nosso compositor.
             .env_remove("DISPLAY")
-            .env("GDK_BACKEND", "wayland")
-            .spawn();
-        match status {
-            Ok(mut child) => {
-                tracing::info!(?command, pid = child.id(), "cliente inicial iniciado");
-                std::thread::spawn(move || {
-                    let _ = child.wait();
-                });
-            }
+            .env("GDK_BACKEND", "wayland");
+        // Cliente público: ciclo de vida (PDEATHSIG) sem privilégio de shell.
+        supervisor::configure_lifecycle(&mut cmd);
+        match supervisor.spawn(&mut cmd) {
+            Ok(pid) => tracing::info!(?command, pid, "cliente inicial iniciado"),
             Err(err) => tracing::warn!(?command, %err, "falha ao iniciar cliente"),
         }
     }
@@ -113,21 +90,20 @@ fn main() -> Result<(), Box<dyn Error>> {
         data.state.test_window_count = count;
     }
 
-    // O supervisor entrega uma ponta do socketpair ao shell via WAYLAND_SOCKET.
-    // Essa conexão é marcada como privilegiada; o socket público nunca é.
-    if let Some(fd) = privileged_fd {
-        let stream = UnixStream::from(fd);
-        data.display_handle.insert_client(
-            stream,
-            Arc::new(ClientState {
-                is_shell: true,
-                ..Default::default()
-            }),
-        )?;
-        tracing::info!("shell privilegiado inserido via AERO_PRIVILEGED_FD");
-    }
-
+    // O supervisor interno cria o socketpair privilegiado e lança o shell.
+    // A ponta do compositor é inserida como is_shell=true; o socket público
+    // nunca é privilegiado. Nenhum env decide privilégio (AGENTS.md §3.5).
     backend::init(&opts, &mut event_loop, &mut data)?;
+
+    if let Some(shell_path) = &opts.shell {
+        supervisor.spawn_shell(
+            &mut data.display_handle,
+            shell_path,
+            &opts.shell_args,
+            &opts.shell_env,
+            &data.state.socket_name,
+        )?;
+    }
 
     // Injeção de ponteiro sintético (S3): `motion x y`, `button press|release`.
     if let Some(path) = std::env::var_os("AERO_TEST_INPUT_SOCK") {
@@ -175,6 +151,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         data.state.check_frame_timeouts();
         let _ = data;
     })?;
+    // Shutdown gracioso dos filhos do supervisor. Em morte abrupta (SIGKILL/
+    // crash) o PDEATHSIG configurado no spawn garante o término pelo kernel.
+    supervisor.shutdown();
     #[cfg(feature = "bench")]
     data.state.log_frame_summary();
 
@@ -189,7 +168,10 @@ mod protocol_tests {
     use crate::cli::Options;
     use std::{
         os::unix::net::UnixStream,
-        sync::atomic::{AtomicUsize, Ordering},
+        sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        },
         time::Duration,
     };
     use wayland_client::{

@@ -12,6 +12,7 @@ bench = []
 [dependencies]
 smithay.workspace = true
 calloop.workspace = true
+rustix.workspace = true
 wayland-scanner.workspace = true
 wayland-server.workspace = true
 wayland-backend.workspace = true

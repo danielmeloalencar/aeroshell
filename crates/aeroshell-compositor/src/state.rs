@@ -353,5 +353,9 @@ pub struct ClientState {
 
 impl ClientData for ClientState {
     fn initialized(&self, _client_id: ClientId) {}
-    fn disconnected(&self, _client_id: ClientId, _reason: DisconnectReason) {}
+    fn disconnected(&self, _client_id: ClientId, reason: DisconnectReason) {
+        if self.is_shell {
+            tracing::warn!(?reason, "conexão privilegiada do shell caiu");
+        }
+    }
 }

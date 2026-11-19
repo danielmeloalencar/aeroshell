@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Benchmark do protótipo do frame: release, 3 repeticoes, N=5 e N=20.
 
-Fluxo real de producao: compositor headless com AERO_PRIVILEGED_FD e cliente
-privilegiado com WAYLAND_SOCKET (socketpair). Nenhum harness in-process.
+Rota única: o compositor (winit) lança o cliente de bench como shell privilegiado
+via --shell (supervisor interno). O socketpair é criado dentro do compositor; os
+logs do cliente saem no stdout do compositor (comp_log). Nenhum harness in-process.
 VM sem 3D: valores relativos, nao comparaveis com GPU real.
 """
 import os
@@ -33,11 +34,62 @@ for key in ("WAYLAND_SOCKET", "AERO_PRIVILEGED_FD"):
     base.pop(key, None)
 
 
+def read(path):
+    return re.sub(r"\x1b\[[0-9;]*m", "", open(path, errors="ignore").read())
+
+
+def wait_log(path, substr, timeout_s):
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        if substr in read(path):
+            return True
+        time.sleep(0.1)
+    return False
+
+
+def wait_socket(sock_name, timeout_s=10):
+    path = f"/run/user/1000/{sock_name}"
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        if os.path.exists(path):
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def start_comp(sock_name, comp_log, shell_env, extra_env=None, size=None):
+    """Sobe o compositor com o cliente de bench como shell privilegiado."""
+    cenv = base.copy()
+    cenv.update(
+        WAYLAND_DISPLAY=base.get("WAYLAND_DISPLAY", "wayland-0"),
+        AERO_FRAME_BENCH_WINDOWS="1",
+        RUST_LOG="warn",
+    )
+    if extra_env:
+        cenv.update(extra_env)
+    args = [COMP, "--backend", "winit", "--socket", sock_name]
+    if size:
+        args += ["--size", size]
+    args += ["--shell", CLIENT]
+    for kv in shell_env:
+        args += ["--shell-env", kv]
+    return subprocess.Popen(
+        args, env=cenv, stdout=open(comp_log, "w"), stderr=subprocess.STDOUT,
+    )
+
+
+def stop_comp(comp):
+    comp.terminate()
+    try:
+        comp.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        comp.kill()
+
+
 def run_once(n, rep):
     tag = f"n{n}-r{rep}-{os.getpid()}"
     sock_name = f"wayland-aero-bench-{tag}"
     comp_log = f"/tmp/aero-bench-comp-{tag}.log"
-    client_log = f"/tmp/aero-bench-client-{tag}.log"
     input_sock = f"/tmp/aero-bench-input-{tag}.sock"
     for p in (input_sock,):
         try:
@@ -45,51 +97,20 @@ def run_once(n, rep):
         except FileNotFoundError:
             pass
 
-    a, b = socket.socketpair()
-    cfd, sfd = a.fileno(), b.fileno()
-    cenv = base.copy()
-    cenv.update(
-        AERO_PRIVILEGED_FD=str(cfd),
-        AERO_FRAME_STEPS=str(n),
-        AERO_FRAME_BENCH_WINDOWS="1",
-        AERO_TEST_INPUT_SOCK=input_sock,
-        RUST_LOG="warn",
+    comp = start_comp(
+        sock_name, comp_log,
+        shell_env=[
+            "AERO_FRAME_BENCH=1",
+            "AERO_FRAME_WINDOW_ID=0",
+            "AERO_WAIT_SOCKET=1",
+            "AERO_FRAME_ACK_DELAY_MS=0",
+        ],
+        extra_env={"AERO_FRAME_STEPS": str(n), "AERO_TEST_INPUT_SOCK": input_sock},
+        size="1280x800",
     )
-    comp = subprocess.Popen(
-        [COMP, "--backend", "winit", "--socket", sock_name, "--size", "1280x800"],
-        env=cenv,
-        pass_fds=(cfd,),
-        stdout=open(comp_log, "w"),
-        stderr=subprocess.STDOUT,
-    )
-    a.close()
-    sock_path = f"/run/user/1000/{sock_name}"
-    for _ in range(100):
-        if os.path.exists(sock_path):
-            break
-        time.sleep(0.05)
-
-    senv = base.copy()
-    senv.update(
-        WAYLAND_SOCKET=str(sfd),
-        WAYLAND_DISPLAY=sock_name,
-        AERO_FRAME_BENCH="1",
-        AERO_FRAME_WINDOW_ID="0",
-        AERO_WAIT_SOCKET="1",
-        AERO_FRAME_ACK_DELAY_MS="0",
-    )
-    cli = subprocess.Popen(
-        [CLIENT],
-        env=senv,
-        pass_fds=(sfd,),
-        stdout=open(client_log, "w"),
-        stderr=subprocess.STDOUT,
-    )
-    b.close()
-    try:
-        cli.wait(timeout=30)
-    except subprocess.TimeoutExpired:
-        cli.kill()
+    wait_socket(sock_name)
+    # O cliente (filho do supervisor) imprime o resumo ao terminar os N passos.
+    wait_log(comp_log, "saw_manager=", 30)
 
     # (iv) latencia do ponteiro: polling ate 3 leituras consecutivas com
     # variacao < 2%. Todas as leituras (inclusive as instaveis) sao registradas.
@@ -103,8 +124,7 @@ def run_once(n, rep):
             s.sendall(b"motion 10 10\n")
             s.close()
             time.sleep(0.12)
-            clog = open(comp_log, errors="ignore").read()
-            m = re.findall(r"POINTER_MOTION serial=\d+ t=(\d+)", clog)
+            m = re.findall(r"POINTER_MOTION serial=\d+ t=(\d+)", read(comp_log))
             if not m:
                 continue
             pointer_all.append((int(m[-1]) - sent) / 1e6)
@@ -118,13 +138,9 @@ def run_once(n, rep):
     pointer_ms = statistics.median(stable) if stable else None
 
     time.sleep(0.2)
-    comp.terminate()
-    try:
-        comp.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        comp.kill()
+    stop_comp(comp)
 
-    log = open(comp_log, errors="ignore").read()
+    log = read(comp_log)
     commits = [float(x) for x in re.findall(r"configure_to_commit_ms=([\d.]+)", log)]
     mismatch = len(re.findall(r"descompasso=true", log))
     timeouts = len(re.findall(r"FRAME_TIMEOUT", log))
@@ -145,47 +161,20 @@ def run_timeout_probe():
     tag = f"timeout-{os.getpid()}"
     sock_name = f"wayland-aero-bench-{tag}"
     comp_log = f"/tmp/aero-bench-comp-{tag}.log"
-    a, b = socket.socketpair()
-    cfd, sfd = a.fileno(), b.fileno()
-    cenv = base.copy()
-    cenv.update(
-        AERO_PRIVILEGED_FD=str(cfd),
-        AERO_FRAME_STEPS="1",
-        AERO_FRAME_BENCH_WINDOWS="1",
-        RUST_LOG="warn",
+    comp = start_comp(
+        sock_name, comp_log,
+        shell_env=[
+            "AERO_FRAME_BENCH=1",
+            "AERO_FRAME_WINDOW_ID=0",
+            "AERO_FRAME_ACK_DELAY_MS=150",
+        ],
+        extra_env={"AERO_FRAME_STEPS": "1"},
     )
-    comp = subprocess.Popen(
-        [COMP, "--backend", "winit", "--socket", sock_name],
-        env=cenv,
-        pass_fds=(cfd,),
-        stdout=open(comp_log, "w"),
-        stderr=subprocess.STDOUT,
-    )
-    a.close()
-    for _ in range(100):
-        if os.path.exists(f"/run/user/1000/{sock_name}"):
-            break
-        time.sleep(0.05)
-    senv = base.copy()
-    senv.update(
-        WAYLAND_SOCKET=str(sfd),
-        WAYLAND_DISPLAY=sock_name,
-        AERO_FRAME_BENCH="1",
-        AERO_FRAME_WINDOW_ID="0",
-        AERO_FRAME_ACK_DELAY_MS="150",
-    )
-    cli = subprocess.Popen([CLIENT], env=senv, pass_fds=(sfd,),
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    b.close()
-    cli.wait(timeout=30)
+    wait_socket(sock_name)
+    wait_log(comp_log, "saw_manager=", 30)
     time.sleep(0.4)
-    comp.terminate()
-    try:
-        comp.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        comp.kill()
-    log = open(comp_log, errors="ignore").read()
-    return len(re.findall(r"FRAME_TIMEOUT", log))
+    stop_comp(comp)
+    return len(re.findall(r"FRAME_TIMEOUT", read(comp_log)))
 
 
 def run_mismatch_probe():
@@ -193,47 +182,20 @@ def run_mismatch_probe():
     tag = f"mismatch-{os.getpid()}"
     sock_name = f"wayland-aero-bench-{tag}"
     comp_log = f"/tmp/aero-bench-comp-{tag}.log"
-    a, b = socket.socketpair()
-    cfd, sfd = a.fileno(), b.fileno()
-    cenv = base.copy()
-    cenv.update(
-        AERO_PRIVILEGED_FD=str(cfd),
-        AERO_FRAME_STEPS="1",
-        AERO_FRAME_BENCH_WINDOWS="1",
-        RUST_LOG="warn",
+    comp = start_comp(
+        sock_name, comp_log,
+        shell_env=[
+            "AERO_FRAME_BENCH=1",
+            "AERO_FRAME_WINDOW_ID=0",
+            "AERO_FRAME_CONTENT_MISMATCH=1",
+        ],
+        extra_env={"AERO_FRAME_STEPS": "1"},
     )
-    comp = subprocess.Popen(
-        [COMP, "--backend", "winit", "--socket", sock_name],
-        env=cenv,
-        pass_fds=(cfd,),
-        stdout=open(comp_log, "w"),
-        stderr=subprocess.STDOUT,
-    )
-    a.close()
-    for _ in range(100):
-        if os.path.exists(f"/run/user/1000/{sock_name}"):
-            break
-        time.sleep(0.05)
-    senv = base.copy()
-    senv.update(
-        WAYLAND_SOCKET=str(sfd),
-        WAYLAND_DISPLAY=sock_name,
-        AERO_FRAME_BENCH="1",
-        AERO_FRAME_WINDOW_ID="0",
-        AERO_FRAME_CONTENT_MISMATCH="1",
-    )
-    cli = subprocess.Popen([CLIENT], env=senv, pass_fds=(sfd,),
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    b.close()
-    cli.wait(timeout=30)
+    wait_socket(sock_name)
+    wait_log(comp_log, "saw_manager=", 30)
     time.sleep(0.3)
-    comp.terminate()
-    try:
-        comp.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        comp.kill()
-    log = open(comp_log, errors="ignore").read()
-    return len(re.findall(r"descompasso=true", log))
+    stop_comp(comp)
+    return len(re.findall(r"descompasso=true", read(comp_log)))
 
 
 print("=== benchmark frame (release, VM sem 3D, valores relativos) ===")

@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Sanidade B.3 de 2 janelas empilhadas: cada frame ABAIXO do seu cliente.
+"""Sanidade B.3 de 2 janelas empilhadas com o supervisor INTERNO (rota única).
 
 Dois clientes azuis (mesmo processo, AERO_SPIKE_BLUE_N=2) -> window_id 0 e 1.
-O spike associa um frame por janela (AERO_SPIKE_FRAME2=1). Prova:
+O compositor lança o spike como shell privilegiado (--shell) com
+AERO_SPIKE_FRAME2=1: um frame por janela. Os logs do spike saem no stdout do
+compositor (LOG_COMP). Prova:
   (a) dois associates + dois buffers de frame ok=true (conteúdo + insets);
   (b) ordem de render frente->trás: cada frame LOGO APÓS o seu cliente;
   (c) raise do cliente 1 mantém o frame 1 junto, abaixo do cliente 1;
@@ -21,7 +23,6 @@ SPIKE = os.path.join(ROOT, "target/debug/examples/frame_spike")
 
 SOCK = "wayland-aero-b3two"
 LOG_COMP = "/tmp/b3-two-comp.log"
-LOG_SPIKE = "/tmp/b3-two-spike.log"
 INPUT_SOCK = "/tmp/b3-two-input.sock"
 
 for orphan in (f"/run/user/1000/{SOCK}", INPUT_SOCK):
@@ -35,23 +36,22 @@ base = os.environ.copy()
 for key in ("WAYLAND_SOCKET", "AERO_PRIVILEGED_FD"):
     base.pop(key, None)
 
-a, b = socket.socketpair()
-cfd, sfd = a.fileno(), b.fileno()
-
 cenv = base.copy()
 cenv.update(
-    AERO_PRIVILEGED_FD=str(cfd),
     WAYLAND_DISPLAY=base.get("WAYLAND_DISPLAY", "wayland-0"),
     RUST_LOG="debug",
     AERO_TEST_INPUT_SOCK=INPUT_SOCK,
 )
 comp = subprocess.Popen(
     [COMP, "--backend", "winit", "--socket", SOCK,
-     "--command", f"AERO_SPIKE_BLUE_CLIENT=1 AERO_SPIKE_BLUE_N=2 {SPIKE}"],
-    env=cenv, pass_fds=(cfd,),
+     "--command", f"AERO_SPIKE_BLUE_CLIENT=1 AERO_SPIKE_BLUE_N=2 {SPIKE}",
+     "--shell", SPIKE,
+     "--shell-env", "LD_PRELOAD=libgtk4-layer-shell.so.0",
+     "--shell-env", "AERO_SPIKE_STAY=1",
+     "--shell-env", "AERO_SPIKE_FRAME2=1"],
+    env=cenv,
     stdout=open(LOG_COMP, "w"), stderr=subprocess.STDOUT,
 )
-a.close()
 for _ in range(100):
     if os.path.exists(f"/run/user/1000/{SOCK}"):
         break
@@ -62,22 +62,14 @@ def comp_log():
     return re.sub(r"\x1b\[[0-9;]*m", "", open(LOG_COMP, errors="ignore").read())
 
 
-def spike_log():
-    return open(LOG_SPIKE, errors="ignore").read()
-
-
 def fail(msg):
     print(f"FALHA: {msg}")
     comp.terminate()
     try:
-        spike.wait(timeout=3)
-    except Exception:
-        spike.kill()
-    try:
         comp.wait(timeout=5)
     except subprocess.TimeoutExpired:
         comp.kill()
-    print(f"logs: {LOG_COMP} {LOG_SPIKE}")
+    print(f"logs: {LOG_COMP}")
     sys.exit(1)
 
 
@@ -128,26 +120,13 @@ def wait_order_change(prev, timeout=15.0):
     return last_render_order()
 
 
-# Esperar os DOIS toplevels (window_id 0 e 1) e seus buffers.
+# Esperar os DOIS toplevels (window_id 0 e 1) e seus buffers. O spike é lançado
+# pelo supervisor no startup; seu loop de inicio atrasa o associate o bastante
+# para os clientes azuis mapearem primeiro.
 if not wait_log("novo toplevel xdg-surface mapeado", 30, count=2):
     fail("os dois clientes azuis não mapearam")
 time.sleep(2)
-print("dois clientes azuis com buffer; lançando spike com 2 frames")
-
-senv = base.copy()
-senv.update(
-    WAYLAND_SOCKET=str(sfd),
-    WAYLAND_DISPLAY=SOCK,
-    GDK_BACKEND="wayland",
-    LD_PRELOAD="libgtk4-layer-shell.so.0",
-    AERO_SPIKE_STAY="1",
-    AERO_SPIKE_FRAME2="1",
-)
-spike = subprocess.Popen(
-    [SPIKE], env=senv, pass_fds=(sfd,),
-    stdout=open(LOG_SPIKE, "w"), stderr=subprocess.STDOUT,
-)
-b.close()
+print("dois clientes azuis com buffer; spike com 2 frames via supervisor")
 
 # (a) dois associates + dois buffers de frame ok=true.
 if not wait_log("frame associado; frame_requested+configure enviados", 30, count=2):
@@ -215,11 +194,10 @@ if frame0 in focus_true or frame1 in focus_true:
     fail(f"teclado focou um frame: focus_true={focus_true}")
 print(f"OK (d): teclado nunca nos frames (@{frame0},@{frame1}); focus_true={focus_true}")
 
-spike.kill()
 comp.terminate()
 try:
     comp.wait(timeout=5)
 except subprocess.TimeoutExpired:
     comp.kill()
-print(f"logs: {LOG_COMP} {LOG_SPIKE}")
+print(f"logs: {LOG_COMP}")
 print("SANIDADE 2 JANELAS: PASSOU (frame de cada uma abaixo do seu cliente)")

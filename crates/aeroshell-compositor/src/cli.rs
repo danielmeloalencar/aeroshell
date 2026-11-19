@@ -35,6 +35,12 @@ pub struct Options {
     pub scale: f64,
     pub mod_key: ModKey,
     pub command: Option<String>,
+    /// Caminho do shell privilegiado lançado pelo supervisor interno.
+    pub shell: Option<String>,
+    /// Argumentos repassados ao shell privilegiado (repetível).
+    pub shell_args: Vec<String>,
+    /// Env exclusivo do filho privilegiado, `CHAVE=VALOR` (repetível).
+    pub shell_env: Vec<String>,
 }
 
 impl Default for Options {
@@ -47,6 +53,9 @@ impl Default for Options {
             scale: 1.0,
             mod_key: ModKey::Alt,
             command: None,
+            shell: None,
+            shell_args: Vec::new(),
+            shell_env: Vec::new(),
         }
     }
 }
@@ -122,6 +131,24 @@ pub fn parse() -> Options {
                         .unwrap_or_else(|| die("--command requer um valor")),
                 );
             }
+            "--shell" => {
+                opts.shell = Some(
+                    args.next()
+                        .unwrap_or_else(|| die("--shell requer um valor")),
+                );
+            }
+            "--shell-arg" => {
+                opts.shell_args.push(
+                    args.next()
+                        .unwrap_or_else(|| die("--shell-arg requer um valor")),
+                );
+            }
+            "--shell-env" => {
+                opts.shell_env.push(
+                    args.next()
+                        .unwrap_or_else(|| die("--shell-env requer CHAVE=VALOR")),
+                );
+            }
             "--help" | "-h" => {
                 println!("{}", usage());
                 std::process::exit(0);
@@ -144,6 +171,9 @@ Uso: aeroshell-compositor [OPÇÕES]
   --scale F                       Escala fracionária (padrão: 1.0)
   --mod super|alt                 Tecla Mod (padrão: alt em nested)
   --command CMD                   Cliente inicial (env filho isolado)
+  --shell CAMINHO                 Shell privilegiado lançado pelo supervisor
+  --shell-arg ARG                 Argumento do shell (repetível)
+  --shell-env CHAVE=VALOR         Env exclusivo do shell (repetível)
 "
 }
 
@@ -182,6 +212,7 @@ mod tests {
             "--outputs",
             "--scale",
             "--mod",
+            "--shell",
         ] {
             assert!(usage.contains(flag), "falta documentar {flag}");
         }
