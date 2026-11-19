@@ -136,6 +136,22 @@ pub fn configure_lifecycle(cmd: &mut Command) {
     }
 }
 
+/// Lança um cliente público (`sh -c <command>`) no socket do AeroShell, sem
+/// privilégio. PDEATHSIG garante a morte do filho junto com o compositor.
+pub fn spawn_public_client(socket_name: &std::ffi::OsStr, command: &str) -> io::Result<u32> {
+    let mut cmd = Command::new("sh");
+    cmd.arg("-c")
+        .arg(command)
+        .env("WAYLAND_DISPLAY", socket_name)
+        // A ponta privilegiada do socketpair NUNCA é herdada por clientes comuns.
+        .env_remove("WAYLAND_SOCKET")
+        // Sem remover DISPLAY, GTK3 abre no X11 do host em vez do nosso compositor.
+        .env_remove("DISPLAY")
+        .env("GDK_BACKEND", "wayland");
+    configure_lifecycle(&mut cmd);
+    cmd.spawn().map(|child| child.id())
+}
+
 /// Guarda async-signal-safe contra a corrida fork/PDEATHSIG: se o pai já morreu
 /// antes de armar o sinal, aborta o filho (Err faz o std dar `_exit`); senão arma
 /// SIGKILL para o kernel matar o filho quando o compositor morrer.

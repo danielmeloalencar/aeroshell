@@ -13,6 +13,7 @@ use crate::{
     state::{AeroState, ClientState},
 };
 use smithay::wayland::compositor::{add_destruction_hook, get_role};
+use smithay::wayland::shell::wlr_layer::LAYER_SURFACE_ROLE;
 use wayland_server::{Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource};
 
 /// Resultado puro da validação de um `associate` (testável sem objetos Wayland).
@@ -37,6 +38,17 @@ pub fn check_frame(existing: &[u32], window_id: u32, window_count: usize) -> Fra
 
 pub fn serial_valid(expected: Option<u32>, got: u32) -> bool {
     expected == Some(got)
+}
+
+/// `associate` apenas MARCA a superfície (ADR 0004). Aceita superfície sem role
+/// ou já com role `layer_surface` (o frame é uma layer surface do shell). Rejeita
+/// qualquer outro role (xdg_toplevel, xdg_popup, cursor_image, …): a superfície
+/// de um cliente comum já tem dono e não pode virar frame.
+pub fn role_allowed(role: Option<&'static str>) -> bool {
+    match role {
+        None => true,
+        Some(r) => r == LAYER_SURFACE_ROLE,
+    }
 }
 
 impl AeroState {
@@ -94,6 +106,45 @@ impl AeroState {
         let geo = self.space.element_geometry(window)?;
         (geo.size.w > 0 && geo.size.h > 0).then_some((geo.size.w, geo.size.h))
     }
+
+    /// Liga um frame associado ANTES de o cliente mapear (cliente inicial adiado)
+    /// à superfície cliente quando ela finalmente mapeia. Sem isto o entry fica
+    /// com `client_surface=None` e o frame nunca segue o conteúdo nem recebe
+    /// `closed`. O primeiro configure sai no commit do cliente (compositor.rs).
+    pub fn bind_pending_frame_client(
+        &mut self,
+        window_id: u32,
+        client: smithay::reexports::wayland_server::protocol::wl_surface::WlSurface,
+    ) {
+        let Some(entry) = self
+            .associated_frames
+            .iter_mut()
+            .find(|(_, _, id, cs)| *id == window_id && cs.is_none())
+        else {
+            return;
+        };
+        entry.3 = Some(client.clone());
+        add_destruction_hook::<AeroState, _>(&client, |state, dead| {
+            if let Some(pos) = state
+                .associated_frames
+                .iter()
+                .position(|(_, _, _, cs)| cs.as_ref() == Some(dead))
+            {
+                let (frame_surface, frame, window_id, _) = state.associated_frames.remove(pos);
+                frame.closed();
+                state.frame_geometries.remove(&frame_surface);
+                state.frame_configured_content.remove(&frame_surface);
+                state
+                    .frame_layer_surfaces
+                    .retain(|l| l.wl_surface() != &frame_surface);
+                tracing::info!(
+                    window_id,
+                    "janela cliente destruída: closed enviado ao frame"
+                );
+            }
+        });
+        tracing::info!(window_id, "frame pendente ligado ao cliente mapeado");
+    }
 }
 
 impl GlobalDispatch<AeroFrameManagerV1, ()> for AeroState {
@@ -145,12 +196,37 @@ impl Dispatch<AeroFrameManagerV1, ()> for AeroState {
                     );
                     return;
                 }
-                if get_role(&surface).is_some() {
-                    manager.post_error(ManagerError::Role, "associate exige superfície sem role");
+                if !role_allowed(get_role(&surface)) {
+                    manager.post_error(
+                        ManagerError::Role,
+                        "associate aceita superfície sem role ou layer_surface",
+                    );
                     return;
                 }
                 let existing: Vec<u32> = state.frames.iter().map(|(_, id)| *id).collect();
+                // Cold-start temporário: o primeiro associate do frame_host libera o
+                // cliente inicial adiado. Ele ainda não mapeou, então este associate
+                // NÃO é "janela fechada": tratamos como Ok e o configure sai quando o
+                // cliente mapear (reconfigure no commit).
+                let pending_cmd = state.pending_initial_command.take();
+                if let Some(command) = &pending_cmd {
+                    match crate::supervisor::spawn_public_client(&state.socket_name, command) {
+                        Ok(pid) => tracing::info!(
+                            ?command,
+                            pid,
+                            "cliente inicial iniciado (após associate)"
+                        ),
+                        Err(err) => {
+                            tracing::warn!(?command, %err, "falha ao iniciar cliente adiado")
+                        }
+                    }
+                }
                 let window_count = state.space.elements().count() + state.test_window_count;
+                let window_count = if pending_cmd.is_some() {
+                    window_count.max(window_id as usize + 1)
+                } else {
+                    window_count
+                };
                 match check_frame(&existing, window_id, window_count) {
                     FrameCheck::AlreadyConstructed => {
                         manager.post_error(
@@ -224,14 +300,15 @@ impl Dispatch<AeroFrameManagerV1, ()> for AeroState {
                         }
                     });
                 }
-                // Em produção: exatamente um configure, com o conteúdo REAL do
-                // cliente (sem variável de ambiente).
+                // Em produção: configure com o conteúdo REAL do cliente. No caso
+                // normal usa fallback no output; só no cliente inicial adiado (sem
+                // cliente mapeado) adia o configure para o commit do cliente.
                 #[cfg(not(feature = "bench"))]
                 {
-                    let content = state
-                        .client_content_size(window_id)
-                        .unwrap_or((size.w, size.h));
-                    state.send_frame_configure(window_id, content);
+                    let real = state.client_content_size(window_id);
+                    if real.is_some() || pending_cmd.is_none() {
+                        state.send_frame_configure(window_id, real.unwrap_or((size.w, size.h)));
+                    }
                 }
                 // Só sob `bench`: quantos passos de resize sintéticos enviar de uma
                 // vez (N=5 / N=20 nas medições).
@@ -321,26 +398,38 @@ impl Dispatch<AeroFrameV1, u32> for AeroState {
                 tracing::info!(window_id = *window_id, left, top, right, bottom, "sombra");
             }
             FrameRequest::Move { seat, serial } => {
-                if !serial_valid(state.last_button_serial, serial) {
-                    tracing::debug!(serial, "move ignorado: serial inválido");
-                    return;
-                }
                 let _ = seat;
-                state.last_geometry_action = Some(("move".to_owned(), now));
-                tracing::info!(window_id = *window_id, serial, "move do frame");
+                if crate::grab::start_geometry_grab(state, *window_id, serial, None) {
+                    state.last_geometry_action = Some(("move".to_owned(), now));
+                    tracing::info!(
+                        window_id = *window_id,
+                        serial,
+                        "move do frame: grab iniciado"
+                    );
+                } else {
+                    tracing::debug!(serial, "move ignorado: serial inválido ou janela ausente");
+                }
             }
             FrameRequest::Resize {
                 seat,
                 serial,
                 edges,
             } => {
-                if !serial_valid(state.last_button_serial, serial) {
-                    tracing::debug!(serial, "resize ignorado: serial inválido");
-                    return;
-                }
                 let _ = seat;
-                state.last_geometry_action = Some(("resize".to_owned(), now));
-                tracing::info!(window_id = *window_id, serial, ?edges, "resize do frame");
+                let edges = edges
+                    .into_result()
+                    .unwrap_or(crate::aero_frame_protocol::aero_frame_v1::ResizeEdge::None);
+                if crate::grab::start_geometry_grab(state, *window_id, serial, Some(edges)) {
+                    state.last_geometry_action = Some(("resize".to_owned(), now));
+                    tracing::info!(
+                        window_id = *window_id,
+                        serial,
+                        ?edges,
+                        "resize do frame: grab iniciado"
+                    );
+                } else {
+                    tracing::debug!(serial, "resize ignorado: serial inválido ou janela ausente");
+                }
 
                 // Só sob `bench`: cada resize válido gera um novo configure com
                 // tamanho diferente, para exercitar configure → commit por passo.
@@ -425,5 +514,20 @@ mod tests {
     fn serial_from_other_surface_is_ignored() {
         assert!(!serial_valid(Some(10), 11));
         assert!(serial_valid(Some(10), 10));
+    }
+
+    #[test]
+    fn role_none_or_layer_is_allowed() {
+        assert!(role_allowed(None));
+        assert!(role_allowed(Some(LAYER_SURFACE_ROLE)));
+    }
+
+    #[test]
+    fn toplevel_popup_cursor_roles_are_rejected() {
+        use smithay::wayland::seat::CURSOR_IMAGE_ROLE;
+        use smithay::wayland::shell::xdg::{XDG_POPUP_ROLE, XDG_TOPLEVEL_ROLE};
+        assert!(!role_allowed(Some(XDG_TOPLEVEL_ROLE)));
+        assert!(!role_allowed(Some(XDG_POPUP_ROLE)));
+        assert!(!role_allowed(Some(CURSOR_IMAGE_ROLE)));
     }
 }

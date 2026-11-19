@@ -609,3 +609,67 @@ O spike é apenas leitura de documentação/código instalados. Próximo passo d
 
 ### Pendente
 S3 (liberado), S4, S5, S6, S7.
+
+### MODO SPIKE — acertos de role (2026-11-19)
+- Regra de role corrigida em `protocols/aero_frame.rs`: `role_allowed` aceita superfície
+  sem role OU já com `layer_surface`; rejeita `xdg_toplevel`/`xdg_popup`/`cursor_image`.
+- Testes novos (vistos falhando antes da correção): puros `role_none_or_layer_is_allowed`,
+  `toplevel_popup_cursor_roles_are_rejected`; protocolo real
+  `associate_accepts_layer_role_and_rejects_toplevel_popup_cursor` (give_role no servidor +
+  `Client::object_from_protocol_id`). Sinal de rejeição = `connection.protocol_error()` +
+  `frames.len()==0` (o evento normal `frame_requested` também marca `protocol_error` no harness).
+- Texto do `aero_frame_v1.xml` atualizado (só descrição/summary, sem assinaturas/nomes) para
+  refletir a regra; arquivo protegido tocado sob aprovação explícita do usuário (acerto #2).
+- `bash scripts/check.sh` verde (1ª execução: flake do S1 nested sob carga, exit 1; isolado e
+  re-execução limpa: pass). Nenhum unsafe/unwrap/allow novo.
+- Bloqueio do passo 2: `foot` NÃO instalado (nenhum terminal além de `zenity` GTK3); instalar
+  foot é dependência de sistema fora do repositório → aguarda decisão.
+
+### MODO SPIKE — decoração server-side + latência do frame (2026-11-19)
+- `foot` instalado (1.25.0) e usado como cliente real. Arrasto da barra HTML move a janela
+  (grab real do compositor); usuário confirmou "funcionou perfeitamente".
+- CSD dupla corrigida: implementado `xdg-decoration` server-side
+  (`protocols/xdg_shell.rs`: `XdgDecorationHandler` + `delegate_xdg_decoration!`;
+  `state.rs`: `xdg_decoration_state`). `new_decoration`/`request_mode`/`unset_mode` →
+  `decoration_mode=ServerSide` + `send_configure`. O foot larga a própria barra; a barra
+  HTML passa a ser a ÚNICA decoração, alinhando render (`render_loc = geo.loc -
+  geometry().loc`, `backend/winit.rs:169`) com a região arrastável do hit-test
+  (`state.rs surface_under`, content_rect = `geo.loc`/`geo.size`). Medido: frame buffer
+  696x524 (conteúdo 494 + titlebar 30), `ok=true`.
+- Latência da decoração: o `--command` (cliente leve) era lançado ANTES do `--shell`
+  (frame_host GTK+WebKit, pesado). Reordenado em `main.rs`: shell primeiro, cliente depois.
+  Medido (log, nested winit, VM sem 3D): intervalo foot-map → 1º ack_configure caiu de
+  ~2,2 s para ~1,5 s. O residual (~1,5 s) é o cold-start do WebKitGTK (linkagem dinâmica +
+  spawn do WebProcess) antes de o frame_host associar; NÃO é atraso do compositor.
+- `bash scripts/check.sh` verde (1ª execução: flake do S1 nested sob carga; re-execução
+  limpa: pass). Nenhum unsafe/unwrap/allow novo; nenhum arquivo protegido alterado.
+- NÃO medido: desempenho em GPU real; latência com pool pré-aquecido de frames (Plano B /
+  ADR, deferido). A eliminação do cold-start exige o pool pré-aquecido da arquitetura —
+  proposto como próximo passo, aguarda aprovação.
+
+### Cold-start — solução temporária (opção 2, 2026-11-19)
+- Decisão do usuário: adiar o 1º cliente (`--command`) até o frame_host associar, só para o primeiro cliente; implementado (`main.rs` adia, `aero_frame.rs` lança no 1º associate e liga o frame ao cliente quando ele mapeia — `bind_pending_frame_client`; configure sai no commit, sem flash de tamanho cheio). Medido: configure 696x494 ~10 ms após o foot mapear; `closed` ok; check.sh verde.
+- Pool pré-aquecido fica para DEPOIS da fatia vertical, em passo próprio, com medição final em GPU real.
+- Risco assumido (temporário): se o frame_host nunca associar, o 1º cliente não é lançado.
+
+### Passo 1 da fatia vertical — resize pelo mouse (8 bordas/cantos), 2026-11-19
+- Hipótese: a inconsistência anterior (só parte das arestas registrava) era o harness de
+  input sintético — sem `release` entre presses o grab anterior continuava ativo e consumia
+  os eventos; a lógica de arestas estava certa.
+- Implementado no frame_host: `BORDER=6`, insets `(6,30,6,6)` e detecção da aresta pela
+  posição local do ponteiro (`frame_webview.rs`); `ResizeGrab` cobre as 8 arestas
+  (`grab.rs:208-255`), `MIN_W=120`/`MIN_H=80`. Timer de auto-quit de 30 s removido (era a
+  causa da decoração sumir).
+- Teste novo `tests/integration/frame_resize_edges.py` (nested winit, exige display): nas 8
+  posições o hit-test resolve para o frame (surface 21, origem (54,50)) e não para o cliente
+  (surface 18, origem (60,80)); a aresta detectada e o grab criado casam com a esperada em
+  8/8. Grab completo `press → motion → release` aplica tamanho novo: conteúdo
+  696x494 → 732x520. Isso também prova que a release encerra o grab (sem isso só o 1º press
+  por rodada registrava).
+- `bash scripts/check.sh` verde. Nenhum `unsafe`/`unwrap`/`allow` novo; nenhum arquivo
+  protegido alterado; nenhuma dependência nova.
+- NÃO testado: serial inválido vindo de um cliente real (coberto só por teste unitário
+  `serial_valid`); o harness sintético não consegue produzir serial desencontrado porque o
+  serial entregue ao cliente é o mesmo gravado em `last_button_serial`.
+- Pendências do marco: botões fechar/maximizar (passo 2), runtime Bun + SDK (passo 3),
+  painel React/TSX (passo 4).

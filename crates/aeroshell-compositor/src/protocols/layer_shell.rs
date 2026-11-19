@@ -61,21 +61,17 @@ impl WlrLayerShellHandler for AeroState {
             .find(|(s, _, _, _)| s == layer.wl_surface())
             .map(|(_, _, window_id, _)| *window_id);
         if let Some(window_id) = frame_window {
-            // Geometria 100% do compositor: conteúdo REAL da janela cliente
-            // associada (não a primeira janela da lista), fallback no output.
-            let content = self.client_content_size(window_id).unwrap_or_else(|| {
-                self.outputs
-                    .first()
-                    .and_then(|o| o.current_mode())
-                    .map(|m| (m.size.w, m.size.h))
-                    .unwrap_or((1280, 800))
-            });
+            // Geometria 100% do compositor: conteúdo REAL da janela cliente. Se o
+            // cliente ainda não mapeou (inicial adiado), adia o configure para o
+            // commit do cliente — evita um frame no tamanho cheio do output.
             self.frame_layer_surfaces.push(layer);
-            self.send_frame_configure(window_id, content);
-            tracing::info!(
-                window_id,
-                "frame layer_surface: duplo configure, FORA do LayerMap"
-            );
+            if let Some(content) = self.client_content_size(window_id) {
+                self.send_frame_configure(window_id, content);
+                tracing::info!(
+                    window_id,
+                    "frame layer_surface: duplo configure, FORA do LayerMap"
+                );
+            }
             return;
         }
 

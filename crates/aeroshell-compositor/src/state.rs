@@ -19,7 +19,10 @@ use smithay::{
         compositor::{CompositorClientState, CompositorState},
         output::OutputManagerState,
         selection::data_device::DataDeviceState,
-        shell::{wlr_layer::WlrLayerShellState, xdg::XdgShellState},
+        shell::{
+            wlr_layer::WlrLayerShellState,
+            xdg::{decoration::XdgDecorationState, XdgShellState},
+        },
         shm::ShmState,
         socket::ListeningSocketSource,
     },
@@ -114,12 +117,16 @@ pub struct AeroState {
     pub last_render_order: Vec<String>,
     /// Permite testes de protocolo validarem IDs sem criar uma janela xdg real.
     pub test_window_count: usize,
+    /// Cliente inicial adiado até o frame_host associar (cold-start temporário).
+    /// Consumido no primeiro associate; `None` depois disso ou sem `--shell`.
+    pub pending_initial_command: Option<String>,
     /// Lista de clientes inseridos (usada só para sinalizar prontidão em testes).
     #[allow(dead_code)]
     pub test_client_count: usize,
 
     pub compositor_state: CompositorState,
     pub xdg_shell_state: XdgShellState,
+    pub xdg_decoration_state: XdgDecorationState,
     pub layer_shell_state: WlrLayerShellState,
     pub shm_state: ShmState,
     pub output_manager_state: OutputManagerState,
@@ -139,6 +146,7 @@ impl AeroState {
 
         let compositor_state = CompositorState::new::<Self>(&dh);
         let xdg_shell_state = XdgShellState::new::<Self>(&dh);
+        let xdg_decoration_state = XdgDecorationState::new::<Self>(&dh);
         let layer_shell_state = WlrLayerShellState::new::<Self>(&dh);
         let _aero_frame_global = dh.create_global::<
             Self,
@@ -208,9 +216,11 @@ impl AeroState {
             last_geometry_action: None,
             last_render_order: Vec::new(),
             test_window_count: 0,
+            pending_initial_command: None,
             test_client_count: 0,
             compositor_state,
             xdg_shell_state,
+            xdg_decoration_state,
             layer_shell_state,
             shm_state,
             output_manager_state,
@@ -256,6 +266,7 @@ impl AeroState {
             if let Some((s, p)) =
                 window.surface_under(pos - location.to_f64(), WindowSurfaceType::ALL)
             {
+                tracing::debug!(?pos, hit_client = ?s.id(), "hit-test cliente (antes do frame)");
                 return Some((s, (p + location).to_f64()));
             }
         }
@@ -299,6 +310,7 @@ impl AeroState {
             // Smithay (input/pointer/mod.rs:795) calcula o local do cliente como
             // `event.location - loc`: o ponto devolvido aqui é a ORIGEM GLOBAL da
             // superfície (não o hit local), para que enter/motion cheguem certos.
+            tracing::debug!(?pos, ?frame_rect, ?content_rect, hit_frame = ?frame_surface.id(), "hit-test frame (região de decoração)");
             return Some((frame_surface.clone(), frame_loc.to_f64()));
         }
         None

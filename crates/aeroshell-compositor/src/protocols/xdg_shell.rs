@@ -20,6 +20,8 @@ use smithay::{
 };
 
 use crate::state::AeroState;
+use smithay::reexports::wayland_protocols::xdg::decoration::zv1::server::zxdg_toplevel_decoration_v1::Mode;
+use smithay::wayland::shell::xdg::decoration::XdgDecorationHandler;
 
 impl XdgShellHandler for AeroState {
     fn xdg_shell_state(&mut self) -> &mut XdgShellState {
@@ -55,6 +57,16 @@ impl XdgShellHandler for AeroState {
                 geometry = ?self.space.element_geometry(window),
                 "toplevel mapeado no space"
             );
+        }
+        // Cliente inicial adiado: o frame associou window_id=n antes de o cliente
+        // existir; liga agora à superfície recém-mapeada.
+        let wl = self
+            .space
+            .elements()
+            .nth(n as usize)
+            .and_then(|w| w.toplevel().map(|t| t.wl_surface().clone()));
+        if let Some(wl) = wl {
+            self.bind_pending_frame_client(n as u32, wl);
         }
     }
 
@@ -94,6 +106,32 @@ impl XdgShellHandler for AeroState {
 }
 
 delegate_xdg_shell!(AeroState);
+
+// Decoração server-side: o frame HTML é a ÚNICA barra de título. Clientes com
+// CSD (foot) recebem mode=ServerSide e largam a própria barra, alinhando o
+// render (render_loc = geo.loc - geometry().loc) com a região arrastável.
+impl XdgDecorationHandler for AeroState {
+    fn new_decoration(&mut self, toplevel: ToplevelSurface) {
+        self.server_side_decoration(toplevel);
+    }
+    fn request_mode(&mut self, toplevel: ToplevelSurface, _mode: Mode) {
+        self.server_side_decoration(toplevel);
+    }
+    fn unset_mode(&mut self, toplevel: ToplevelSurface) {
+        self.server_side_decoration(toplevel);
+    }
+}
+
+impl AeroState {
+    fn server_side_decoration(&mut self, toplevel: ToplevelSurface) {
+        toplevel.with_pending_state(|state| {
+            state.decoration_mode = Some(Mode::ServerSide);
+        });
+        let _ = toplevel.send_configure();
+    }
+}
+
+smithay::delegate_xdg_decoration!(AeroState);
 
 /// Envia o configure inicial no primeiro commit do cliente.
 pub fn handle_commit(popups: &mut PopupManager, space: &Space<Window>, surface: &WlSurface) {

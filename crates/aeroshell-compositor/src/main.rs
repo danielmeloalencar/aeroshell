@@ -5,10 +5,12 @@ mod backend;
 mod cli;
 #[cfg(feature = "bench")]
 mod frame_metrics;
+mod grab;
 mod input;
 mod protocols;
 mod state;
 mod supervisor;
+mod window_ipc;
 
 use std::{error::Error, io::BufRead, os::unix::net::UnixListener};
 
@@ -55,24 +57,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     // O env do host NÃO é alterado: só o processo filho recebe o socket do AeroShell.
     let socket_name = state.socket_name.clone();
     let mut supervisor = supervisor::Supervisor::new();
-    if let Some(command) = &opts.command {
-        // `sh -c` permite `--command "zenity --info --text=..."` com argumentos.
-        let mut cmd = std::process::Command::new("sh");
-        cmd.arg("-c")
-            .arg(command)
-            .env("WAYLAND_DISPLAY", &socket_name)
-            // A ponta privilegiada do socketpair NUNCA é herdada por clientes comuns.
-            .env_remove("WAYLAND_SOCKET")
-            // Sem remover DISPLAY, GTK3 abre no X11 do host em vez do nosso compositor.
-            .env_remove("DISPLAY")
-            .env("GDK_BACKEND", "wayland");
-        // Cliente público: ciclo de vida (PDEATHSIG) sem privilégio de shell.
-        supervisor::configure_lifecycle(&mut cmd);
-        match supervisor.spawn(&mut cmd) {
-            Ok(pid) => tracing::info!(?command, pid, "cliente inicial iniciado"),
-            Err(err) => tracing::warn!(?command, %err, "falha ao iniciar cliente"),
-        }
-    }
 
     let mut data = CalloopData {
         state,
@@ -103,6 +87,21 @@ fn main() -> Result<(), Box<dyn Error>> {
             &opts.shell_env,
             &data.state.socket_name,
         )?;
+    }
+
+    // Cliente inicial: com frame_host (--shell), ADIA o lançamento até o primeiro
+    // associate (cold-start temporário: a janela nunca aparece sem decoração).
+    // Sem frame_host, lança imediato. Só vale para o primeiro cliente.
+    if let Some(command) = &opts.command {
+        if opts.shell.is_some() {
+            data.state.pending_initial_command = Some(command.clone());
+            tracing::info!(?command, "cliente inicial adiado até o frame associar");
+        } else {
+            match supervisor::spawn_public_client(&socket_name, command) {
+                Ok(pid) => tracing::info!(?command, pid, "cliente inicial iniciado"),
+                Err(err) => tracing::warn!(?command, %err, "falha ao iniciar cliente"),
+            }
+        }
     }
 
     // Injeção de ponteiro sintético (S3): `motion x y`, `button press|release`.
@@ -144,6 +143,22 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
             })?;
         tracing::info!(?path, "injeção de ponteiro sintético ativa");
+    }
+
+    // IPC de controle de janelas (list/focus/close/maximize) para o SDK/TS.
+    if let Some(path) = std::env::var_os("AERO_WINDOW_IPC_SOCK") {
+        let (sender, source) = channel::channel::<window_ipc::Command>();
+        window_ipc::spawn(&path.to_string_lossy(), sender)?;
+        event_loop
+            .handle()
+            .insert_source(source, |event, _, data| {
+                let channel::Event::Msg((cmd, reply)) = event else {
+                    return;
+                };
+                let resp = data.state.window_command(&cmd);
+                let _ = reply.send(resp);
+            })?;
+        tracing::info!(?path, "IPC de janelas ativo");
     }
 
     event_loop.run(None, &mut data, |data| {
@@ -346,6 +361,7 @@ mod protocol_tests {
         connection: Connection,
         queue: wayland_client::EventQueue<ClientState>,
         client: ClientState,
+        server_client: wayland_server::Client,
         protocol_error: bool,
     }
 
@@ -365,7 +381,7 @@ mod protocol_tests {
                 ..Default::default()
             };
             let state = AeroState::new(&mut event_loop, display, &opts).unwrap();
-            display_handle
+            let server_client = display_handle
                 .insert_client(
                     server,
                     Arc::new(ServerClientState {
@@ -390,6 +406,7 @@ mod protocol_tests {
                 connection,
                 queue,
                 client: ClientState::default(),
+                server_client,
                 protocol_error: false,
             };
             harness.pump();
@@ -520,6 +537,53 @@ mod protocol_tests {
     }
 
     #[test]
+    fn associate_accepts_layer_role_and_rejects_toplevel_popup_cursor() {
+        use smithay::wayland::compositor::give_role;
+        use smithay::wayland::seat::CURSOR_IMAGE_ROLE;
+        use smithay::wayland::shell::wlr_layer::LAYER_SURFACE_ROLE;
+        use smithay::wayland::shell::xdg::{XDG_POPUP_ROLE, XDG_TOPLEVEL_ROLE};
+        use wayland_client::Proxy as _;
+
+        // O sinal de aceitação/rejeição é frames.len()+configured: o evento
+        // normal frame_requested também marca protocol_error no harness.
+        // layer_surface: ACEITA (o frame é uma layer surface do shell).
+        let mut h = Harness::new(true);
+        h.create_surface();
+        let server = h
+            .server_client
+            .object_from_protocol_id::<wl_surface::WlSurface>(
+                &h.data.display_handle,
+                h.client.surface.clone().unwrap().id().protocol_id(),
+            )
+            .unwrap();
+        give_role(&server, LAYER_SURFACE_ROLE).unwrap();
+        assert!(h.associate(0).is_none(), "layer_surface deveria ser ACEITO");
+        assert_eq!(h.data.state.frames.len(), 1);
+        assert_eq!(h.client.configured, 1);
+
+        // toplevel / popup / cursor: REJEITA (superfície de cliente comum).
+        for role in [XDG_TOPLEVEL_ROLE, XDG_POPUP_ROLE, CURSOR_IMAGE_ROLE] {
+            let mut h = Harness::new(true);
+            h.create_surface();
+            let server = h
+                .server_client
+                .object_from_protocol_id::<wl_surface::WlSurface>(
+                    &h.data.display_handle,
+                    h.client.surface.clone().unwrap().id().protocol_id(),
+                )
+                .unwrap();
+            give_role(&server, role).unwrap();
+            let _ = h.associate(0);
+            assert!(
+                h.connection.protocol_error().is_some(),
+                "role {role} deveria ser REJEITADO"
+            );
+            assert_eq!(h.data.state.frames.len(), 0);
+            assert_eq!(h.client.configured, 0);
+        }
+    }
+
+    #[test]
     fn unknown_window_associate_gets_closed() {
         let mut h = Harness::new(true);
         h.create_surface();
@@ -539,5 +603,49 @@ mod protocol_tests {
         frame._move(&seat, 0xDEAD);
         h.pump();
         assert!(h.data.state.last_geometry_action.is_none());
+    }
+
+    #[test]
+    fn move_grab_actually_moves_the_client_window() {
+        let mut h = Harness::new(true);
+        // Cliente real: toplevel xdg mapeado no space.
+        h.create_surface();
+        let shell = h.client.shell.clone().unwrap();
+        let surface = h.client.surface.clone().unwrap();
+        let xdg_surface = shell.get_xdg_surface(&surface, &h.queue.handle(), ());
+        let _toplevel = xdg_surface.get_toplevel(&h.queue.handle(), ());
+        h.pump();
+        let window = h.data.state.space.elements().next().unwrap().clone();
+        let initial = h.data.state.space.element_location(&window).unwrap();
+
+        // Superfície do frame (sem role) associada à janela 0.
+        let compositor = h.client.compositor.clone().unwrap();
+        let frame_surface = compositor.create_surface(&h.queue.handle(), ());
+        h.client.surface = Some(frame_surface);
+        h.pump();
+        assert!(h.associate(0).is_none());
+
+        // Clique real -> serial válido; move do frame inicia o grab.
+        h.data.state.inject_button(true);
+        let serial = h.data.state.last_button_serial.unwrap();
+        let seat = h.client.seat.clone().unwrap();
+        let frame = h.client.frames.last().unwrap().clone();
+        frame._move(&seat, serial);
+        h.pump();
+        assert!(
+            h.data.state.seat.get_pointer().unwrap().is_grabbed(),
+            "grab de move deveria estar ativo"
+        );
+
+        // Motion durante o grab move a janela cliente.
+        h.data.state.inject_motion(300.0, 300.0);
+        h.pump();
+        let moved = h.data.state.space.element_location(&window).unwrap();
+        assert_ne!(moved, initial, "janela deveria ter movido com o grab");
+
+        // Release encerra o grab.
+        h.data.state.inject_button(false);
+        h.pump();
+        assert!(!h.data.state.seat.get_pointer().unwrap().is_grabbed());
     }
 }

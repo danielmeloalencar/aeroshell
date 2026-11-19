@@ -148,6 +148,7 @@ impl AeroState {
                 let button_state = event.state();
 
                 if ButtonState::Pressed == button_state {
+                    self.last_button_serial = Some(u32::from(serial));
                     self.focus_on_press(serial);
                 }
 

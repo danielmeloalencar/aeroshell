@@ -12,8 +12,10 @@
       associado a outra janela.
 
       REGRAS DE ASSOCIAÇÃO (v1, emenda aprovada):
-      - `associate` NÃO atribui role à superfície. Ela deve ainda não ter role
-        no momento da chamada; se já tiver, o compositor posta o erro `role`.
+      - `associate` NÃO atribui role à superfície: apenas a marca como frame.
+        No momento da chamada ela deve estar sem role OU já com role
+        `layer_surface` (o caminho do frame); qualquer outro role pré-existente
+        (`xdg_toplevel`, `xdg_popup`, `cursor_image`, …) é erro `role`.
       - A superfície associada pode, DEPOIS, receber o role de `layer_surface`
         (suportado: é o caminho do frame). Se receber `xdg_toplevel`, o
         compositor envia `closed` e o suporte fica DEFERIDO — a superfície
@@ -45,9 +47,10 @@
     <request name="destroy" type="destructor"/>
 
     <request name="associate">
-      <description summary="associa uma superfície sem role a uma janela">
+      <description summary="marca uma superfície como frame desta janela">
         NÃO atribui role: apenas marca a superfície como frame desta janela.
-        A superfície deve ainda não ter role (erro `role` caso contrário).
+        A superfície deve estar sem role ou já com role `layer_surface`
+        (erro `role` para qualquer outro role pré-existente).
         O role `layer_surface` é suportado depois da associação; `xdg_toplevel`
         recebe `closed` e fica deferido. Se o window_id não existir mais
         (corrida legítima: a janela fechou após frame_requested), o compositor
