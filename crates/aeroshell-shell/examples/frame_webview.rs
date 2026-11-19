@@ -341,10 +341,21 @@ fn main() {
         .application_id("dev.aeroshell.frame-webview")
         .build();
     app.connect_activate(move |app| {
+        // Fundo do frame: sem fundo de tema, a área recém-exposta durante resize
+        // mostra o que está atrás em vez de branco (a decoração é pintada só pelo HTML).
+        let css = gtk4::CssProvider::new();
+        css.load_from_string(".aero-frame { background-color: rgba(0, 0, 0, 0); }");
+        gtk4::style_context_add_provider_for_display(
+            &gtk4::gdk::Display::default().expect("display GTK ausente"),
+            &css,
+            gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+        );
+
         let window = gtk4::ApplicationWindow::builder()
             .application(app)
             .title("frame webview")
             .build();
+        window.add_css_class("aero-frame");
         window.init_layer_shell();
         window.set_namespace(Some("aeroshell-frame-webview"));
         // Teclado NUNCA no frame: interatividade none (só ponteiro na decoração).
