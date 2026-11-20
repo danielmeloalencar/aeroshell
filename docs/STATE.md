@@ -225,12 +225,16 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   código do teste; `frame_buttons`, `frame_window_id`, `frame_resize_glue`, `frame_initial_buffer` OK;
   `frame_follows_resize.py` teve `detected=None` (flake de captura de log) 1× e 2/2 OK isolados depois;
   `frame_resize_sync.py` FALHA esperada. Gate `02m_v2_check_final.log` EXIT=0 (bun 9 pass/0 fail); clippy
-  bench `02m_v2_clippy_final.log` EXIT=0. Critério VISUAL: ver §7.
+  bench `02m_v2_clippy_final.log` EXIT=0.
+  JUIZ VISUAL (2026-11-20, instância v3): **"o problema no clique/arrasto resolveu totalmente"** — o critério
+  desta correção (zero configures no press/drag) PASSOU no juiz. Porém o humano relatou um sintoma NOVO no
+  release, registrado em §7/§9; por isso 02m/02l ainda NÃO fecham. Gate/clippy verdes após o commit final
+  (`02m_v2_check_aftercommit.log`, `02m_v2_clippy_aftercommit.log`), commit `4208226`.
 ## 4. Em andamento
-- 02m (3ª abordagem) técnica PRONTA (§3): humano autorizou especificação no compositor; baseline FALHANDO,
-  correção mínima em `grab.rs`, 3× OK, vizinhos, gate e clippy. Falta SÓ o juiz visual (§7). As 2 abordagens
-  anteriores no shell ficam registradas como histórico (2ª eliminou o 200×200; juiz ainda negou).
-  NÃO mexer em 02l/protocolo/ADR/shell sem aprovação.
+- 02m (3ª abordagem): juiz CONFIRMOU que clique/arrasto está resolvido (§3). Sintoma NOVO no release com arrasto
+  (flicker) registrado em §7 — causa é o `source=final` no unset, que a PRÓPRIA especificação do humano mandou
+  manter. NÃO alterar `source=final` sem decisão. Regra das duas tentativas: 3 abordagens já usadas (2 shell
+  falharam no juiz; esta técnica passou no press/drag). PARAR e pedir decisão antes de qualquer 4ª mudança.
 - 02l EM EXECUÇÃO: código/teste/gate/clippy prontos (§3); falta a validação visual com juiz humano (§7).
   Humano (2026-11-20): **"vi na execução dos seus testes que o problema foi resolvido."** Registrado como dado
   favorável, mas veio da execução dos harnesses, não de uma sessão visual formal com 2 `foot`; por §0.9 ainda
@@ -493,9 +497,20 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   clicar/arrastar as bordas das 2 janelas na instância nova e dar o "ok" explícito, 02m e 02l seguem NÃO
   CONCLUÍDAS (AGENTS.md §0.9). A hipótese do `target=12x36` permanece registrada acima como descoberta; a
   correção autorizada ataca a causa apontada pelo humano (configure de freeze no press), não aquela.**
-  Instância visual ABERTA desta 3ª versão: socket `wayland-aero-02m-v3`, compositor 112693 (bash pai 112687),
-  shell 112699, `foot` 112772 e 112826, log `/tmp/opencode/aero-02m-v3-visual.log`, 2 associates (0 e 1).
-  NÃO encerrar: quem fecha é o humano. Sem `--features bench`, logo a prova do zero-configure veio do harness.
+  Instância visual desta 3ª versão: socket `wayland-aero-02m-v3`, compositor 112693, shell 112699,
+  `foot` 112772/112826, log `/tmp/opencode/aero-02m-v3-visual.log`, 2 associates. Humano testou e encerrou
+  (não foi o agente). Sem `--features bench`, por isso a prova do zero-configure veio do harness.
+- **02m (JUIZ VISUAL DA 3ª ABORDAGEM — VEREDITO MISTO, 2026-11-20): humano, ao clicar/arrastar bordas das 2
+  janelas na instância v3: "o proplema no clique/arrasto resolveu totalmente. Mas agora tem o mesmo problema
+  no soltar o arraste. Se eu clicar e segurar uma borda e nao arrastar, nao ocorre problema ao soltar o clique.
+  Mas se eu clicar, segurar, arrastar e depois soltar ocorre o problema da moldura redimensionar rapido dando
+  efeito de flicker."** Dado prevalece (AGENTS.md §0.4/§0.9). Press/drag = OK; release com arrasto = flicker.
+  Medição objetiva do release no log do harness `/tmp/gh-comp-110069.log`: após `FRAME_CONFIGURE ... source=final
+  w=756 h=546` (target 768×582), o buffer fica CONGELADO em 708×530 por 10 frames ≈ 79,7 ms com
+  `rescaled=true sx=1.0862 sy=1.1053`, depois salta para 768×582 `rescaled=false sx=1.0` — é o "redimensionar
+  rápido" visto. Sem arrasto não há mudança de conteúdo, logo o `source=final` não causa flicker (bate com o
+  relato). Causa = `source=final` no `unset` (`grab.rs:403-420`), que a ESPECIFICAÇÃO do humano mandou MANTER.
+  NÃO mexer sem decisão. 02m/02l NÃO CONCLUÍDAS no visual.**
 - 02l (JUIZ VISUAL — RELATO FAVORÁVEL ANTERIOR, agora superado): humano (2026-11-20):
   **"vi na execução dos seus testes que o problema foi resolvido."** Veredito positivo registrado como dado.
   Como o relato veio da execução dos harnesses (que abrem janela winit + `foot`), e não de uma sessão manual
@@ -582,9 +597,13 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
 - Reproduzir: `python3 tests/integration/frame_grab_configure_hygiene.py` → `configures_no_grab=0
   source_final_apos_release=1 VEREDITO: OK`. Baseline cru FALHOU em `/tmp/opencode/02m_grab_baseline1.log`
   (`source=grab-start w=1280 h=800` em +26,93 ms); 3× limpas em `/tmp/opencode/02m_grab_clean{1,2,3}.log`.
-- VALIDAÇÃO VISUAL ABERTA: socket `wayland-aero-02m-v3`, compositor 112693, shell 112699, `foot` 112772/112826,
-  log `/tmp/opencode/aero-02m-v3-visual.log`, 2 associates. Humano deve clicar/arrastar bordas da 1ª e 2ª janela
-  (press sem transiente, arrasto lento/rápido) e dar o "ok" explícito. Quem fecha é o humano — NÃO encerrar PIDs.
+- JUIZ VISUAL (2026-11-20, instância v3 — encerrada pelo humano): **press/arrasto 100% resolvido; flicker NOVO
+  no release com arrasto** (relato cru + medição em §7). Causa = `source=final` no `unset`, que o cartão mandou
+  manter. NÃO há instância aberta. NÃO mexer em `source=final` sem decisão; 3 abordagens usadas, regra das duas
+  tentativas atingida — PARAR.
+- Próximo passo imediato (NÃO executar): humano decidir sobre o flicker no release — (a) autorizar 4ª abordagem
+  para atacar o `source=final`/repaint do WebKit no unset [exige reabrir cartão], (b) aceitar como dívida e fechar
+  02m/02l como parciais no visual, (c) outro rumo. Só com decisão e novo "ok" do juiz fecham 02m/02l.
 - NÃO mudar `target = content + extras`, move, conteúdo, 9-slice da 02k/02l, ADR 0006, protocolo ou shell sem
   aprovação; NÃO encerrar PIDs de instância; sem push. Hipótese `target=12x36` segue em §7 como descoberta
   histórica; a correção atual ataca a causa apontada pelo humano (configure de freeze no press), não aquela.
