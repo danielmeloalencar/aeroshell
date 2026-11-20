@@ -1,4 +1,4 @@
-# Tarefa 04a — Adaptador React `useWindows()` (RASCUNHO — aguarda "ok")
+# Tarefa 04a — Adaptador React `useWindows()` (aprovada e executada em 2026-11-20)
 
 > Cartão de tarefa: um agente deve conseguir executá-la lendo só AGENTS.md, STATE.md, RUNBOOK.md e este arquivo.
 > Uma tarefa por sessão. Se o objetivo mudar no meio, PARE e pergunte.

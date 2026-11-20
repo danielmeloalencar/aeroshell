@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-20 · tarefa ativa: 03 (pré-filtros verdes — aguarda juiz visual) · modo: SPIKE
+Última atualização: 2026-11-20 · tarefa ativa: 04a (concluída) · próxima: 04b (aprovada, não iniciada) · modo: SPIKE
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -81,8 +81,16 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   `--list` (2 linhas com id/título), `--focus 0` (elevou a janela certa) e `--close 1` (fechou só aquela) e respondeu
   **"ok validado"**. O próprio humano fechou a aplicação (PID 39214 encerrado); nenhum processo meu ficou órfão.
   Tarefa 03 FECHADA.
+- [x] 04a (critério 1): `bun test packages/react` → `3 pass / 0 fail / 8 expect()`. O teste foi escrito antes e visto
+  falhando (`Cannot find module './useWindows'`), depois passou. `useWindows` liga `store.subscribe`/
+  `store.getSnapshot` ao `useSyncExternalStore`; patch notifica e unsubscribe desliga o listener.
+- [x] 04a (deps): React 19.2.0 + react-dom 19.2.0 (MIT, aprovados) instalados no workspace `packages/react`;
+  `bun.lock` versionado. Prova: `bun -e 'import("react")'` dentro de `packages/react` → `react real ok function`.
+- [x] 04a (critérios 2/3): `bun run generate:types` → `EXIT=0` e `git diff -- packages/sdk/src/generated` vazio;
+  `bash scripts/check.sh` → `OK: scripts/check.sh passou` (EXIT=0), `bun test` 9 pass / 0 fail.
 ## 4. Em andamento
-- Nenhuma tarefa em andamento: 03 fechada com "ok validado" do humano; 02c segue bloqueada (decisão pendente).
+- Nenhuma: 04a concluída; 04b aprovada pelo humano (inclui extensão do bridge), mas NÃO iniciada — uma tarefa por sessão.
+- 02c segue bloqueada (decisão pendente do humano).
 - 02c BLOQUEADA: duas abordagens tentadas e insuficientes no critério de pendência — (1) configure no motion e
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). Não abrir validação visual até a decisão.
@@ -90,7 +98,8 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
 1. `02d-frame-resize-diagnostico.md` — RASCUNHO criado, aguarda o "ok" do humano. Medir 5 cadências × 3
    execuções + juiz visual para decidir entre Plano B e redefinição de critério (decisão do humano em 2026-11-20:
    "Manter parcial, cartão novo").
-2. Passo 4 — Painel React (`useWindows()`), clique foca a janela certa; testar com 2 e 3 janelas (cartão a criar).
+2. `04b-painel-react-webview.md` — APROVADA, não iniciada: painel TSX em `aero://`, bridge `focus` → IPC,
+   pré-filtro com 2 e 3 `foot` + juiz visual. Começar por ela na próxima sessão.
 3. Decisão sobre modo produto (sua).
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
 - 03: o socket IPC é síncrico (request/response); não há eventos de map/unmap. Os patches do SDK são derivados da
@@ -174,11 +183,11 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- O que eu estava fazendo: nada em andamento — 03 FECHADA com "ok validado" do humano (2026-11-20).
-- O que funcionou: 4 bindings TS gerados de `aeroshell-ipc`; `bun test packages/sdk` 5/5; `sdk_cli.py` provou
-  `--list` (id+título), `--focus` (ordem de render inverteu) e `--close` seletivo; gate verde (bun 6/6).
-- Comando exato para reproduzir: `python3 tests/integration/sdk_cli.py` → `OK: --list mostrou 2 janelas; --close 1 deixou só a janela 0`.
-- Próximo passo imediato (uma ação): criar o cartão da tarefa 04 (painel React `useWindows()`) e aguardar seu "ok".
+- O que eu estava fazendo: 04a CONCLUÍDA — adapter `useWindows()` com `useSyncExternalStore` e 3 testes Bun.
+- O que funcionou: `bun test packages/react` 3/3 (teste escrito e visto falhando antes); React 19.2.0 instalado e
+  `bun.lock` versionado; `generate:types` sem diffs; gate verde (bun 9/9).
+- Comando exato para reproduzir: `bun test packages/react` → `3 pass / 0 fail / 8 expect()`.
+- Próximo passo imediato (uma ação): executar 04b (painel React na WebView + bridge `focus`), já aprovada pelo humano.
 - NÃO executar 02d (resize) nem tentar terceira abordagem sem autorização explícita.
 - Descobertas laterais em §6: IPC sem eventos (patches vêm do `list`), `send_close` assíncrono (teste com polling),
   arredondamento do foot, timer 1 ms sem ganho, `frame_resize_edges.py` intermitente, flake do S1.
