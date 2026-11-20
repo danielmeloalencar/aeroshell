@@ -364,7 +364,9 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   A 02j não muda aparência, logo NÃO é ela que introduziu o flicker, mas a instrumentação só prova que a escala
   esteve ativa por 5,4 s seguidos; **não mede o flicker em si**. Falta a medição que Capture posição da decoração
   por frame durante o arrasto (lacuna registrada, exige cartão novo). Aplicação deixada aberta; quem fecha é o
-  humano. Instância 02f (PID 72480) também continua aberta.
+  A instância 84904 já não está rodando: o log termina com `FRAME_SUMMARY samples=1` (shutdown gracioso) e
+  não há `panicked`/`SIGSEGV`; o agente NÃO executou nenhum comando de encerramento — muito provavelmente o
+  humano fechou a janela ao terminar o teste (confirmar). Instância 02f (PID 72480) continua aberta.
 - 02j: não medido — latência/qualidade visual em GPU real; os 3 modos nomeados foram medidos só em VM sem 3D.
 - 02f: JUIZ VISUAL NEGATIVO (2026-11-20): humano: **"A moldura ainda está chegando atrasada"**. O pré-filtro
   (razão 0,286, 14/14 configures no cliente, final no tamanho real) NÃO mediu o que a pessoa viu — mesma lacuna
@@ -427,7 +429,8 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
   `wayland-aero-02f`, log `/tmp/opencode/aero-02f-visual.log`. Não encerrar — quem fecha é o humano.
 - VALIDAÇÃO VISUAL NEGATIVA (2026-11-20, teste manual com PID 84904): humano viu **flicker geral, incluindo as
   bordas**, contradizendo o relato anterior de que só a titlebar piscava. Não medido nem investigado; precisa de
-  medição de posição da decoração por frame e cartão novo. Instância 84904 deixada aberta; quem fecha é o humano.
+  medição de posição da decoração por frame e cartão novo. O PID 84904 já encerrou com shutdown gracioso
+  (`FRAME_SUMMARY` no log, sem `panicked`); o agente não o encerrou — confirmar se foi o humano.
   Próximo passo (NÃO executar): humano decidir se abre cartão para o flicker geral; não reabrir 02e/02f sozinho.
 - NÃO mexer no debounce/200 ms, NÃO mudar escala/move/conteúdo, NÃO editar ADR 0006, NÃO encerrar PID 72480,
   NÃO executar 02d/02g/02h/02i/05/9-slice sem autorização nova. Sem push.
