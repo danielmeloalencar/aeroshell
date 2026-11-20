@@ -169,16 +169,24 @@ def scenario(count):
         if len(rects) < 2:
             fail(f"painel publicou só {len(rects)} retângulo(s), esperava >=2")
         gx, gy = geometry()
-        # Clicar na PRIMEIRA linha (id 0), que começa atrás: se o clique
-        # funcionar, ela sobe para a frente e a ordem muda no log.
-        r = rects[0]
-        cx = gx + int(r["x"]) + int(r["w"]) // 2
-        cy = gy + int(r["y"]) + int(r["h"]) // 2
-        print(f"geometry={gx},{gy} rects={rects} clique 1ª linha={cx},{cy}")
-
         before = render_order()
         if before is None:
             fail("sem ordem de render no log do compositor")
+
+        # A ordem frente->tras varia entre execuções. Escolher o botão cujo
+        # cliente está ATRÁS (último da ordem) garante que a elevação é visível.
+        # Mapeamento observado: id N -> wl_surface@3[N+1] (o shell consome o 1º).
+        surfaces = [int(n) for n in re.findall(r'wl_surface@3\[(\d+)\]', before)]
+        if len(surfaces) != count:
+            fail(f"ordem de render inesperada: {before}")
+        back_id = surfaces[-1] - 1
+        if not 0 <= back_id < count:
+            fail(f"id de trás fora da lista: {back_id} (ordem={before})")
+        r = rects[back_id]
+        cx = gx + int(r["x"]) + int(r["w"]) // 2
+        cy = gy + int(r["y"]) + int(r["h"]) // 2
+        print(f"geometry={gx},{gy} rects={rects} clique botão id={back_id} em {cx},{cy}")
+
         click(cx, cy)
         if not wait_for(lambda: render_order() != before, seconds=8):
             fail(f"clique não mudou a ordem de render (antes={before})")
@@ -186,10 +194,18 @@ def scenario(count):
         print("ordem antes:", before)
         print("ordem depois:", after)
 
-        # O id 0 corresponde ao surface wl_surface@3[1] (1º cliente mapeado).
         front = after.split()[0] if after else ""
-        if "[1]" not in front:
-            fail(f"clique elegeu {front!r}, esperava o 1º cliente (id 0)")
+        if f"[{back_id + 1}]" not in front:
+            fail(f"clique elegeu {front!r}, esperava o surface [{back_id + 1}] (id {back_id})")
+
+        # REGRESSÃO DO TRAVAMENTO: após o `focus`, o bridge precisa continuar
+        # respondendo `list`. Se `forward()` esperar o "." que só o `list`
+        # envia, o main loop congela e os botões ficam mortos na tela.
+        list_count = lambda: len(re.findall(r'painel React command="list"', clean()))
+        lists_after = list_count()
+        if not wait_for(lambda: list_count() > lists_after, seconds=6):
+            fail("bridge parou de responder após o clique (botões mortos na tela)")
+        print("bridge continuou respondendo após o clique")
     finally:
         stop(procs)
 

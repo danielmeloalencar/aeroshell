@@ -25,6 +25,11 @@ fn forward(command: &str) -> Vec<String> {
     if writeln!(stream, "{command}").is_err() || stream.flush().is_err() {
         return vec!["ERR falha ao enviar comando".to_owned()];
     }
+    // O IPC responde "OK" para focus/close e "." apenas para list. Sem
+    // shutdown do lado de escrita, o compositor mantém a conexão aberta
+    // esperando outro comando e o BufReader abaixo bloqueia para sempre,
+    // congelando o main loop do shell (botões mortos na tela).
+    let _ = stream.shutdown(std::net::Shutdown::Write);
     BufReader::new(stream)
         .lines()
         .map_while(Result::ok)

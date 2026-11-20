@@ -111,6 +111,16 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
 - 04b: `tests/integration/s3_input.sh` falha **também no baseline** (`0fc05e7`, worktree isolado): a input region
   é aplicada (`rects=[(24,8,189,36)]`) mas o clique "dentro" dá `under=None`. Não é regressão do painel React;
   S3 não está no gate. 04b não mexeu no teste (tentei `AERO_PANEL_LEGACY=1`, sem efeito, e revertei).
+- **REQUISITO DO PROJETO (decisão do humano, 2026-11-20): compatibilidade com compositores modernos.** O humano
+  relatou na tela estas mensagens do `foot` e exigiu que todas sejam implementadas no AeroShell (ou registradas
+  como requisito se não for o momento): `compositor does not implement the primary selection interface`;
+  `compositor does not implement xdg activation`; `bell.urgent will fall back to coloring the window margins red`;
+  `compositor does not implement fractional scaling`; `compositor does not implement server-side cursors, falling
+  back to client-side cursors`; `compositor does not implement the xdg toplevel icon protocol`;
+  `text interface not implemented compositor, IME will be disabled`. Nomes de protocolo prováveis (CONFIRMAR na
+  versão fixada de Smithay/foot antes de implementar): wp-primary-selection-v1, xdg-activation-v1,
+  wp-fractional-scale-v1, wp-cursor-shape-v1, xdg-toplevel-icon-v1, zwp-text_input_v3/IME, além de urgência/atenção
+  de toplevel. Não implementados nesta fatia (exige ADR + cartões novos); rascunho em `docs/tasks/05-*.md`.
 - 03: o socket IPC é síncrico (request/response); não há eventos de map/unmap. Os patches do SDK são derivados da
   resposta `list` do compositor no `createAero.refresh()`. Streaming de eventos + codec MessagePack é o S4 do plano
   mestre (exige ADR e dependências novas) — NÃO foi feito aqui.
@@ -172,10 +182,16 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   pode ser reatribuído. O mapa `window_surfaces` é limpo no hook de destruição, mas ids monotonicamente estáveis
   (não reutilizados) ficam para uma tarefa futura se o cenário aparecer.
 ## 7. Não medido / não validado (não trate como fato)
-- 04b: **juiz visual PENDENTE**. O pré-filtro automatizado provou lista + clique no 1º botão, mas o humano ainda não
-  confirmou na tela que a lista aparece no painel e que o clique eleva só a janela clicada. Aplicação deixada aberta:
-  compositor PID 49681 + shell PID 49719, socket `wayland-aero-04b-vis2`, log `/tmp/opencode/aero-04b-visual2.log`.
-  O agente NÃO encerrou; quem fecha é o humano. Sem o "ok", 04b NÃO está concluída.
+- 04b: **VEREDITO VISUAL NEGATIVO (2026-11-20)** — humano: "nada disso funcionou"; viu 2 `foot` sem decoração e
+  2 botões no canto inferior esquerdo que não respondiam ao clique. O pré-filtro antigo mediu só a elevação no log
+  e **não mediu se o bridge continuava vivo depois do clique**: lacuna corrigida em `react_panel.py`.
+- 04b (causa raiz, reproduzida): `bridge::forward()` bloqueava em `BufReader::lines()` após `focus`, porque o IPC
+  responde `OK` (sem o `.` que só o `list` envia) e a conexão ficava aberta. O main loop do shell congelava — botões
+  na tela, porém mortos. Prova crua: `/tmp/opencode/react_panel_trava_antes2.log` → `FALHA: bridge parou de responder
+  após o clique`, com a ordem de render já invertida. Correção: `stream.shutdown(Shutdown::Write)` após enviar o
+  comando (`bridge.rs`); depois, `/tmp/opencode/react_panel_trava_depois.log` → `bridge continuou respondendo` com
+  2 e 3 janelas. Nova instância aberta para o humano: compositor PID 53098 + shell PID 53151, 3 `foot`,
+  socket `wayland-aero-04b-fix`, log `/tmp/opencode/aero-04b-fix.log`. O agente NÃO encerrou; quem fecha é o humano.
 - 03: latência do IPC, taxa de perda e reconexão NÃO medidos (S4 do plano mestre, fora do cartão).
 - Latência de resize com WebKit real; latência de ponteiro; qualquer desempenho em GPU real (tudo foi em VM sem 3D).
 - Número de processos/PSS com `related-view` foi medido só em VM; ADR 0001 está "aceito provisoriamente".
@@ -196,12 +212,14 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- O que eu estava fazendo: 04b com pré-filtro verde; aguardando o "ok" visual do humano com a aplicação aberta.
-- O que funcionou: `python3 tests/integration/react_panel.py` → `OK: painel React listou 2 e 3 janelas; clique na
-  1ª linha elevou só ela`; `bash scripts/check.sh` green (EXIT=0, bun 9/9); bundle em `packages/panel/dist/app.js`.
+- O que eu estava fazendo: 04b NÃO validada — humano deu veredito visual negativo ("nada disso funcionou");
+  registrei a lacuna de medição em §7 e os 7 protocolos faltantes como requisito em §6 + rascunho `docs/tasks/05`.
+- O que funcionou (apenas pré-filtros, NÃO prova visual): `python3 tests/integration/react_panel.py` → `OK: painel
+  React listou 2 e 3 janelas; clique na 1ª linha elevou só ela`; `bash scripts/check.sh` green (bun 9/9).
 - Comando exato para reproduzir: `python3 tests/integration/react_panel.py` (sobe/encerra os próprios PIDs).
-- Próximo passo imediato (uma ação): humano olha o painel e clica; se der ok, fechar a aplicação e eu atualizo
-  STATE.md §3/§7 e comito 04b. NÃO executar 02d.
+- Próximo passo imediato (uma ação): **não corrigir no escuro**. Perguntar ao humano O QUE na tela falhou
+  (painel invisível? lista vazia? clique sem elevar?) e criar a medição que faltava antes de qualquer mudança.
+  Depois decidir 05 (compatibilidade) com o humano. NÃO executar 02d.
 - NÃO executar 02d (resize) nem tentar terceira abordagem sem autorização explícita.
 - Descobertas laterais em §6: IPC sem eventos (patches vêm do `list`), `send_close` assíncrono (teste com polling),
   arredondamento do foot, timer 1 ms sem ganho, `frame_resize_edges.py` intermitente, flake do S1.
