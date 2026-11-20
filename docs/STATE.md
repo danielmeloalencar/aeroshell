@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-19 · commit: <PREENCHER `git rev-parse --short HEAD`> · modo: SPIKE
+Última atualização: 2026-11-19 · commit: `feb21a0` (na entrada desta sessão; ver `git log --oneline -3`) · modo: SPIKE
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -25,13 +25,16 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
 - [x] Regra de validação visual com juiz humano (agente executa/deixa aberto, humano testa e fecha) — `AGENTS.md §0.9`,
       `§0.7` e checklist `§9`; prova: `git diff -- AGENTS.md`
 ## 4. Em andamento
-- [ ] Frame por janela com `window_id` próprio (antes usava `entries.first()`: ✕ da janela B fechava a A).
-      Implementado (protocols/xdg_shell.rs anuncia `frame_requested`; frame_webview.rs cria 1 WebView por window_id).
-      FALTA: rodar `tests/integration/frame_window_id.py` e ver OK. Verifique antes de assumir que passa.
+- [ ] **QUEBRADO** — frame por janela com `window_id` próprio. Código na branch `wip/window-id` (`f448dab`):
+      só 1 janela decorada, mover às vezes move a outra, resize não acompanha. O teste `frame_window_id.py` existe
+      nessa branch e NÃO foi rodado com sucesso. `master` (`bf44f22` + docs) é o estado bom: 1 janela decorada,
+      resize acompanha com atraso/fundo branco no gap. Cartão: `docs/tasks/02b-window-id.md`.
 ## 5. Próximas tarefas (ordem; cada uma tem um cartão em docs/tasks/)
-1. Passo 3 — Runtime Bun + SDK mínimo: `aero.windows.list/focus/close`, snapshot + patches sobre o IPC existente; tipos TS gerados de `aeroshell-ipc`.
-2. Passo 4 — Painel React (`useWindows()`), clique foca a janela certa; testar com 2 e 3 janelas.
-3. Decisão sobre modo produto (sua).
+0. `00-gate-confiavel.md` — `check.sh` verde 3× seguidas; S1 mata o PID que iniciou e imprime stderr.
+1. `02b-window-id.md` — 2 janelas decoradas, frame segue o resize; teste novo escrito primeiro.
+2. `03-runtime-bun-sdk.md` — `aero.windows.list/focus/close`, snapshot + patches; tipos TS gerados de `aeroshell-ipc`.
+3. Passo 4 — Painel React (`useWindows()`), clique foca a janela certa; testar com 2 e 3 janelas (cartão a criar).
+4. Decisão sobre modo produto (sua).
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
 - Atraso da decoração no resize (frame repinta depois do conteúdo; VM sem 3D piora). Causas baratas aplicadas
   (frame usa geometria commitada; fundo transparente). Timer de 20 ms no frame_webview.rs ainda existe (loop de despacho).
@@ -46,18 +49,22 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
 - `AGENTS.md` tem dois protocolos sobrepostos: novo `§0.1–0.9` (linhas 7–106) e antigo "Início/Foco/Fim" (linhas ~108–131).
   Conflito: linha 16 manda corrigir o gate se falhar; antiga linha ~94 manda parar. Linhas 3/135 chamam `progress.md` de fonte
   única, mas este arquivo é a fonte única. Há também um título órfão no fim. Limpeza em cartão próprio, NÃO feita aqui.
+- Flake do S1: `bun test` falhou uma vez com exit 1 em ~16 s sob carga; isolado passou em 7,67 s. Registrado, NÃO
+  descartado. Correção na tarefa 00. Reexecutar até passar é proibido pelo `AGENTS.md §0.5`.
 ## 7. Não medido / não validado (não trate como fato)
 - Latência de resize com WebKit real; latência de ponteiro; qualquer desempenho em GPU real (tudo foi em VM sem 3D).
 - Número de processos/PSS com `related-view` foi medido só em VM; ADR 0001 está "aceito provisoriamente".
 - Estabilidade do `ext-background-effect` (blur): não implementado; Smithay 0.7 não tem handler.
+- Nenhuma validação visual com juiz humano foi feita nestas duas últimas sessões (só documentação). Item visual só entra
+  na seção 3 com o "ok" do humano registrado, conforme `AGENTS.md §0.9`.
 ## 8. Ambiente
 Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), gtk4-layer-shell, Rust via rustup, Bun.
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- O que eu estava fazendo: acrescentei `AGENTS.md §0.9` (juiz humano para validação visual) + 1 linha no relatório `§0.7` e 1 no checklist `§9`.
-- O que funcionou: edição aplicada. `git diff -- AGENTS.md` contra HEAD inclui os 3 acréscimos desta tarefa **e** a reescrita do §0 feita pelo usuário (ainda não commitada). Nada foi descartado; nenhum código tocado.
-- Comando exato para reproduzir o estado atual: `git status --short && git log --oneline -3 && git diff -- AGENTS.md docs/STATE.md && bash scripts/check.sh`
-- Próximo passo imediato (uma ação): executar o bootstrap já aprovado — criar cartões `00`, `02b`, `03`; preencher o hash `3d52160`, o §4 (window_id quebrado na `wip/window-id`) e o §9; alinhar `RUNBOOK.md:12`; corrigir/commitar `docs/progress.md`.
-- Descobertas laterais registradas na seção 6 (não corrigidas): protocolos duplicados no `AGENTS.md` e `progress.md` ainda citado como fonte única.
+- O que eu estava fazendo: bootstrap do repositório — cartões `00`/`02b`/`03`, `STATE.md` honesto, `RUNBOOK` alinhado e `progress.md` corrigido.
+- O que funcionou: 3 cartões criados; §4 agora diz que o window_id está quebrado na `wip/window-id`; gate verde na entrada e na saída.
+- Comando exato para reproduzir o estado atual: `git status --short && git log --oneline -3 && ls docs/tasks/ && bash scripts/check.sh`
+- Próximo passo imediato (uma ação): abrir o cartão `docs/tasks/00-gate-confiavel.md` — fazer o S1 imprimir stderr e matar seu próprio PID, provar com falha induzida, 3 gates verdes seguidos.
+- Descobertas laterais registradas na seção 6 (não corrigidas): protocolos duplicados no `AGENTS.md`, `progress.md` citado como fonte única, flake do S1 não investigado.
  

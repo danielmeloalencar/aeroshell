@@ -1,4 +1,4 @@
-# Progresso
+# Histórico. O estado atual está em docs/STATE.md.
 
 ## F0 — spikes go/no-go
 

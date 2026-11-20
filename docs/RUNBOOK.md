@@ -9,8 +9,15 @@ Se um comando abaixo estiver desatualizado, CORRIJA este arquivo na mesma tarefa
 ```
 bash scripts/check.sh      # doctor + fmt --check + clippy -D warnings + cargo test --workspace + bun test
 ```
-Flakes conhecidos: `bun test` e o S1 nested falham às vezes sob carga; reexecute isolado e REGISTRE o flake.
- 
+Gate verde = TUDO verde numa única execução. Se `bun test` ou o S1 falhar, NÃO reexecute até passar: registre em
+`docs/STATE.md` §6 e abra a tarefa `00-gate-confiavel.md`. O S1 já falhou uma vez sob carga (exit 1, ~16 s) e passou
+isolado (7,67 s); isso está registrado, não descartado.
+
+## Validação visual (juiz humano)
+Para qualquer critério visual — arrastar/fechar janela, largura do painel, cursor, transparência, z-order — execute o
+comando abaixo, **deixe a aplicação aberta**, diga exatamente o que observar e peça o "ok" do humano. Quem fecha a
+aplicação é o humano, nunca o agente (AGENTS.md §0.9). Sem o "ok", o item fica em `STATE.md` §7 como não validado.
+
 ## Rodar o desktop nested (janela dentro do seu desktop)
 ```
 cargo build --workspace --examples
