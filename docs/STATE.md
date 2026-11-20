@@ -126,8 +126,10 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
 - [x] 02e (ADR aditivo): `docs/adr/0006-frame-resize-composicao-elastica.md` com causa raiz (pipeline WebKit),
   decisão, alternativas preteridas e gatilhos de reavaliação. Nenhum ADR aceito editado.
 ## 4. Em andamento
-- 02e EM ANDAMENTO: código, teste, ADR e gate prontos; **falta o juiz visual** (critério 4 do cartão).
-  Instância de validação será aberta com 2 `foot`; sem o "ok" do humano o item fica em §7 como não validado.
+- 02e EM ANDAMENTO: código, teste, ADR e gate prontos; **juiz visual relatou "ainda feio, não suave"** (critério 4
+  do cartão NÃO passou). Instância aberta com 2 `foot` (PID 63221, socket `wayland-aero-02e`); não encerrar.
+  Antes de mexer no código, é preciso definir o que "feio" significa (distorção da escala? degraus? descolamento
+  residual?) e abrir cartão novo — 9-slice e suavização estão FORA do cartão 02e.
 - 02c BLOQUEADA: duas abordagens tentadas e insuficientes no critério de pendência — (1) configure no motion e
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
@@ -228,9 +230,14 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   porque a variável só era lida sob `cfg(feature="bench")`. Corrigido renomeando para `_window_id`, sem `allow`
   nem desligar checagem; gate e clippy `--features bench` verdes depois.
 ## 7. Não medido / não validado (não trate como fato)
-- 02e: JUIZ VISUAL PENDENTE. Pré-filtro espacial passou (3×), mas "borda colada, sem correr atrás" só é fechado
-  pelo humano ao arrastar borda direita e canto inferior-direito, lento e rápido, em 2 `foot`. Sem o "ok", a
-  tarefa NÃO está concluída.
+- 02e: JUIZ VISUAL NEGATIVO/PARCIAL (2026-11-20, instância `wayland-aero-02e`, PID 63221 deixada aberta):
+  humano: **"o atraso está menor, porém ainda feio. Não está natural suave como Windows, GNOME, etc."**
+  Ou seja: a colagem espacial melhorou, mas a QUALIDADE VISUAL do arrasto não passou. o "ok" NÃO foi dado;
+  02e NÃO está concluída. Instância não foi fechada pelo agente.
+- 02e (LACUNA DE MEDIÇÃO): `frame_resize_glue.py` mede só geometria por frame (`target == content + extras`);
+  ele não mede distorção da escala, suavidade da cadência nem aparência de bordas/cantos. O relato do humano
+  prevalece sobre o teste automatizado (`AGENTS.md §0.4`). Criar medição que faltava antes de qualquer nova
+  mudança de código.
 - 02e: nenhuma conclusão de desempenho — medições feitas em VM sem 3D; GPU real não foi medida.
 - 04b: nada pendente — veredito visual POSITIVO do humano e causa do travamento registrados em §3. Instância da
   validação fechada pelo próprio humano; nenhum PID meu ficou órfão.
@@ -254,15 +261,15 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- O que eu estava fazendo: 02e com código, teste, ADR e gate prontos; instância de validação visual aberta com
-  2 `foot`, aguardando o "ok" do humano (critério 4). Não encerrar o processo — quem fecha é o humano.
+- O que eu estava fazendo: 02e com código, teste, ADR e gate prontos; juiz visual disse "atraso menor, porém ainda
+  feio, não suave como Windows/GNOME". Instância aberta (PID 63221, socket `wayland-aero-02e`); não encerrar.
 - O que funcionou: `python3 tests/integration/frame_resize_glue.py` → `VEREDITO: OK` em 3 execuções seguidas;
   4 vizinhos OK; `frame_resize_sync.py` segue FALHO; `bash scripts/check.sh` verde; clippy `--features bench` EXIT=0.
 - Comando exato para reproduzir (instância de validação): `cargo build --workspace --examples` e
   `LD_PRELOAD=libgtk4-layer-shell.so.0 target/debug/aeroshell-compositor --backend winit --socket wayland-aero-02e \
   --shell target/debug/examples/frame_webview --shell-env LD_PRELOAD=libgtk4-layer-shell.so.0 --command 'foot & foot'`.
-- Próximo passo imediato (uma ação): receber o "ok" visual do humano, registrar em §3/§7 e fechar 02e com commit.
-  Depois, SOMENTE com nova autorização, abrir cartão 02f.
+- Próximo passo imediato (uma ação): perguntar ao humano qual aspecto de "feio" predomina (distorção/degraus/
+  descolamento) e abrir um cartão novo — NÃO alterar 02e por conta própria. Depois: 02f só com autorização.
 - NÃO executar 02d, 02f, 02g, 02h, 02i nem 05 sem autorização explícita.
 - Descobertas laterais em §6: `list` mudou na tarefa 03 (parsers dos vizinhos corrigidos), amostra com
   `buffer=None`, `window_id` sob `cfg(bench)`, IPC sem eventos, arredondamento do foot, timer 1 ms sem ganho.
