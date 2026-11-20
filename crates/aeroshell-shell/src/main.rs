@@ -95,13 +95,10 @@ fn main() {
         host::install_transparent_css();
         let window = host::panel_window(app);
 
-        let manager = bridge::install(&window);
         let context = WebContext::new();
         scheme::install(&context);
-        let webview = WebView::builder()
-            .user_content_manager(&manager)
-            .web_context(&context)
-            .build();
+        let webview = WebView::builder().web_context(&context).build();
+        bridge::install(&window, &webview);
         webview.set_background_color(&gtk4::gdk::RGBA::new(0.0, 0.0, 0.0, 0.0));
         tracing::info!(
             alpha = webview.background_color().alpha(),

@@ -8,7 +8,33 @@ use webkit6::{URISchemeRequest, WebContext};
 pub const PANEL_URI: &str = "aero://panel/index.html";
 
 const SHELL_RESET_CSS: &str = include_str!("../../../assets/shell-reset.css");
+const PANEL_JS: &[u8] = include_bytes!("../../../packages/panel/dist/app.js");
 
+/// HTML do painel React (04b). O bundle é servido em `aero://panel/app.js`.
+const REACT_PANEL_HTML: &str = r##"
+<!doctype html>
+<html lang="pt-br">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="aero://shell-reset.css" />
+    <style>
+      #root { height: 100%; display: flex; align-items: center; padding: 0 8px;
+        color: #e8f6ff; font: 14px sans-serif; }
+      .aero-panel { display: flex; gap: 8px; width: 100%; }
+      .aero-row { display: flex; gap: 6px; align-items: center; height: 18px;
+        background: #23364a; color: #e8f6ff; border: 1px solid #4a6b8a;
+        border-radius: 4px; padding: 0 6px; font: inherit; cursor: pointer; }
+      .aero-id { opacity: 0.7; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script src="aero://panel/app.js"></script>
+  </body>
+</html>
+"##;
+
+/// Stub mantido para `?legacy` (testes S2/S3 de input region e overflow).
 const PANEL_HTML: &str = r##"
 <!doctype html>
 <html lang="pt-br">
@@ -81,8 +107,16 @@ pub fn install(context: &WebContext) {
         // casar pela URI completa evita confundir host e path.
         let uri = request.uri().map(|u| u.to_string()).unwrap_or_default();
         tracing::info!(%uri, "aero:// request");
+        let legacy = uri.contains("legacy");
+        if uri.contains("app.js") {
+            let stream = MemoryInputStream::from_bytes(&Bytes::from_static(PANEL_JS));
+            request.finish(&stream, PANEL_JS.len() as i64, Some("text/javascript"));
+            return;
+        }
         let (body, mime) = if uri.contains("shell-reset.css") {
             (SHELL_RESET_CSS, "text/css")
+        } else if uri.contains("/index.html") && !legacy {
+            (REACT_PANEL_HTML, "text/html")
         } else if uri.contains("/index.html") {
             (PANEL_HTML, "text/html")
         } else {

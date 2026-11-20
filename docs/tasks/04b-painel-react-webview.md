@@ -1,4 +1,4 @@
-# Tarefa 04b — Painel React na WebView: lista janelas e foca a clicada (RASCUNHO — aguarda "ok")
+# Tarefa 04b — Painel React na WebView: lista janelas e foca a clicada (executada; aguarda juiz visual)
 
 > Cartão de tarefa: um agente deve conseguir executá-la lendo só AGENTS.md, STATE.md, RUNBOOK.md e este arquivo.
 > Uma tarefa por sessão. Se o objetivo mudar no meio, PARE e pergunte.
@@ -18,9 +18,11 @@ No nested com 2 e depois 3 `foot`, o painel em React/TSX mostra id + título das
 ## Critério de aceite (comandos exatos + saída esperada)
 1. `bun build packages/panel/src/index.tsx --target=browser --outfile=packages/panel/dist/app.js` → bundle gerado;
    `aero://panel/index.html` + `aero://panel/app.js` servem o painel (sem navegação externa, sem dev server em produção).
-2. Pré-filtro `python3 tests/integration/react_panel.py` (escrever PRIMEIRO, ver falhando): com 2 e 3 `foot`,
-   o painel lista ids/títulos; um clique na 2ª linha inverte a ordem de render no log do compositor; as outras janelas
-   permanecem. Usar PIDs próprios, sem `pkill` genérico.
+2. Pré-filtro `python3 tests/integration/react_panel.py` (escrito PRIMEIRO, visto falhando com "bundle ausente"):
+   com 2 e 3 `foot`, o painel lista ids/títulos; um clique no 1º botão (a janela de trás) inverte a ordem de render
+   no log do compositor; as outras janelas permanecem. Usar PIDs próprios, sem `pkill` genérico.
+   Nota: o cartão previa a 2ª linha, mas ela já nasce na frente — clicar nela não mudaria a ordem e o teste daria
+   falso negativo. O 1º botão é a janela de trás, então prova a elevação.
 3. Teste manual (humano): abrir o nested do RUNBOOK com o painel e 2 `foot`, depois 3; verificar na tela que a lista
    acompanha abrir/fechar janela e que o clique eleva só a janela clicada. O agente deixa a aplicação **aberta** e pede
    o "ok"; quem fecha é o humano (AGENTS.md §0.9).

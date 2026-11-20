@@ -9,6 +9,14 @@
         "typescript": "^5",
       },
     },
+    "packages/panel": {
+      "name": "@aeroshell/panel",
+      "version": "0.0.0",
+      "dependencies": {
+        "react": "19.2.0",
+        "react-dom": "19.2.0",
+      },
+    },
     "packages/react": {
       "name": "@aeroshell/react",
       "version": "0.0.0",
@@ -19,6 +27,8 @@
     },
   },
   "packages": {
+    "@aeroshell/panel": ["@aeroshell/panel@workspace:packages/panel"],
+
     "@aeroshell/react": ["@aeroshell/react@workspace:packages/react"],
 
     "@types/bun": ["@types/bun@1.4.5", "", { "dependencies": { "bun-types": "1.4.5" } }, "sha512-DpgwNI9z0L1S0gtb45QLCWgwCUcMLnsHYMJHQvpNj7erGiCGBvpggltAIeARrtobNMKMuy0UP7i56tKKgwFs/Q=="],

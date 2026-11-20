@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-20 · tarefa ativa: 04a (concluída) · próxima: 04b (aprovada, não iniciada) · modo: SPIKE
+Última atualização: 2026-11-20 · tarefa ativa: 04b (pré-filtros verdes — aguarda juiz visual) · modo: SPIKE
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -88,8 +88,15 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   `bun.lock` versionado. Prova: `bun -e 'import("react")'` dentro de `packages/react` → `react real ok function`.
 - [x] 04a (critérios 2/3): `bun run generate:types` → `EXIT=0` e `git diff -- packages/sdk/src/generated` vazio;
   `bash scripts/check.sh` → `OK: scripts/check.sh passou` (EXIT=0), `bun test` 9 pass / 0 fail.
+- [x] 04b (pré-filtro): `python3 tests/integration/react_panel.py` → `OK: painel React listou 2 e 3 janelas;
+  clique na 1ª linha elevou só ela`. Escrito antes e visto falhando (`bundle ausente`). O teste prova: bundle servido
+  por `aero://panel/app.js`, lista `(id,título)` entregue via bridge, clique injetado no 1º botão inverte a ordem
+  de render (`wl_surface@3[1]` sobe) sem alterar as demais.
+- [x] 04b (gate): `bash scripts/check.sh` → `OK: scripts/check.sh passou`, `EXIT=0`, `bun test 9 pass / 0 fail`.
+  `rustfmt` corrigiu a formatação do bridge antes do gate final; gate verde numa única execução.
 ## 4. Em andamento
-- Nenhuma: 04a concluída; 04b aprovada pelo humano (inclui extensão do bridge), mas NÃO iniciada — uma tarefa por sessão.
+- 04b: **aguarda o "ok" visual do humano**. Aplicação deixada aberta (compositor PID 49681 + shell PID 49719,
+  socket `wayland-aero-04b-vis2`, 2 `foot`); o humano fecha. Sem o ok, o critério visual fica em §7.
 - 02c segue bloqueada (decisão pendente do humano).
 - 02c BLOQUEADA: duas abordagens tentadas e insuficientes no critério de pendência — (1) configure no motion e
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
@@ -98,10 +105,12 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
 1. `02d-frame-resize-diagnostico.md` — RASCUNHO criado, aguarda o "ok" do humano. Medir 5 cadências × 3
    execuções + juiz visual para decidir entre Plano B e redefinição de critério (decisão do humano em 2026-11-20:
    "Manter parcial, cartão novo").
-2. `04b-painel-react-webview.md` — APROVADA, não iniciada: painel TSX em `aero://`, bridge `focus` → IPC,
-   pré-filtro com 2 e 3 `foot` + juiz visual. Começar por ela na próxima sessão.
-3. Decisão sobre modo produto (sua).
+2. Decisão sobre modo produto (sua), **após** o juiz visual de 04b.
+3. (Opcional) corrigir S3: hoje falha no baseline por input region de layer surface — ver §6.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- 04b: `tests/integration/s3_input.sh` falha **também no baseline** (`0fc05e7`, worktree isolado): a input region
+  é aplicada (`rects=[(24,8,189,36)]`) mas o clique "dentro" dá `under=None`. Não é regressão do painel React;
+  S3 não está no gate. 04b não mexeu no teste (tentei `AERO_PANEL_LEGACY=1`, sem efeito, e revertei).
 - 03: o socket IPC é síncrico (request/response); não há eventos de map/unmap. Os patches do SDK são derivados da
   resposta `list` do compositor no `createAero.refresh()`. Streaming de eventos + codec MessagePack é o S4 do plano
   mestre (exige ADR e dependências novas) — NÃO foi feito aqui.
@@ -163,6 +172,10 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   pode ser reatribuído. O mapa `window_surfaces` é limpo no hook de destruição, mas ids monotonicamente estáveis
   (não reutilizados) ficam para uma tarefa futura se o cenário aparecer.
 ## 7. Não medido / não validado (não trate como fato)
+- 04b: **juiz visual PENDENTE**. O pré-filtro automatizado provou lista + clique no 1º botão, mas o humano ainda não
+  confirmou na tela que a lista aparece no painel e que o clique eleva só a janela clicada. Aplicação deixada aberta:
+  compositor PID 49681 + shell PID 49719, socket `wayland-aero-04b-vis2`, log `/tmp/opencode/aero-04b-visual2.log`.
+  O agente NÃO encerrou; quem fecha é o humano. Sem o "ok", 04b NÃO está concluída.
 - 03: latência do IPC, taxa de perda e reconexão NÃO medidos (S4 do plano mestre, fora do cartão).
 - Latência de resize com WebKit real; latência de ponteiro; qualquer desempenho em GPU real (tudo foi em VM sem 3D).
 - Número de processos/PSS com `related-view` foi medido só em VM; ADR 0001 está "aceito provisoriamente".
@@ -183,11 +196,12 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- O que eu estava fazendo: 04a CONCLUÍDA — adapter `useWindows()` com `useSyncExternalStore` e 3 testes Bun.
-- O que funcionou: `bun test packages/react` 3/3 (teste escrito e visto falhando antes); React 19.2.0 instalado e
-  `bun.lock` versionado; `generate:types` sem diffs; gate verde (bun 9/9).
-- Comando exato para reproduzir: `bun test packages/react` → `3 pass / 0 fail / 8 expect()`.
-- Próximo passo imediato (uma ação): executar 04b (painel React na WebView + bridge `focus`), já aprovada pelo humano.
+- O que eu estava fazendo: 04b com pré-filtro verde; aguardando o "ok" visual do humano com a aplicação aberta.
+- O que funcionou: `python3 tests/integration/react_panel.py` → `OK: painel React listou 2 e 3 janelas; clique na
+  1ª linha elevou só ela`; `bash scripts/check.sh` green (EXIT=0, bun 9/9); bundle em `packages/panel/dist/app.js`.
+- Comando exato para reproduzir: `python3 tests/integration/react_panel.py` (sobe/encerra os próprios PIDs).
+- Próximo passo imediato (uma ação): humano olha o painel e clica; se der ok, fechar a aplicação e eu atualizo
+  STATE.md §3/§7 e comito 04b. NÃO executar 02d.
 - NÃO executar 02d (resize) nem tentar terceira abordagem sem autorização explícita.
 - Descobertas laterais em §6: IPC sem eventos (patches vêm do `list`), `send_close` assíncrono (teste com polling),
   arredondamento do foot, timer 1 ms sem ganho, `frame_resize_edges.py` intermitente, flake do S1.
