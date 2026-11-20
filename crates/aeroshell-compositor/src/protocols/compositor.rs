@@ -36,7 +36,8 @@ impl CompositorHandler for AeroState {
 
     fn commit(&mut self, surface: &WlSurface) {
         // Medir o buffer REAL commitado pelo frame vs. o tamanho configurado.
-        #[cfg(debug_assertions)]
+        // `bench` também precisa dele para o diagnóstico FRAME_NEVER_DREW_AT_SIZE.
+        #[cfg(any(debug_assertions, feature = "bench"))]
         if self
             .associated_frames
             .iter()
@@ -77,6 +78,18 @@ impl CompositorHandler for AeroState {
                 "FRAME_BUFFER_COMMIT buffer={:?} expected={:?} ok={ok} t={t_nanos}",
                 committed, expected
             );
+            #[cfg(feature = "bench")]
+            if let (Some(buffer), Some((_, _, window_id, _))) = (
+                committed,
+                self.associated_frames
+                    .iter()
+                    .find(|(s, _, _, _)| s == surface),
+            ) {
+                // 02j: um commit com o buffer esperado quita o configure que
+                // esperava aquele tamanho, evitando falso NEVER_DREW_AT_SIZE.
+                self.frame_diag
+                    .note_buffer(*window_id, (buffer.0.max(0) as u32, buffer.1.max(0) as u32));
+            }
         }
         #[cfg(feature = "bench")]
         {

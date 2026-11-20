@@ -98,10 +98,19 @@ def send(line):
     s.sendall((line + "\n").encode())
     time.sleep(0.45)
 
-def last(pattern, since):
-    hits = [m for m in re.finditer(pattern, log())]
-    new = [m for m in hits if m.start() >= since]
-    return new
+def last(pattern, since, timeout_s=2.0):
+    """Espera a linha aparecer, em vez de depender de um sleep fixo.
+
+    Amostra preservada em /tmp/opencode/02j_neighbor_frame_resize_edges.log:
+    o log do compositor tinha `borda/canto -> resize Right`, mas o harness
+    reportou `detectado=None` (corrida entre `len(log())` e o processamento).
+    """
+    deadline = time.time() + timeout_s
+    while True:
+        new = [m for m in re.finditer(pattern, log()) if m.start() >= since]
+        if new or time.time() >= deadline:
+            return new
+        time.sleep(0.05)
 
 EDGE_POINTS = {
     "TopLeft":     (frame_origin[0] + 3,        frame_origin[1] + 3),
@@ -129,9 +138,23 @@ print("\n=== probes de borda/canto (motion -> press -> release; sem motion duran
 rows = []
 for edge, (x, y) in EDGE_POINTS.items():
     hit = probe(x, y)
-    mark_press = len(log())
-    send("button press")
-    det = last(r"borda/canto -> resize (\w+) serial=\d+", mark_press)
+    # Mesma corrida de foco vista em frame_configure_hygiene.py: o press pode
+    # chegar ao compositor sem foco e o WebView não registra o botão. Repetir
+    # REGISTRA cada tentativa; nenhuma amostra é descartada em silêncio.
+    tentativas = []
+    det = []
+    grab = []
+    for tentativa in range(1, 4):
+        mark_press = len(log())
+        send("button press")
+        det = last(r"borda/canto -> resize (\w+) serial=\d+", mark_press)
+        tentativas.append(f"{tentativa}={'ok' if det else 'sem deteccao'}")
+        if det:
+            break
+        send("button release")
+        time.sleep(0.1)
+        send(f"motion {x} {y}")
+    print(f"  {edge:11} tentativas de press: {', '.join(tentativas)}")
     send("button release")
     grab = last(r"resize do frame: grab iniciado.*?edges=(\w+)", mark_press)
     rows.append((edge, det[-1].group(1) if det else None, grab[-1].group(1) if grab else None,

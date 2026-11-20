@@ -138,9 +138,31 @@ def send(line, delay=MOTION_DELAY):
     time.sleep(delay)
 
 
+def grab_count():
+    return len(re.findall(r"grab iniciado", log()))
+
+
+# Corrida observada em /tmp/opencode/02j_hygiene_fixed3.log (amostra preservada):
+# o press chegou ao compositor, mas sem `set_focus` -> nenhum `FRAMEWEB: button`
+# e nenhum grab, logo zero motions no intervalo. Repetir o press REGISTRA cada
+# tentativa; nenhuma amostra é descartada em silêncio.
 send(f"motion {edge_x} {mid_y}")
-t_press = time.time_ns()
-send("button press", 0.1)
+t_press = None
+tentativas = []
+for tentativa in range(1, 4):
+    antes = grab_count()
+    t_press = time.time_ns()
+    send("button press", 0.1)
+    depois = grab_count()
+    tentativas.append((tentativa, depois - antes))
+    if depois > antes:
+        break
+    send("button release", 0)
+    time.sleep(0.1)
+    send(f"motion {edge_x} {mid_y}")
+print("tentativas de press: " + ", ".join(
+    f"{n}={'grab' if g else 'sem grab'}" for n, g in tentativas
+))
 for i in range(STEPS):
     send(f"motion {edge_x + (i + 1) * STEP_PX} {mid_y}")
 # O instante de soltura é o do sendall, NÃO depois do sleep do send(): o
@@ -200,11 +222,19 @@ if malformed:
     print("exemplos FRAME_CONFIGURE malformados: " + repr(malformed[:3]))
 
 during_motions = [t for t in motions if t_press <= t <= t_release]
-during_configs = [c for c in frame_configs if t_press <= c[0] <= t_release]
+# `source=final` é enviado pelo unset do grab, ou seja, DEPOIS do release.
+# O relógio do harness pode registrá-lo antes de t_release (corrida de
+# escalonamento: sendall()->time.time_ns()); classificar pelo rótulo semântico
+# evita contar o configure final como "durante o arrasto" (amostra crua:
+# /tmp/opencode/02j_hygiene_final1.log, ratio 0,357 com 1 'final' dentro).
+during_configs = [
+    c for c in frame_configs
+    if t_press <= c[0] <= t_release and c[4] != "final"
+]
 during_client = [c for c in client_configs if t_press <= c[0] <= t_release]
 finals = [
     c for c in frame_configs
-    if t_release <= c[0] <= t_release + 100_000_000 and c[4] == "final"
+    if t_release - 20_000_000 <= c[0] <= t_release + 100_000_000 and c[4] == "final"
 ]
 last_commit = [c for c in client_commits if c[0] <= t_release]
 last_size = last_commit[-1][1] if last_commit else None

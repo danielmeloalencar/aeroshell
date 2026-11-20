@@ -3,6 +3,10 @@
 mod aero_frame_protocol;
 mod backend;
 mod cli;
+// 02j: os testes puros precisam do módulo sem `bench`; o binário de produção
+// não pode compilá-lo (evita código morto e mantém as strings fora dele).
+#[cfg(any(test, feature = "bench"))]
+mod frame_diagnostics;
 #[cfg(feature = "bench")]
 mod frame_metrics;
 mod grab;
@@ -169,6 +173,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Shutdown gracioso dos filhos do supervisor. Em morte abrupta (SIGKILL/
     // crash) o PDEATHSIG configurado no spawn garante o término pelo kernel.
     supervisor.shutdown();
+    #[cfg(feature = "bench")]
+    data.state.flush_frame_diagnostics();
     #[cfg(feature = "bench")]
     data.state.log_frame_summary();
 

@@ -246,6 +246,21 @@ pub fn init_winit(
                                                         "RESIZE_GLUE t={t_nanos} window_id={_window_id} content={}x{} target={}x{} buffer={}x{} rescaled={rescaled}",
                                                         geo.size.w, geo.size.h, target.w, target.h, buffer.w, buffer.h,
                                                     );
+                                                    // 02j: duração do episódio de escala,
+                                                    // sem alterar o RescaleRenderElement.
+                                                    let max_scale = if buffer.w > 0 && buffer.h > 0 {
+                                                        (target.w as f64 / buffer.w as f64)
+                                                            .max(target.h as f64 / buffer.h as f64)
+                                                    } else {
+                                                        0.0
+                                                    };
+                                                    state.frame_diag.note_stretch(
+                                                        *_window_id,
+                                                        rescaled,
+                                                        max_scale,
+                                                        std::time::Instant::now(),
+                                                        crate::frame_diagnostics::now_ns(),
+                                                    );
                                                 }
                                                 if rescaled {
                                                     let scale = UtilsScale::from((

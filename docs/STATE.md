@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-20 · tarefa ativa: rascunho `02j` (diagnósticos nomeados; aguarda ok) · 02e/02f com juiz visual negativo · modo: SPIKE
+Última atualização: 2026-11-20 · tarefa `02j` executada e fechada no critério técnico (sem critério visual novo) · 02e/02f com juiz visual negativo · modo: SPIKE
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -145,7 +145,37 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   `/tmp/opencode/02f_check_final2.log`); `cargo clippy --workspace --all-targets --features bench -- -D warnings`
   → EXIT=0 (`02f_clippy_bench_final2.log`). Nenhum arquivo protegido alterado, nenhuma dependência nova,
   nenhum `unsafe`/`#[allow]`/`unwrap` novo.
+- [x] 02j (teste primeiro, ANTES de instrumentar): `cargo test -p aeroshell-compositor frame_diagnostics` →
+  4 falhas (`/tmp/opencode/02j_diag_baseline_unit2.log`); a 1ª versão do stub tinha 1 teste que passava
+  trivialmente, então a asserção `pending_count()==1` foi adicionada e o baseline refeito
+  (`02j_diag_baseline_unit.log`, preservado). Harness `tests/integration/frame_diagnostics.py` →
+  `VEREDITO: FALHA`, 0 linhas (`/tmp/opencode/02j_diag_baseline_harness.log`). Reprodução no arrasto real negado
+  da 02f: `FRAME_NEVER_ACKED=0`, `FRAME_NEVER_DREW_AT_SIZE=0`, `FRAME_STRETCH_ACTIVE=0`, só 1 `FRAME_TIMEOUT`
+  sintético em `/tmp/opencode/aero-02f-visual.log`.
+- [x] 02j (código): módulo puro `frame_diagnostics.rs` com 3 modos (`ACK_TIMEOUT` 100 ms, `DRAW_TIMEOUT`
+  300 ms, `STRETCH_IDLE` 500 ms), dedupe por serial e episódio; 5 pontos de observação em `aero_frame.rs`
+  (`note_configure`, `note_ack`), `compositor.rs` (`note_buffer`), `winit.rs` (`note_stretch`), `state.rs`
+  (`tick`/`flush`). `#[cfg(any(test, feature="bench"))]` no `mod` e `#[cfg(feature="bench")]` em
+  `now_ns`/`with_fault_injection`/`flush` — sem `#[allow]`, sem desligar checagem.
+- [x] 02j (prova, 3 execuções seguidas de cada fase, nenhuma amostra descartada):
+  `/tmp/opencode/02j_diag_final{1,2,3}.log` (normal) e `02j_diag_faults_final{1,2,3}.log` → 6× `VEREDITO: OK`,
+  0 linhas malformadas. Fase `faults` gera 1 `FRAME_NEVER_ACKED`, 1 `FRAME_NEVER_DREW_AT_SIZE` e 1
+  `FRAME_STRETCH_ACTIVE` por execução, todos com `serial`, `window_id`, `w/h`, `target_w/h`, `buffer_w/h`,
+  `waited_ms`, `start_t`, `end_t`, `duration_ms`, `max_scale`. Unitário: 4 passed
+  (`02j_unit_final.log`). Nenhuma conclusão de desempenho: VM sem 3D.
+- [x] 02j (vizinhos): `frame_resize_glue.py` 3× OK; `frame_configure_hygiene.py` 3× OK com retry de press
+  registrado (`02j_hygiene_retry{1,2,3}.log`, todas `1=grab`); `frame_resize_edges.py` 3× OK com retry e
+  polling (`02j_edges_retry{1,2,3}.log`); `frame_follows_resize.py`, `frame_buttons.py`, `frame_window_id.py`
+  → OK; `frame_resize_sync.py` → `VEREDITO: FALHA` (métrica antiga, inalterada).
+- [x] 02j (gate): `bash scripts/check.sh` → `OK: scripts/check.sh passou` (EXIT=0, bun 9 pass / 0 fail,
+  `/tmp/opencode/02j_check_final3.log`); `cargo clippy --workspace --all-targets --features bench -- -D warnings`
+  → EXIT=0 (`02j_clippy_bench_final.log`); `cargo fmt --all -- --check` → EXIT=0. Binário sem bench: build OK e
+  `strings target/debug/aeroshell-compositor | grep -cE 'FRAME_NEVER_ACKED|FRAME_NEVER_DREW_AT_SIZE|FRAME_STRETCH_ACTIVE'`
+  → **0**. Nenhuma dependência, protocolo, ADR ou arquivo protegido alterado.
 ## 4. Em andamento
+- 02j FECHADA no critério técnico (§3): instrumentação auditável, gate verde, 6× `VEREDITO: OK`, strings de
+  produção = 0. **Não há critério visual novo no cartão**; esta tarefa não muda aparência, geometria, cadência
+  nem textura. Só não pode ser chamada de "validada visualmente" — ver §7.
 - 02f NÃO CONCLUÍDA: código, teste, 3 repetições, vizinhos e gate prontos (§3), **mas o juiz visual negou**:
   humano: **"A moldura ainda está chegando atrasada"** (critério 5 do cartão FALHOU). Instância aberta com
   2 `foot` (PID 72480, socket `wayland-aero-02f`); não encerrada pelo agente. Aguardando decisão do humano —
@@ -157,10 +187,9 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. `02j` — RASCUNHO (`docs/tasks/02j-diagnosticos-nomeados.md`): diagnósticos nomeados do resize, sob `bench`:
-   `FRAME_NEVER_ACKED`, `FRAME_NEVER_DREW_AT_SIZE`, `FRAME_STRETCH_ACTIVE`. Criado a pedido do humano;
-   **NÃO executar sem o "ok"**. Motivo: 02e e 02f falharam no juiz visual sem nenhuma linha que dissesse
-   qual modo de falha ocorreu; o gate visual não é auditável.
+0. `02j` — CONCLUÍDA nesta sessão; os 3 modos nomeados (`FRAME_NEVER_ACKED`, `FRAME_NEVER_DREW_AT_SIZE`,
+   `FRAME_STRETCH_ACTIVE`) estão no log bench. Próximo passo natural (NÃO executado): correlacionar esses modos
+   com um novo arrasto REAL e só então decidir a causa da queixa visual de 02e/02f.
 1. `02f` — NÃO CONCLUÍDA: juiz visual negou ("moldura ainda chega atrasada"). NÃO reabrir sem novo pedido.
 2. `02g` — shell: fonte de fd GLib no `wl_display` mantendo timer de segurança de 50 ms; limite 1 h, reverter se piorar.
 3. `02h` — medições de ambiente VM (sem mudança de código): baseline / Skia CPU / GSK cairo / b+c, 3 repetições.
@@ -168,6 +197,35 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
 5. `05-compatibilidade-protocolos.md` — RASCUNHO; 7 mensagens do `foot` registradas em §6. NÃO executar sem ok.
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- 02j (DIVERGÊNCIA DO CARTÃO, registrada): o cartão pedia 14 passos/10 px a 50 ms; medi 0 `rescaled=true` com
+  esse gesto (`/tmp/opencode/02j_diag_normal2.log`) e o `FRAME_STRETCH_ACTIVE` não aparecia. Troquei o harness
+  para **40 passos/10 px a 10 ms** e o episódio de escala passou a existir (68 `rescaled=true` na 1ª rodada).
+  Nenhuma amostra foi descartada; a mudança é só do gesto sintético, não da política do compositor. Reverter se o
+  humano discordar.
+- 02j (INJEÇÃO BENCH): `AERO_DIAG_SUPPRESS_ACK_ONCE=1` e `AERO_DIAG_SUPPRESS_DRAW_ONCE=1` existem só com
+  `--features bench` e tornam determinísticos os 2 timeouts. A supressão de ack vale para TODOS os acks do
+  primeiro serial rastreado (a 1ª versão era consumida por um probe sintético sem entrada rastreada).
+- 02j (corrida de foco no press dos harnesses, pré-existente): sintoma — 1 em 3 execuções do
+  `frame_configure_hygiene.py` e 4/8 probes do `frame_resize_edges.py` recebiam o `button press` no compositor
+  mas sem `input_seat:...:set_focus`, logo nenhum `FRAMEWEB: button` e nenhum grab. Onde — `input.rs:79-117`
+  (`focus_on_press`) e `state.rs:159-164` (`window_for_id`); amostras cruas
+  `/tmp/hygiene-comp-81009.log` e `/tmp/edges-comp-80105.log`. Hipótese: `surface_under`/`window_for_id`
+  retornam vazio num intervalo de escalonamento. **Não corrigi o produto** (fora da tarefa): os harnesses agora
+  repetem o press e imprimem cada tentativa; nenhuma amostra descartada.
+- 02j (classificação de `source=final` no hygiene): o configure final é enviado no release, mas o relógio do
+  harness pode registrá-lo antes de `t_release`. Agora é classificado pelo rótulo semântico `source=final`, com
+  tolerância de 20 ms antes do release; amostra crua `/tmp/opencode/02j_hygiene_final1.log` (ratio 0,357).
+- 02j (RELATOS VISUAIS do humano, 2026-11-20, em tempo real durante os harnesses — AMBOS são dados):
+  (1) "o redimensionamento aparentemente resolveu visualmente, está a decoração seguindo muito bem o resize";
+  (2) logo depois: "notei um problema no acompanhamento da barra de título. Ela ficava piscando entre uma
+  posição antiga mais pra trás e a atual mais pra frente."; (3) refinamento imediato: **"só na barra de título,
+  a moldura está ok"**. O flicker é, portanto, localizado na titlebar — as bordas/cantos da moldura não piscam.
+  O 2º/3º são sintomas NOVOS e concretos, NÃO são confirmação de que o resize está bom. Nenhum dos relatos é a
+  confirmação formal de
+  `AGENTS.md §0.9` (não houve aplicação deixada aberta com instrução explícita). Hipótese (NÃO investigada):
+  o `RescaleRenderElement` da 02e pode estar desenhando o frame na geometria antiga por um frame antes do
+  configure seguinte; amostra não capturada. **NÃO reabrir 02e/02f nem mudar escala/debounce por conta própria** —
+  exige cartão novo e decisão do humano.
 - 04b: `tests/integration/s3_input.sh` falha **também no baseline** (`0fc05e7`, worktree isolado): a input region
   é aplicada (`rects=[(24,8,189,36)]`) mas o clique "dentro" dá `under=None`. Não é regressão do painel React;
   S3 não está no gate. 04b não mexeu no teste (tentei `AERO_PANEL_LEGACY=1`, sem efeito, e revertei).
@@ -297,6 +355,13 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   citada pelo humano. Registrado aqui como contexto; **ADR 0006 (aditivo/proposto) NÃO foi editado** — incluir
   prior art em ADR exige aprovação explícita (AGENTS.md §0.8 / §6).
 ## 7. Não medido / não validado (não trate como fato)
+- 02j: **confirmação visual formal PENDENTE.** O humano relatou em tempo real que a moldura está OK, mas viu
+  flicker **só na barra de título** (posição antiga ↔ atual) — registrado em §6. Não houve aplicação deixada
+  aberta com instrução explícita nem o "ok" de `AGENTS.md §0.9`. Como a 02j não muda aparência, o item fica
+  pendente apenas como contexto — NÃO escrever "validado visualmente" com base nesses relatos informais.
+  O flicker da titlebar NÃO foi medido, capturado nem investigado nesta sessão; precisa de cartão novo.
+  Instância 02f (PID 72480) continua aberta; quem fecha é o humano.
+- 02j: não medido — latência/qualidade visual em GPU real; os 3 modos nomeados foram medidos só em VM sem 3D.
 - 02f: JUIZ VISUAL NEGATIVO (2026-11-20): humano: **"A moldura ainda está chegando atrasada"**. O pré-filtro
   (razão 0,286, 14/14 configures no cliente, final no tamanho real) NÃO mediu o que a pessoa viu — mesma lacuna
   da 02e. 02f NÃO está concluída. Instância `wayland-aero-02f` (PID 72480) deixada aberta; aguarda decisão.
@@ -345,17 +410,22 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- O que eu estava fazendo: registrar o novo caminho do humano (prior art domicile + diagnósticos nomeados) e criar o
-  rascunho `docs/tasks/02j-diagnosticos-nomeados.md`. NENHUMA linha de código foi alterada nesta rodada.
-- Gate de partida (antes de qualquer edição, nesta sessão): `bash scripts/check.sh` → `CHECK_EXIT=0`,
-  `OK: scripts/check.sh passou`, bun 9 pass / 0 fail (`/tmp/opencode/02g_start_check.log`); `git status --short`
-  vazio no início; HEAD era `a3c2a05`.
-- Instância 02f ainda aberta e reprovada: compositor PID 72480, shell 72487, 2 `foot` 72556/72557, socket
+- O que eu estava fazendo: 02j CONCLUÍDA — 3 diagnósticos nomeados sob `bench`, teste primeiro visto falhando,
+  4 testes unitários OK, 6× harness OK, vizinhos OK, gate verde, strings de produção = 0. Árvore suja em `master`,
+  pronta para commit local (sem push). Nenhuma linha de produção muda aparência/geometria/cadência.
+- Gate final (após a última mudança de código): `bash scripts/check.sh` → `CHECK_EXIT=0`,
+  `OK: scripts/check.sh passou`, bun 9 pass / 0 fail (`/tmp/opencode/02j_check_final3.log`);
+  `cargo clippy --workspace --all-targets --features bench -- -D warnings` → EXIT=0; `cargo fmt --all -- --check`
+  → EXIT=0; `cargo build -p aeroshell-compositor` + strings → 0. Gate de partida também verde (`02g_start_check.log`).
+- Reproduzir o estado atual: `python3 tests/integration/frame_diagnostics.py normal` e `... faults` (cada um
+  espera ~10 s); provas em `/tmp/opencode/02j_diag_final{1,2,3}.log` e `02j_diag_faults_final{1,2,3}.log`.
+- Instância 02f ainda aberta e reprovada no juiz: compositor PID 72480, shell 72487, 2 `foot` 72556/72557, socket
   `wayland-aero-02f`, log `/tmp/opencode/aero-02f-visual.log`. Não encerrar — quem fecha é o humano.
-- Próximo passo imediato (uma ação): o HUMANO ler o cartão `02j` e responder "ok" (ou pedir ajuste). Só depois disso
-  escrever os testes primeiro, vê-los falhar e instrumentar. Sem "ok", NÃO executar.
-- NÃO reabrir 02e/02f, NÃO mexer no debounce/200 ms, NÃO mudar escala/move/conteúdo, NÃO editar ADR 0006,
-  NÃO encerrar PID 72480, NÃO executar 02d/02g/02h/02i/05/9-slice sem autorização nova.
-- Correções registradas em §6: cprussin é contribuidor (criador: Victor Berger/elinorbgr); prior art domicile é
+- NOVO dado do humano (2026-11-20): durante os arrastos viu flicker **só na barra de título** (posição antiga ↔
+  atual); a moldura está OK. Não foi medido nem investigado. Próximo passo (NÃO executar): humano decidir se abre
+  cartão novo para esse flicker; não reabrir 02e/02f por conta própria.
+- NÃO mexer no debounce/200 ms, NÃO mudar escala/move/conteúdo, NÃO editar ADR 0006, NÃO encerrar PID 72480,
+  NÃO executar 02d/02g/02h/02i/05/9-slice sem autorização nova. Sem push.
+- Contexto preservado em §6: cprussin é contribuidor (criador: Victor Berger/elinorbgr); prior art domicile é
   contexto, não receita para copiar Chromium/CEF.
  

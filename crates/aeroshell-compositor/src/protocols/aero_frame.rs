@@ -84,6 +84,15 @@ impl AeroState {
             .copied()
             .unwrap_or_default();
         let total = (content.0 + geo.extra_w(), content.1 + geo.extra_h());
+        #[cfg(feature = "bench")]
+        self.frame_diag.note_configure(
+            window_id,
+            serial,
+            (content.0.max(0) as u32, content.1.max(0) as u32),
+            (total.0.max(0) as u32, total.1.max(0) as u32),
+            Instant::now(),
+            crate::frame_diagnostics::now_ns(),
+        );
         if let Some(layer) = self
             .frame_layer_surfaces
             .iter()
@@ -491,13 +500,19 @@ impl Dispatch<AeroFrameV1, u32> for AeroState {
                     let (_, started) = state.pending_configures.remove(pos);
                     let ack_ms = started.elapsed().as_secs_f64() * 1000.0;
                     #[cfg(feature = "bench")]
-                    if let Some(probe) = state.frame_probes.iter_mut().find(|p| p.serial == serial)
                     {
-                        probe.acked = true;
-                        eprintln!(
-                            "FRAME_ACK serial={serial} window_id={} ack_ms={ack_ms:.3}",
-                            probe.window_id
-                        );
+                        // 02j: o ack conta mesmo para configures REAIS, que não
+                        // têm entrada em `frame_probes`.
+                        state.frame_diag.note_ack(serial);
+                        if let Some(probe) =
+                            state.frame_probes.iter_mut().find(|p| p.serial == serial)
+                        {
+                            probe.acked = true;
+                            eprintln!(
+                                "FRAME_ACK serial={serial} window_id={} ack_ms={ack_ms:.3}",
+                                probe.window_id
+                            );
+                        }
                     }
                     tracing::info!(serial, ack_ms, "ack_configure");
                 }

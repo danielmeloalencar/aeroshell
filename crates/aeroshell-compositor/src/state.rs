@@ -116,6 +116,9 @@ pub struct AeroState {
     /// Amostras de configure → commit (serial, ms) para agregação no fim.
     #[cfg(feature = "bench")]
     pub frame_commit_samples: Vec<(u32, f64)>,
+    /// 02j: diagnósticos nomeados (eventos e linhas de log só sob `bench`).
+    #[cfg(feature = "bench")]
+    pub frame_diag: crate::frame_diagnostics::FrameDiagnostics,
     /// Último serial de botão recebido (validação de move/resize).
     pub last_button_serial: Option<u32>,
     /// window_id sob resize ativo. O commit-hook não reconfigura a decoração
@@ -232,6 +235,11 @@ impl AeroState {
             frame_probes: Vec::new(),
             #[cfg(feature = "bench")]
             frame_commit_samples: Vec::new(),
+            #[cfg(feature = "bench")]
+            frame_diag: crate::frame_diagnostics::FrameDiagnostics::with_fault_injection(
+                std::env::var("AERO_DIAG_SUPPRESS_ACK_ONCE").is_ok(),
+                std::env::var("AERO_DIAG_SUPPRESS_DRAW_ONCE").is_ok(),
+            ),
             last_button_serial: None,
             resize_grab_active: None,
             shell_manager: None,
@@ -382,6 +390,25 @@ impl AeroState {
                     probe.configured_at.elapsed().as_millis()
                 );
             }
+        }
+        // 02j: timeouts dos configures REAIS (não apenas dos probes sintéticos)
+        // e fechamento de episódios de escala ociosos.
+        let now = Instant::now();
+        self.frame_diag
+            .tick(now, crate::frame_diagnostics::now_ns());
+        for event in self.frame_diag.drain_events() {
+            eprintln!("{}", event.render());
+        }
+    }
+
+    /// 02j: no shutdown, fecha o último episódio de escala ainda aberto.
+    #[cfg(feature = "bench")]
+    pub fn flush_frame_diagnostics(&mut self) {
+        let now = Instant::now();
+        self.frame_diag
+            .flush(now, crate::frame_diagnostics::now_ns());
+        for event in self.frame_diag.drain_events() {
+            eprintln!("{}", event.render());
         }
     }
 }
