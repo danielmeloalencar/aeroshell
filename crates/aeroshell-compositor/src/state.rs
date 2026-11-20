@@ -38,6 +38,10 @@ pub struct FrameGeometry {
     pub insets: (i32, i32, i32, i32),
     /// left, top, right, bottom
     pub shadow: (i32, i32, i32, i32),
+    /// 02l: larguras (esquerda, direita) das zonas da titlebar que o 9-slice
+    /// NÃO estica em X. Declaradas pelo shell via `set_titlebar_slices`;
+    /// (0, 0) mantém o comportamento anterior da 02k.
+    pub titlebar_slices: (i32, i32),
 }
 
 impl FrameGeometry {

@@ -217,7 +217,9 @@ SLICE_RE = re.compile(
     r"target=(\d+)x(\d+) rescaled=(true|false) "
     r"insets=(\d+),(\d+),(\d+),(\d+) "
     r"edge_l=([0-9.]+) edge_r=([0-9.]+) title_h=([0-9.]+) "
-    r"slice_scale_x=([0-9.]+) slice_scale_y=([0-9.]+)"
+    r"slice_scale_x=([0-9.]+) slice_scale_y=([0-9.]+) "
+    r"title_n=(\d+) title_slices=(\d+),(\d+) "
+    r"title_left_w=([0-9.]+) title_gap_w=([0-9.]+) title_right_w=([0-9.]+)"
 )
 
 slices = []
@@ -236,7 +238,13 @@ for l in text.splitlines():
         "rescaled": g[6] == "true",
         "insets": tuple(int(x) for x in g[7:11]),
         "edge_l": float(g[11]), "edge_r": float(g[12]), "title_h": float(g[13]),
-        "sx": float(g[14]), "sy": float(g[15]), "raw": l,
+        "sx": float(g[14]), "sy": float(g[15]),
+        "title_n": int(g[16]),
+        "title_slices": (int(g[17]), int(g[18])),
+        "title_left_w": float(g[19]),
+        "title_gap_w": float(g[20]),
+        "title_right_w": float(g[21]),
+        "raw": l,
     })
 
 slice_during = [s for s in slices if s["t"] < release_ns and s["rescaled"]]
@@ -277,6 +285,58 @@ else:
             f"ex.: {', '.join(edge_bad[:3])})"
         )
 
+    # --- 02l: texto e botões da titlebar não podem ser esticados ------------
+    # O compositor informa quantas fatias compõem a barra, as larguras
+    # declaradas pelo shell (texto, botões) e as larguras DESTINO de cada
+    # zona. Baseline 02k: title_n=1 e a zona esquerda cresce com slice_sx.
+    declared = {s["title_slices"] for s in slice_during}
+    left_bad = [
+        f"t={s['t']} title_left_w={s['title_left_w']:.2f}!={s['title_slices'][0]}"
+        for s in slice_during
+        if abs(s["title_left_w"] - s["title_slices"][0]) > EDGE_TOL
+    ]
+    right_bad = [
+        f"t={s['t']} title_right_w={s['title_right_w']:.2f}!={s['title_slices'][1]}"
+        for s in slice_during
+        if abs(s["title_right_w"] - s["title_slices"][1]) > EDGE_TOL
+    ]
+    total_bad = []
+    for s in slice_during:
+        want = s["target"][0] - s["insets"][0] - s["insets"][2]
+        got = s["title_left_w"] + s["title_gap_w"] + s["title_right_w"]
+        if abs(got - want) > 1:
+            total_bad.append(f"t={s['t']} soma={got:.2f}!={want}")
+    gaps = [s["title_gap_w"] for s in slice_during]
+    print(f"titlebar: n={ {s['title_n'] for s in slice_during} } "
+          f"declaradas={declared} "
+          f"left=[{min(s['title_left_w'] for s in slice_during):.2f},"
+          f"{max(s['title_left_w'] for s in slice_during):.2f}] "
+          f"right=[{min(s['title_right_w'] for s in slice_during):.2f},"
+          f"{max(s['title_right_w'] for s in slice_during):.2f}] "
+          f"gap=[{min(gaps):.2f},{max(gaps):.2f}]")
+    if {s["title_n"] for s in slice_during} != {3}:
+        problems.append(
+            f"titlebar composta por { {s['title_n'] for s in slice_during} } "
+            f"fatias (esperado 3: texto, intervalo, botões)"
+        )
+    if len(declared) != 1 or min(declared) == (0, 0):
+        problems.append(f"linhas de corte da titlebar ausentes/inconsistentes: {declared}")
+    if left_bad:
+        problems.append(
+            f"zona do texto esticada ({len(left_bad)} amostras; ex.: {left_bad[:2]})"
+        )
+    if right_bad:
+        problems.append(
+            f"zona dos botões esticada ({len(right_bad)} amostras; ex.: {right_bad[:2]})"
+        )
+    if total_bad:
+        problems.append(
+            f"soma das zonas != largura alvo ({len(total_bad)} amostras; "
+            f"ex.: {total_bad[:2]})"
+        )
+    if max(gaps) - min(gaps) < 1:
+        problems.append("o intervalo esticável não acompanhou o resize")
+
     # Snap = salto descontínuo da escala das fatias entre frames consecutivos.
     jumps = []
     for a, b in zip(slice_during, slice_during[1:]):
@@ -313,6 +373,65 @@ if not compose_during:
 elif any(n != 9 for _, n in compose_during):
     bad = [(t, n) for t, n in compose_during if n != 9][:3]
     problems.append(f"composição com != 9 fatias: {bad}")
+
+# Geometria REAL dos elementos compostos (não reusa os valores que o próprio
+# compositor calculou para RESIZE_SLICE). As 3 primeiras fatias são o topo.
+GEOM_RE = re.compile(
+    r"SLICE_GEOM t=(\d+) window_id=(\d+) i=(\d+) "
+    r"x=(-?\d+) y=(-?\d+) w=(\d+) h=(\d+)"
+)
+geoms = {}
+malformed_geom = []
+for l in text.splitlines():
+    if "SLICE_GEOM " not in l:
+        continue
+    m = GEOM_RE.search(l)
+    if not m:
+        malformed_geom.append(l)
+        continue
+    t, _wid, idx, x, y, w, h = (int(v) for v in m.groups())
+    geoms.setdefault(t, {})[idx] = (x, y, w, h)
+slice_by_t = {s["t"]: s for s in slice_during}
+geom_during = {t: g for t, g in geoms.items() if t < release_ns and t in slice_by_t}
+print(f"linhas SLICE_GEOM={sum(len(g) for g in geoms.values())} malformadas="
+      f"{len(malformed_geom)} frames_durante_grab={len(geom_during)}")
+if not geom_during:
+    problems.append("nenhuma linha SLICE_GEOM durante o grab")
+else:
+    geom_bad = []
+    for t, g in sorted(geom_during.items()):
+        if len(g) != 9:
+            geom_bad.append(f"t={t} n_geoms={len(g)}")
+            continue
+        s = slice_by_t[t]
+        # As fatias de canto incluem o inset lateral (6 px), declarado à parte.
+        want_l = s["insets"][0] + s["title_slices"][0]
+        want_r = s["insets"][2] + s["title_slices"][1]
+        w0, w1, w2 = g[0][2], g[1][2], g[2][2]
+        if abs(w0 - want_l) > 1:
+            geom_bad.append(f"t={t} texto w={w0}!={want_l}")
+        if abs(w2 - want_r) > 1:
+            geom_bad.append(f"t={t} botoes w={w2}!={want_r}")
+        if abs(w1 - s["title_gap_w"]) > 1:
+            geom_bad.append(f"t={t} intervalo w={w1}!={s['title_gap_w']:.0f}")
+        if g[1][0] != g[0][0] + w0 or g[2][0] != g[1][0] + w1:
+            geom_bad.append(f"t={t} topo nao contiguo: {g[0][0]},{g[1][0]},{g[2][0]}")
+        if len({g[i][1] for i in range(3)}) != 1 or any(g[i][3] != s["insets"][1] for i in range(3)):
+            geom_bad.append(f"t={t} altura do topo inconsistente")
+        # As 9 fatias têm de cobrir exatamente o retângulo alvo. Sem o
+        # deslocamento das bordas direita/inferior, elas ficam nas coordenadas
+        # do buffer congelado (1292x836) e o canto some (VM: output_scale=1).
+        xmax = max(g[i][0] + g[i][2] for i in range(9))
+        ymax = max(g[i][1] + g[i][3] for i in range(9))
+        if xmax != g[0][0] + s["target"][0]:
+            geom_bad.append(f"t={t} borda direita em x={xmax}, alvo={g[0][0] + s['target'][0]}")
+        if ymax != g[0][1] + s["target"][1]:
+            geom_bad.append(f"t={t} borda inferior em y={ymax}, alvo={g[0][1] + s['target'][1]}")
+    if geom_bad:
+        problems.append(
+            f"geometria real das fatias errada ({len(geom_bad)}; "
+            f"ex.: {', '.join(geom_bad[:3])})"
+        )
 
 if problems:
     print("FALHA: " + "; ".join(problems[:5]), file=sys.stderr)

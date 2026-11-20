@@ -431,6 +431,17 @@ impl Dispatch<AeroFrameV1, u32> for AeroState {
                 }
                 tracing::info!(window_id = *window_id, left, top, right, bottom, "sombra");
             }
+            FrameRequest::SetTitlebarSlices { left, right } => {
+                if let Some((surface, _, _, _)) = state
+                    .associated_frames
+                    .iter()
+                    .find(|(_, _, id, _)| id == window_id)
+                {
+                    let geo = state.frame_geometries.entry(surface.clone()).or_default();
+                    geo.titlebar_slices = (left.max(0), right.max(0));
+                }
+                tracing::info!(window_id = *window_id, left, right, "fatias da titlebar");
+            }
             FrameRequest::Move { seat, serial } => {
                 let _ = seat;
                 if crate::grab::start_geometry_grab(state, *window_id, serial, None) {

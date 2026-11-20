@@ -136,6 +136,19 @@
       <arg name="bottom" type="int"/>
     </request>
 
+    <request name="set_titlebar_slices">
+      <description summary="larguras protegidas da titlebar durante o resize">
+        Estado pendente; vale no próximo wl_surface.commit. Define as larguras,
+        em px lógicos, das zonas da titlebar que NÃO devem ser esticadas: a da
+        esquerda (título) e a da direita (botões). São medidas a partir das
+        bordas interna dos insets laterais. O compositor estica somente o
+        intervalo entre as duas zonas. (0, 0) preserva o comportamento de
+        esticar a barra inteira, para clientes que não declaram nada.
+      </description>
+      <arg name="left" type="int"/>
+      <arg name="right" type="int"/>
+    </request>
+
     <request name="move">
       <description summary="inicia grab de mover">
         O compositor valida que o serial corresponde a um clique de botão

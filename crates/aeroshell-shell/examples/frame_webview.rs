@@ -46,6 +46,8 @@ const TITLEBAR_H: i32 = 30;
 const BORDER: i32 = 6;
 /// Largura reservada à direita da titlebar para botões (não dispara move).
 const RIGHT_CONTROLS: i32 = 96;
+/// 02l: largura fixa da zona do título, declarada ao compositor.
+const TITLE_TEXT_W: i32 = 120;
 
 struct FrameEntry {
     frame: AeroFrameV1,
@@ -311,7 +313,11 @@ const TITLEBAR_HTML: &str = r#"<!doctype html>
     border:6px solid #2b2b2b;border-top:0;}
   #bar{position:absolute;top:0;left:0;right:0;height:30px;display:flex;
     align-items:center;background:#2b2b2b;color:#eee;}
-  #title{flex:1;padding:0 8px;font-size:13px;white-space:nowrap;overflow:hidden;}
+  /* 02l: largura FIXA do texto; o intervalo até os botões fica em branco e
+     é a única parte da barra que o compositor pode esticar no resize. */
+  #title{flex:0 0 120px;width:120px;padding:0 8px;font-size:13px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  #max{margin-left:auto;}
   button{width:30px;height:30px;border:0;background:transparent;color:#eee;
     font-size:14px;cursor:pointer;}
   button:hover{background:#444;}
@@ -343,6 +349,7 @@ fn associate_frame(
         let manager = rt.state.manager.clone().expect("manager ausente");
         let frame = manager.associate(&wl_surface, window_id, &qh, ());
         frame.set_insets(BORDER, TITLEBAR_H, BORDER, BORDER);
+        frame.set_titlebar_slices(TITLE_TEXT_W, RIGHT_CONTROLS);
         let _ = rt.queue.flush();
         rt.state.entries.push(FrameEntry {
             frame,
@@ -352,7 +359,8 @@ fn associate_frame(
             total: (0, 0),
             window_id,
         });
-        eprintln!("FRAMEWEB: associate(window_id={window_id}) + set_insets({BORDER},{TITLEBAR_H},{BORDER},{BORDER})");
+        eprintln!("FRAMEWEB: associate(window_id={window_id}) + set_insets({BORDER},{TITLEBAR_H},{BORDER},{BORDER}) \
+                   + set_titlebar_slices({TITLE_TEXT_W},{RIGHT_CONTROLS})");
     });
 }
 

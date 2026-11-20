@@ -271,14 +271,49 @@ pub fn init_winit(
                                                 let slice_sx = dst_mid_w as f64 / src_mid_w as f64;
                                                 let slice_sy = dst_mid_h as f64 / src_mid_h as f64;
                                                 let delta = SlicePoint::new(loc.x - origin.x, loc.y - origin.y);
+                                                // 02l: zonas protegidas declaradas pelo shell.
+                                                // Somente o intervalo entre elas estica em X;
+                                                // texto e botões mantêm a largura do buffer.
+                                                let title_slices = (
+                                                    fgeo.titlebar_slices.0.max(0),
+                                                    fgeo.titlebar_slices.1.max(0),
+                                                );
+                                                let tl = (title_slices.0 as f64 * output_scale).round() as i32;
+                                                let tr = (title_slices.1 as f64 * output_scale).round() as i32;
+                                                // Nunca deixar o intervalo sem pixels: o Crop
+                                                // de uma fatia vazia é descartado.
+                                                let tl = tl.min((src_mid_w - 1).max(0));
+                                                let tr = tr.min((src_mid_w - tl - 1).max(0));
+                                                let src_gap_w = (src_mid_w - tl - tr).max(1);
+                                                let dst_gap_w = (dst_mid_w - tl - tr).max(1);
+                                                let gap_sx = dst_gap_w as f64 / src_gap_w as f64;
+                                                #[cfg(feature = "bench")]
+                                                let title_n = 3;
+                                                #[cfg(feature = "bench")]
+                                                let title_left_w = tl;
+                                                #[cfg(feature = "bench")]
+                                                let title_gap_w = dst_gap_w;
+                                                #[cfg(feature = "bench")]
+                                                let title_right_w = tr;
+                                                // Fatias presas à borda direita/inferior do
+                                                // alvo precisam do deslocamento da diferença
+                                                // buffer->alvo; as presas à esquerda/topo usam
+                                                // o deslocamento comum.
+                                                let shift_x = dst_mid_w - src_mid_w;
+                                                let shift_y = dst_mid_h - src_mid_h;
+                                                let delta_rx = SlicePoint::new(delta.x + shift_x, delta.y);
+                                                let delta_by = SlicePoint::new(delta.x, delta.y + shift_y);
+                                                let delta_rb = SlicePoint::new(delta.x + shift_x, delta.y + shift_y);
+                                                #[cfg(feature = "bench")]
+                                                let frame_t_nanos;
                                                 #[cfg(feature = "bench")]
                                                 {
-                                                    let t_nanos = std::time::SystemTime::now()
+                                                    frame_t_nanos = std::time::SystemTime::now()
                                                         .duration_since(std::time::UNIX_EPOCH)
                                                         .map(|d| d.as_nanos())
                                                         .unwrap_or(0);
                                                     eprintln!(
-                                                        "RESIZE_GLUE t={t_nanos} window_id={_window_id} content={}x{} target={}x{} buffer={}x{} rescaled={rescaled}",
+                                                        "RESIZE_GLUE t={frame_t_nanos} window_id={_window_id} content={}x{} target={}x{} buffer={}x{} rescaled={rescaled}",
                                                         geo.size.w, geo.size.h, target.w, target.h, buffer.w, buffer.h,
                                                     );
                                                     // 02j: duração do episódio de escala,
@@ -305,15 +340,20 @@ pub fn init_winit(
                                                         (1.0, 1.0)
                                                     };
                                                     eprintln!(
-                                                        "RESIZE_SLICE t={t_nanos} window_id={_window_id} \
+                                                        "RESIZE_SLICE t={frame_t_nanos} window_id={_window_id} \
                                                          buf={}x{} target={}x{} rescaled={rescaled} \
                                                          insets={},{},{},{} edge_l={} \
                                                          edge_r={} title_h={} \
-                                                         slice_scale_x={sx:.4} slice_scale_y={sy:.4}",
+                                                         slice_scale_x={sx:.4} slice_scale_y={sy:.4} \
+                                                         title_n={title_n} title_slices={},{} \
+                                                         title_left_w={title_left_w} \
+                                                         title_gap_w={title_gap_w} \
+                                                         title_right_w={title_right_w}",
                                                         buffer.w, buffer.h, target.w, target.h,
                                                         fgeo.insets.0, fgeo.insets.1,
                                                         fgeo.insets.2, fgeo.insets.3,
                                                         fgeo.insets.0, fgeo.insets.2, fgeo.insets.1,
+                                                        title_slices.0, title_slices.1,
                                                     );
                                                 }
                                                 if rescaled {
@@ -326,29 +366,39 @@ pub fn init_winit(
                                                     let rect = |x: i32, y: i32, w: i32, h: i32| {
                                                         SliceRect::new(SlicePoint::new(x, y), (w, h).into())
                                                     };
-                                                    // (crop na origem, âncora do rescale, escala)
+                                                    // (crop na origem, âncora do rescale,
+                                                    //  escala, deslocamento final)
                                                     let specs: [(
                                                         SliceRect,
                                                         SlicePoint,
                                                         (f64, f64),
+                                                        SlicePoint,
                                                     ); 9] = [
-                                                        // 4 cantos: sem escala.
-                                                        (rect(x0, y0, l, t), SlicePoint::new(x0, y0), (1.0, 1.0)),
-                                                        (rect(x2, y0, r, t), SlicePoint::new(x2, y0), (1.0, 1.0)),
-                                                        (rect(x0, y2, l, b), SlicePoint::new(x0, y2), (1.0, 1.0)),
-                                                        (rect(x2, y2, r, b), SlicePoint::new(x2, y2), (1.0, 1.0)),
+                                                        // Topo: texto e botões NÃO esticam;
+                                                        // só o intervalo entre eles muda.
+                                                        (rect(x0, y0, l + tl, t), SlicePoint::new(x0, y0), (1.0, 1.0), delta),
+                                                        (rect(x1 + tl, y0, src_gap_w, t), SlicePoint::new(x1 + tl, y0), (gap_sx, 1.0), delta),
+                                                        (rect(x2 - tr, y0, r + tr, t), SlicePoint::new(x2 - tr, y0), (1.0, 1.0), delta_rx),
+                                                        // 2 cantos inferiores: sem escala.
+                                                        (rect(x0, y2, l, b), SlicePoint::new(x0, y2), (1.0, 1.0), delta_by),
+                                                        (rect(x2, y2, r, b), SlicePoint::new(x2, y2), (1.0, 1.0), delta_rb),
                                                         // left/right: largura fixa, altura estica.
-                                                        (rect(x0, y1, l, src_mid_h), SlicePoint::new(x0, y1), (1.0, slice_sy)),
-                                                        (rect(x2, y1, r, src_mid_h), SlicePoint::new(x2, y1), (1.0, slice_sy)),
-                                                        // titlebar/base: altura fixa, largura estica.
-                                                        (rect(x1, y0, src_mid_w, t), SlicePoint::new(x1, y0), (slice_sx, 1.0)),
-                                                        (rect(x1, y2, src_mid_w, b), SlicePoint::new(x1, y2), (slice_sx, 1.0)),
+                                                        (rect(x0, y1, l, src_mid_h), SlicePoint::new(x0, y1), (1.0, slice_sy), delta),
+                                                        (rect(x2, y1, r, src_mid_h), SlicePoint::new(x2, y1), (1.0, slice_sy), delta_rx),
+                                                        // base: altura fixa, largura estica.
+                                                        (rect(x1, y2, src_mid_w, b), SlicePoint::new(x1, y2), (slice_sx, 1.0), delta_by),
                                                         // centro (transparente sob o cliente).
-                                                        (rect(x1, y1, src_mid_w, src_mid_h), SlicePoint::new(x1, y1), (slice_sx, slice_sy)),
+                                                        (rect(x1, y1, src_mid_w, src_mid_h), SlicePoint::new(x1, y1), (slice_sx, slice_sy), delta),
                                                     ];
                                                     #[cfg(feature = "bench")]
                                                     let before = elements.len();
-                                                    for (crop, anchor, (sxa, sya)) in specs {
+                                                    #[cfg(feature = "bench")]
+                                                    let mut slice_idx = 0usize;
+                                                    for (crop, anchor, (sxa, sya), move_delta) in specs {
+                                                        #[cfg(feature = "bench")]
+                                                        {
+                                                            slice_idx += 1;
+                                                        }
                                                         let slice = with_states(frame_surface, |states| {
                                                             WaylandSurfaceRenderElement::from_surface(
                                                                 renderer, frame_surface, states, f,
@@ -367,8 +417,21 @@ pub fn init_winit(
                                                             cropped, anchor, UtilsScale::from((sxa, sya)),
                                                         );
                                                         let moved = RelocateRenderElement::from_element(
-                                                            scaled, delta, Relocate::Relative,
+                                                            scaled, move_delta, Relocate::Relative,
                                                         );
+                                                        // 02l: geometria REAL do elemento
+                                                        // composto — não é o valor calculado
+                                                        // para a instrumentação de cima.
+                                                        #[cfg(feature = "bench")]
+                                                        {
+                                                            let g = moved.geometry(es);
+                                                            eprintln!(
+                                                                "SLICE_GEOM t={frame_t_nanos} window_id={_window_id} \
+                                                                 i={} x={} y={} w={} h={}",
+                                                                slice_idx - 1,
+                                                                g.loc.x, g.loc.y, g.size.w, g.size.h,
+                                                            );
+                                                        }
                                                         elements.push(AeroRenderElements::Slice(moved));
                                                     }
                                                     #[cfg(feature = "bench")]
