@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-20 · tarefa ativa: nenhuma (02e e 02f com juiz visual negativo; aguarda decisão) · modo: SPIKE
+Última atualização: 2026-11-20 · tarefa ativa: rascunho `02j` (diagnósticos nomeados; aguarda ok) · 02e/02f com juiz visual negativo · modo: SPIKE
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -156,9 +156,12 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
 - 02c BLOQUEADA: duas abordagens tentadas e insuficientes no critério de pendência — (1) configure no motion e
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
-## 5. Próximas tarefas (ordem autorizada pelo humano em 2026-11-20; abrir cartão antes de executar)
-1. `02f` — CARTÃO EM EXECUÇÃO (`docs/tasks/02f-higiene-configures.md`): implementado; falta SOMENTE o juiz visual.
-   Depois do "ok", fechar 02f e PARAR — 9-slice só com autorização nova.
+## 5. Próximas tarefas (abrir cartão antes de executar)
+0. `02j` — RASCUNHO (`docs/tasks/02j-diagnosticos-nomeados.md`): diagnósticos nomeados do resize, sob `bench`:
+   `FRAME_NEVER_ACKED`, `FRAME_NEVER_DREW_AT_SIZE`, `FRAME_STRETCH_ACTIVE`. Criado a pedido do humano;
+   **NÃO executar sem o "ok"**. Motivo: 02e e 02f falharam no juiz visual sem nenhuma linha que dissesse
+   qual modo de falha ocorreu; o gate visual não é auditável.
+1. `02f` — NÃO CONCLUÍDA: juiz visual negou ("moldura ainda chega atrasada"). NÃO reabrir sem novo pedido.
 2. `02g` — shell: fonte de fd GLib no `wl_display` mantendo timer de segurança de 50 ms; limite 1 h, reverter se piorar.
 3. `02h` — medições de ambiente VM (sem mudança de código): baseline / Skia CPU / GSK cairo / b+c, 3 repetições.
 4. `02i` — correções de documentação (somente docs): presentation-time, background_effect, WPE, cartões 02c/02d, F1.
@@ -280,6 +283,19 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   (é o campo `h`) e por isso relatei falsamente "0 configures `source=grab` dentro dos arrastos". Refeito com `group(6)`:
   132 configs na janela 0 e 70 na janela 1, dentro dos intervalos de motion. O dado falso NÃO foi usado como
   achado; registrado para não ressurgir.
+- CONTEXTO DO HUMANO (2026-11-20, prior art `github.com/cprussin/domicile`): no domicile o Chromium forkado é o
+  compositor final (viz); Rust/Smithay é host/producer, a decoração é DOM na MESMA cena e a cola vem de
+  surface-sync com deadline — não é portável para o AeroShell (WebView nativa do sistema, WebKitGTK 6.0).
+  Lição aproveitável: geometria de apresentação dona do compositor final + **diagnósticos nomeados** para
+  "página que nunca faz ack", "página que nunca desenha no tamanho novo" e "por que nada foi enviado".
+  **NÃO copiar o fork do Chromium nem CEF OSR** — não eliminaria o invariante da Tarefa 1 e contradiz a premissa
+  de WebView nativa. Política confirmada pelo humano: conteúdo NÃO estica; só a textura do FRAME estica
+  transitoriamente; move NÃO muda (já correto no Rust).
+- CORREÇÃO DE AUTORIA (humano, 2026-11-20): **cprussin é contribuidor do Smithay**, não o criador; o criador é
+  **Victor Berger (elinorbgr)**. Não repetir a atribuição errada.
+- `docs/architecture/WINDOW-COMPOSITING.md` e `docs/architecture/ARCHITECTURE.md` são a referência de prior art
+  citada pelo humano. Registrado aqui como contexto; **ADR 0006 (aditivo/proposto) NÃO foi editado** — incluir
+  prior art em ADR exige aprovação explícita (AGENTS.md §0.8 / §6).
 ## 7. Não medido / não validado (não trate como fato)
 - 02f: JUIZ VISUAL NEGATIVO (2026-11-20): humano: **"A moldura ainda está chegando atrasada"**. O pré-filtro
   (razão 0,286, 14/14 configures no cliente, final no tamanho real) NÃO mediu o que a pessoa viu — mesma lacuna
@@ -329,18 +345,17 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- O que eu estava fazendo: 02f com código/teste/gate prontos, MAS juiz visual negou ("moldura ainda chega atrasada").
-  Instância de validação aberta: compositor PID 72480, shell 72487, 2 `foot` 72556/72557, socket `wayland-aero-02f`,
-  log `/tmp/opencode/aero-02f-visual.log`. Não encerrar — quem fecha é o humano.
-- O que funcionou (métrica, não visual): `python3 tests/integration/frame_configure_hygiene.py` → `VEREDITO: OK`
-  3× seguidas (razão 0,286; 14/14 configures no cliente; 1 final no tamanho real); glue 3× OK; 4 vizinhos OK;
-  `frame_resize_sync.py` FALHO; `bash scripts/check.sh` verde; clippy `--features bench` EXIT=0.
-- Comando exato da instância (após `cargo build --workspace --examples`):
-  `env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET -u AERO_PRIVILEGED_FD LD_PRELOAD=libgtk4-layer-shell.so.0 nohup target/debug/aeroshell-compositor --backend winit --socket wayland-aero-02f --shell target/debug/examples/frame_webview --shell-env LD_PRELOAD=libgtk4-layer-shell.so.0 --command 'foot & foot' > /tmp/opencode/aero-02f-visual.log 2>&1 &`
-- Próximo passo imediato (uma ação): o HUMANO decidir a próxima família (9-slice / shell 02g / decoração desenhada
-  no compositor). Eu parei: 3 famílias já falharam no juiz, nova tentativa sem autorização é proibida (§3.12).
-- Não reabrir 02e nem 02f por conta própria; não mexer no debounce; não encerrar PID 72480.
-- NÃO executar 02d, 02g, 02h, 02i, 05 nem 9-slice sem autorização explícita.
-- Descobertas laterais em §6: formato de `FRAME_BUFFER_COMMIT` (3 glue FALHAS preservadas), erro de `t_release`,
-  `source` sob `cfg(bench)`, regra do humano sobre a decoração aparecer 1–2 s depois, `list` da tarefa 03.
+- O que eu estava fazendo: registrar o novo caminho do humano (prior art domicile + diagnósticos nomeados) e criar o
+  rascunho `docs/tasks/02j-diagnosticos-nomeados.md`. NENHUMA linha de código foi alterada nesta rodada.
+- Gate de partida (antes de qualquer edição, nesta sessão): `bash scripts/check.sh` → `CHECK_EXIT=0`,
+  `OK: scripts/check.sh passou`, bun 9 pass / 0 fail (`/tmp/opencode/02g_start_check.log`); `git status --short`
+  vazio no início; HEAD era `a3c2a05`.
+- Instância 02f ainda aberta e reprovada: compositor PID 72480, shell 72487, 2 `foot` 72556/72557, socket
+  `wayland-aero-02f`, log `/tmp/opencode/aero-02f-visual.log`. Não encerrar — quem fecha é o humano.
+- Próximo passo imediato (uma ação): o HUMANO ler o cartão `02j` e responder "ok" (ou pedir ajuste). Só depois disso
+  escrever os testes primeiro, vê-los falhar e instrumentar. Sem "ok", NÃO executar.
+- NÃO reabrir 02e/02f, NÃO mexer no debounce/200 ms, NÃO mudar escala/move/conteúdo, NÃO editar ADR 0006,
+  NÃO encerrar PID 72480, NÃO executar 02d/02g/02h/02i/05/9-slice sem autorização nova.
+- Correções registradas em §6: cprussin é contribuidor (criador: Victor Berger/elinorbgr); prior art domicile é
+  contexto, não receita para copiar Chromium/CEF.
  
