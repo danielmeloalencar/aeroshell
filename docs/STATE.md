@@ -67,9 +67,9 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). Não abrir validação visual até a decisão.
 ## 5. Próximas tarefas (ordem; cada uma tem um cartão em docs/tasks/)
-1. DECISÃO DO HUMANO sobre 02c: (A) aprovar Plano B (decoração 9-slice no compositor / buffer sobredimensionado
-   + src-rect, ADR novo) — única forma de eliminar a pendência com WebKit no caminho crítico; (B) redefinir o
-   critério para "lag p95 ≤ 300 ms" (já atendido: 127 ms) e encerrar 02c; (C) manter como está e abrir cartão novo.
+1. `02d-frame-resize-diagnostico.md` — RASCUNHO criado, aguarda o "ok" do humano. Medir 5 cadências × 3
+   execuções + juiz visual para decidir entre Plano B e redefinição de critério (decisão do humano em 2026-11-20:
+   "Manter parcial, cartão novo").
 2. `03-runtime-bun-sdk.md` — `aero.windows.list/focus/close`, snapshot + patches; tipos TS gerados de `aeroshell-ipc`.
 3. Passo 4 — Painel React (`useWindows()`), clique foca a janela certa; testar com 2 e 3 janelas (cartão a criar).
 4. Decisão sobre modo produto (sua).
