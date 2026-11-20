@@ -493,6 +493,9 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   clicar/arrastar as bordas das 2 janelas na instância nova e dar o "ok" explícito, 02m e 02l seguem NÃO
   CONCLUÍDAS (AGENTS.md §0.9). A hipótese do `target=12x36` permanece registrada acima como descoberta; a
   correção autorizada ataca a causa apontada pelo humano (configure de freeze no press), não aquela.**
+  Instância visual ABERTA desta 3ª versão: socket `wayland-aero-02m-v3`, compositor 112693 (bash pai 112687),
+  shell 112699, `foot` 112772 e 112826, log `/tmp/opencode/aero-02m-v3-visual.log`, 2 associates (0 e 1).
+  NÃO encerrar: quem fecha é o humano. Sem `--features bench`, logo a prova do zero-configure veio do harness.
 - 02l (JUIZ VISUAL — RELATO FAVORÁVEL ANTERIOR, agora superado): humano (2026-11-20):
   **"vi na execução dos seus testes que o problema foi resolvido."** Veredito positivo registrado como dado.
   Como o relato veio da execução dos harnesses (que abrem janela winit + `foot`), e não de uma sessão manual
@@ -579,9 +582,9 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
 - Reproduzir: `python3 tests/integration/frame_grab_configure_hygiene.py` → `configures_no_grab=0
   source_final_apos_release=1 VEREDITO: OK`. Baseline cru FALHOU em `/tmp/opencode/02m_grab_baseline1.log`
   (`source=grab-start w=1280 h=800` em +26,93 ms); 3× limpas em `/tmp/opencode/02m_grab_clean{1,2,3}.log`.
-- Próximo passo imediato: abrir validação visual do RUNBOOK com 2 `foot`, deixar aberta; humano clica/arrasta
-  bordas da 1ª e 2ª janela (press sem transiente, arrasto lento/rápido) e dá o "ok" explícito. Só então fechar
-  02m e 02l. Quem fecha a aplicação é o humano — NÃO encerrar PIDs.
+- VALIDAÇÃO VISUAL ABERTA: socket `wayland-aero-02m-v3`, compositor 112693, shell 112699, `foot` 112772/112826,
+  log `/tmp/opencode/aero-02m-v3-visual.log`, 2 associates. Humano deve clicar/arrastar bordas da 1ª e 2ª janela
+  (press sem transiente, arrasto lento/rápido) e dar o "ok" explícito. Quem fecha é o humano — NÃO encerrar PIDs.
 - NÃO mudar `target = content + extras`, move, conteúdo, 9-slice da 02k/02l, ADR 0006, protocolo ou shell sem
   aprovação; NÃO encerrar PIDs de instância; sem push. Hipótese `target=12x36` segue em §7 como descoberta
   histórica; a correção atual ataca a causa apontada pelo humano (configure de freeze no press), não aquela.
