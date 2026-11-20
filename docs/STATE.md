@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-20 · tarefa ativa: 02f (código + teste + gate prontos; aguarda juiz visual) · 02e permanece parcial · modo: SPIKE
+Última atualização: 2026-11-20 · tarefa ativa: nenhuma (02e e 02f com juiz visual negativo; aguarda decisão) · modo: SPIKE
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -146,8 +146,10 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   → EXIT=0 (`02f_clippy_bench_final2.log`). Nenhum arquivo protegido alterado, nenhuma dependência nova,
   nenhum `unsafe`/`#[allow]`/`unwrap` novo.
 ## 4. Em andamento
-- 02f EM ANDAMENTO: código, teste, 3 repetições, vizinhos e gate prontos (§3). **Falta o juiz visual** (critério 5
-  do cartão). Instância será aberta com 2 `foot`; sem o "ok" do humano, 02f fica em §7 como não validada.
+- 02f NÃO CONCLUÍDA: código, teste, 3 repetições, vizinhos e gate prontos (§3), **mas o juiz visual negou**:
+  humano: **"A moldura ainda está chegando atrasada"** (critério 5 do cartão FALHOU). Instância aberta com
+  2 `foot` (PID 72480, socket `wayland-aero-02f`); não encerrada pelo agente. Aguardando decisão do humano —
+  NÃO iniciar nova abordagem por conta própria (AGENTS.md §3.12 / §0.4).
 - 02e PERMANECE PARCIAL/NÃO CONCLUÍDA: juiz visual relatou "atraso menor, porém ainda feio; a moldura chega
   atrasada". Código/teste/ADR/gate verdes não bastam. Instância `wayland-aero-02e` (PID 63221) foi encerrada
   pelo humano, não pelo agente. NÃO reabrir 02e sem novo pedido.
@@ -266,12 +268,26 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   a janela abre". O teste novo agora espera 2,0 s depois do primeiro `FRAME_BUFFER_COMMIT` antes de arrastar.
   Outros harnesses (`frame_resize_glue.py`, `frame_resize_sync.py`) ainda não têm essa espera explícita — não
   alterados aqui para preservar a evidência da 02e; adotar em tarefa futura se aparecer falsa falha.
+- 02f (dados do arrasto REAL que o humano negou, `/tmp/opencode/aero-02f-visual.log`, 118.188 linhas): 8.152
+  `RESIZE_SYNC_MOTION`, 8.152 `RESIZE_SYNC_CLIENT_CONFIGURE`, 202 `FRAME_CONFIGURE source=grab` (2,5% dos motions),
+  1 `source=commit`, 3 `source=final`; delta mediano configure→motion = 0,19 ms. **O storm foi eliminado de fato** —
+  e ainda assim o juiz viu a moldura atrasada. 99.557 `RESIZE_GLUE` válidas, invariante espacial 0 quebras;
+  6.860 com `rescaled=true` (6,9% no total, ~98% DENTRO dos 41 segmentos de arrasto). Descompasso
+  `|buffer-target|`: mediana 26 px, p75 81 px, p95 **434 px**, max **945 px**; fator de escala p95 **1,399**,
+  max **6,839**. Ou seja: o que sobrou não é contagem de configures, é o buffer do WebView não alcançar o alvo e
+  a escala 02e precisar distorcer a moldura durante o gesto.
+- 02f (ERRO DE ANÁLISE MEU, corrigido antes de concluir): a 1ª leitura do log usou `m.group(5)` como `source`
+  (é o campo `h`) e por isso relatei falsamente "0 configures `source=grab` dentro dos arrastos". Refeito com `group(6)`:
+  132 configs na janela 0 e 70 na janela 1, dentro dos intervalos de motion. O dado falso NÃO foi usado como
+  achado; registrado para não ressurgir.
 ## 7. Não medido / não validado (não trate como fato)
-- 02f: JUIZ VISUAL PENDENTE. O pré-filtro medial (razão 0,286, 14/14 configures no cliente, final no tamanho real)
-  NÃO prova que a moldura deixou de chegar atrasada na tela — a mesma lacuna da 02e. Humano deve arrastar borda
-  direita e canto inferior-direito, lento e rápido, em 2 `foot`. Sem o "ok", 02f NÃO está concluída.
-- 02f: nenhuma conclusão de desempenho — VM sem 3D; GPU real não medida. O debounce de 200 ms foi escolhido para
-  satisfazer a razão ≤1/3; o juiz visual decide se a cadência ficou suave.
+- 02f: JUIZ VISUAL NEGATIVO (2026-11-20): humano: **"A moldura ainda está chegando atrasada"**. O pré-filtro
+  (razão 0,286, 14/14 configures no cliente, final no tamanho real) NÃO mediu o que a pessoa viu — mesma lacuna
+  da 02e. 02f NÃO está concluída. Instância `wayland-aero-02f` (PID 72480) deixada aberta; aguarda decisão.
+- 02f: nenhuma conclusão de desempenho — VM sem 3D; GPU real não medida. O debounce de 200 ms satisfez a métrica,
+  mas NÃO resolveu a queixa visual; não aumentar nem diminuir o debounce sem nova decisão.
+- 02f/02e (decisão pendente): 3 famílias já falharam no juiz — (1) 02c configure no motion + timer, (2) 02e escala
+  no render, (3) 02f higiene de configures. Nova tentativa exige escolha do humano (AGENTS.md §3.12).
 - 02e: JUIZ VISUAL NEGATIVO/PARCIAL (2026-11-20, instância `wayland-aero-02e`, PID 63221 deixada aberta):
   humano: **"o atraso está menor, porém ainda feio. Não está natural suave como Windows, GNOME, etc."**
   Ou seja: a colagem espacial melhorou, mas a QUALIDADE VISUAL do arrasto não passou. o "ok" NÃO foi dado;
@@ -313,15 +329,17 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- O que eu estava fazendo: 02f com código/teste/3 repetições/gate prontos; instância de validação visual será aberta
-  com 2 `foot`. Não encerrar o processo — quem fecha é o humano.
-- O que funcionou: `python3 tests/integration/frame_configure_hygiene.py` → `VEREDITO: OK` 3× seguidas (razão 0,286;
-  14/14 configures no cliente; 1 final no tamanho real); glue 3× OK; 4 vizinhos OK; `frame_resize_sync.py` FALHO;
-  `bash scripts/check.sh` verde; clippy `--features bench` EXIT=0.
+- O que eu estava fazendo: 02f com código/teste/gate prontos, MAS juiz visual negou ("moldura ainda chega atrasada").
+  Instância de validação aberta: compositor PID 72480, shell 72487, 2 `foot` 72556/72557, socket `wayland-aero-02f`,
+  log `/tmp/opencode/aero-02f-visual.log`. Não encerrar — quem fecha é o humano.
+- O que funcionou (métrica, não visual): `python3 tests/integration/frame_configure_hygiene.py` → `VEREDITO: OK`
+  3× seguidas (razão 0,286; 14/14 configures no cliente; 1 final no tamanho real); glue 3× OK; 4 vizinhos OK;
+  `frame_resize_sync.py` FALHO; `bash scripts/check.sh` verde; clippy `--features bench` EXIT=0.
 - Comando exato da instância (após `cargo build --workspace --examples`):
   `env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET -u AERO_PRIVILEGED_FD LD_PRELOAD=libgtk4-layer-shell.so.0 nohup target/debug/aeroshell-compositor --backend winit --socket wayland-aero-02f --shell target/debug/examples/frame_webview --shell-env LD_PRELOAD=libgtk4-layer-shell.so.0 --command 'foot & foot' > /tmp/opencode/aero-02f-visual.log 2>&1 &`
-- Próximo passo imediato (uma ação): receber o "ok" visual do humano, registrar em §3/§7, comitar o desfecho e PARAR.
-  Sem o "ok", manter 02f como parcial — NÃO reabrir 02e nem iniciar 9-slice.
+- Próximo passo imediato (uma ação): o HUMANO decidir a próxima família (9-slice / shell 02g / decoração desenhada
+  no compositor). Eu parei: 3 famílias já falharam no juiz, nova tentativa sem autorização é proibida (§3.12).
+- Não reabrir 02e nem 02f por conta própria; não mexer no debounce; não encerrar PID 72480.
 - NÃO executar 02d, 02g, 02h, 02i, 05 nem 9-slice sem autorização explícita.
 - Descobertas laterais em §6: formato de `FRAME_BUFFER_COMMIT` (3 glue FALHAS preservadas), erro de `t_release`,
   `source` sob `cfg(bench)`, regra do humano sobre a decoração aparecer 1–2 s depois, `list` da tarefa 03.
