@@ -32,4 +32,4 @@ bench:
     @echo "AVISO: benchmarks de GPU só em hardware real; VM = funcionamento"
 
 spike s:
-    @echo "Spike {{s}}: ver docs/progress.md"
+    @echo "Spike {{s}}: ver docs/STATE.md"

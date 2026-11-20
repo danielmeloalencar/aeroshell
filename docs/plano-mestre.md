@@ -1,7 +1,11 @@
 # AeroShell — Plano de Trabalho (Agents.md)
 
-> Documento-guia para agentes e desenvolvedores. Toda implementação deve seguir
-> este plano. Mudanças de arquitetura exigem ADR (regra 3). **Sempre commitar
+> **HISTÓRICO — NÃO SEGUIR.** O plano abaixo é o documento original de F0 e está desatualizado.
+> As regras ativas estão em `AGENTS.md`; o estado atual em `docs/STATE.md`; os comandos em `docs/RUNBOOK.md`.
+> Referências a `docs/progress.md` nele são históricas — aquele arquivo também não é fonte de verdade.
+>
+> Documento-guia original, mantido só como registro. Na época, toda implementação
+> devia seguir este plano. Mudanças de arquitetura exigem ADR (regra 3). **Sempre commitar
 > quando uma etapa for validada** (regra 10): commits pequenos, descritivos e
 > com o gate que os autorizou. Idioma do projeto: português (PT-BR).
 

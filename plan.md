@@ -1,7 +1,7 @@
 # AeroShell — plano (resumo)
 
-**Fonte única de status, números, decisões e próximos passos: [`docs/progress.md`](docs/progress.md).**
-Este arquivo é apenas um resumo estável para não divergir do progresso.
+**Fonte única de status, números, decisões e próximos passos: [`docs/STATE.md`](docs/STATE.md).**
+Este arquivo é um resumo antigo; para o estado atual, siga `docs/STATE.md`.
 
 Framework pré-alfa de compositores Wayland cuja UI é TSX/JSX em WebViews nativas (WebKitGTK 6.0).
 Mecanismo em Rust/Smithay, política em Bun/TypeScript. Ambiente de referência: Ubuntu 26.04,
@@ -21,7 +21,7 @@ Rust 1.100.0, Bun 1.4.4, VM sem 3D (funcionamento validado; desempenho só em GP
 - **Regra de ambiente**: nunca sobrescrever `WAYLAND_DISPLAY` do host; `WAYLAND_SOCKET` jamais no
   ambiente do compositor (use `AERO_PRIVILEGED_FD`); sem `/etc/pam.d` sem aviso.
 
-Histórico detalhado, hashes, benchmarks e limitações: [`docs/progress.md`](docs/progress.md).
+Histórico antigo (não seguir): [`docs/progress.md`](docs/progress.md). Estado atual: [`docs/STATE.md`](docs/STATE.md).
 Plano completo (F0–F9, regras e visão): [`docs/plano-mestre.md`](docs/plano-mestre.md) (recuperado
 do `Agents.md` histórico) e [`docs/plano-completo-nested.md`](docs/plano-completo-nested.md) (matriz
 nested/udev). Guia rápido: [`README.md`](README.md). Convenções: [`AGENTS.md`](AGENTS.md).

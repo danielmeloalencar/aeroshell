@@ -1,6 +1,7 @@
 # AGENTS.md — Regras para o agente (AeroShell)
  
-Leia este arquivo e `docs/progress.md` no INÍCIO de toda sessão. Estas regras têm
+Leia este arquivo, `docs/STATE.md`, `docs/RUNBOOK.md` e o cartão da tarefa no INÍCIO de toda sessão.
+`docs/progress.md` é apenas arquivo histórico: não ler para decidir, não atualizar. Estas regras têm
 prioridade sobre qualquer instrução vaga em conversa. Se uma instrução do usuário
 conflitar com elas, avise o conflito e peça confirmação antes de agir.
 
@@ -151,7 +152,7 @@ AeroShell é um framework para criar compositores Wayland completos cuja parte v
 WebKitGTK. Compositor em Rust + Smithay; política em Bun/TypeScript. Roda nested
 (janela dentro do compositor atual) para desenvolvimento e em sessão real (TTY).
  
-Plano completo: `docs/architecture.md`. Status atual: `docs/progress.md` (fonte única).
+Plano completo: `docs/architecture.md`. Status atual: `docs/STATE.md` (fonte única). `docs/progress.md` é histórico.
 Decisões: `docs/adr/`. Modelo de ameaça: `docs/security-model.md`.
  
 ## 2. Decisões congeladas (NÃO reabra sem aprovação explícita)
@@ -259,8 +260,8 @@ e reportados.
 4. Riscos e incertezas ("estou supondo que…").
 5. Liste 3 maneiras pelas quais sua conclusão pode estar errada e o que checou para cada.
 6. Próximo passo proposto. NÃO o execute. Aguarde aprovação.
-Atualize `docs/progress.md` ao fim de cada tarefa: decisões, pendências, números medidos
-(com a ressalva de ambiente) e o que está "não medido".
+Atualize `docs/STATE.md` ao fim de cada tarefa: decisões, pendências, números medidos
+(com a ressalva de ambiente) e o que está "não medido". `docs/progress.md` NÃO é atualizado.
  
 ## 9. Checklist de fim de tarefa
  
@@ -269,7 +270,7 @@ Atualize `docs/progress.md` ao fim de cada tarefa: decisões, pendências, núme
 - [ ] Nenhum `unsafe`/`unwrap`/`allow` novo sem justificativa
 - [ ] Nenhum arquivo protegido alterado sem aprovação
 - [ ] Nenhuma dependência nova sem aprovação
-- [ ] `docs/progress.md` atualizado
+- [ ] `docs/STATE.md` atualizado (`docs/progress.md` é histórico, não é atualizado)
 - [ ] Confirmação visual do humano obtida quando o critério é visual; o agente não fechou a aplicação
 - [ ] Relatório no formato da seção 8, com o que NÃO foi testado
 - [ ] Parou. Não iniciou a próxima fase.

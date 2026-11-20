@@ -5,9 +5,8 @@ workspaces, decoração de janela, lock screen e greeter) é escrita em TSX/JSX 
 WebViews nativas do sistema (WebKitGTK 6.0). O mecanismo em Rust/Smithay é dono do estado e do
 input; a política em TypeScript/Bun decide layouts, regras e idle.
 
-Estado atual: F0 (spikes go/no-go) em andamento. S1/S2/S3 concluídos; protocolo `aero_frame_v1`
-gerado e testado; desenho do frame e S4/S6/S7 pendentes. Fonte única de status:
-[`docs/progress.md`](docs/progress.md). Plano resumido: [`plan.md`](plan.md).
+Estado atual: [`docs/STATE.md`](docs/STATE.md) (fonte única). Plano resumido antigo:
+[`plan.md`](plan.md). `docs/progress.md` é apenas histórico.
 
 ## Rodando em modo nested (sem afetar o host)
 
