@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-20 · tarefa ativa: 02e (código + gate prontos; aguarda juiz visual) · modo: SPIKE
+Última atualização: 2026-11-20 · tarefa ativa: 02f (cartão aberto; aguarda ok para executar) · 02e permanece parcial (juiz visual negativo) · modo: SPIKE
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -126,16 +126,20 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
 - [x] 02e (ADR aditivo): `docs/adr/0006-frame-resize-composicao-elastica.md` com causa raiz (pipeline WebKit),
   decisão, alternativas preteridas e gatilhos de reavaliação. Nenhum ADR aceito editado.
 ## 4. Em andamento
-- 02e EM ANDAMENTO: código, teste, ADR e gate prontos; **juiz visual relatou "ainda feio, não suave"** (critério 4
-  do cartão NÃO passou). Instância aberta com 2 `foot` (PID 63221, socket `wayland-aero-02e`); não encerrar.
-  Antes de mexer no código, é preciso definir o que "feio" significa (distorção da escala? degraus? descolamento
-  residual?) e abrir cartão novo — 9-slice e suavização estão FORA do cartão 02e.
+- 02f AUTORIZADA (2026-11-20, "ok" do humano após escolher entre 02f e 9-slice): cartão criado em
+  `docs/tasks/02f-higiene-configures.md`, aguarda o ok para EXECUTAR. Motivo medido: no arrasto real do juiz,
+  os seriais de frame configure foram 1→92 em um único gesto (§7) — hipótese de "configure storm" competindo
+  com o commit-hook de `compositor.rs:192-200`, que puxa a moldura de volta ao tamanho atrasado do conteúdo.
+- 02e PERMANECE PARCIAL/NÃO CONCLUÍDA: juiz visual relatou "atraso menor, porém ainda feio; a moldura chega
+  atrasada". Código/teste/ADR/gate verdes não bastam. Instância `wayland-aero-02e` (PID 63221) foi encerrada
+  pelo humano, não pelo agente. NÃO reabrir 02e sem novo pedido.
 - 02c BLOQUEADA: duas abordagens tentadas e insuficientes no critério de pendência — (1) configure no motion e
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (ordem autorizada pelo humano em 2026-11-20; abrir cartão antes de executar)
-1. `02f` — higiene dos configures (compositor): `last_sent_size`/`last_sent_at` no grab (≥150 ms), pular
-   configure no commit-hook durante grab, um configure final com o tamanho real ao soltar.
+1. `02f` — CARTÃO CRIADO (`docs/tasks/02f-higiene-configures.md`), aguarda ok para executar: higiene dos
+   configures (compositor); `last_sent_size`/`last_sent_at` no grab, pular configure no commit-hook durante
+   grab, um configure final com o tamanho real ao soltar.
 2. `02g` — shell: fonte de fd GLib no `wl_display` mantendo timer de segurança de 50 ms; limite 1 h, reverter se piorar.
 3. `02h` — medições de ambiente VM (sem mudança de código): baseline / Skia CPU / GSK cairo / b+c, 3 repetições.
 4. `02i` — correções de documentação (somente docs): presentation-time, background_effect, WPE, cartões 02c/02d, F1.
@@ -271,18 +275,13 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- O que eu estava fazendo: 02e com código, teste, ADR e gate prontos; juiz visual disse "atraso menor, porém ainda
-  feio, não suave como Windows/GNOME". Instância aberta (PID 63221, socket `wayland-aero-02e`); não encerrar.
-- O que funcionou: `python3 tests/integration/frame_resize_glue.py` → `VEREDITO: OK` em 3 execuções seguidas;
-  4 vizinhos OK; `frame_resize_sync.py` segue FALHO; `bash scripts/check.sh` verde; clippy `--features bench` EXIT=0.
-- Comando exato para reproduzir (instância de validação): `cargo build --workspace --examples` e
-  `LD_PRELOAD=libgtk4-layer-shell.so.0 target/debug/aeroshell-compositor --backend winit --socket wayland-aero-02e \
-  --shell target/debug/examples/frame_webview --shell-env LD_PRELOAD=libgtk4-layer-shell.so.0 --command 'foot & foot'`.
-- Próximo passo imediato (uma ação): decidir entre (a) abrir cartão 02f (higiene de configures — recomendado,
-  já autorizado no plano e com sinal medido acima) e (b) cartão novo de 9-slice (`CropRenderElement`, gatilho 1
-  do ADR 0006). NÃO alterar 02e nem iniciar qualquer um sem o "ok" do humano.
-- Instância visual `/tmp/opencode/aero-02e-visual.log` (PID 63221) foi encerrada pelo humano, não pelo agente.
-- NÃO executar 02d, 02f, 02g, 02h, 02i nem 05 sem autorização explícita.
-- Descobertas laterais em §6: `list` mudou na tarefa 03 (parsers dos vizinhos corrigidos), amostra com
-  `buffer=None`, `window_id` sob `cfg(bench)`, IPC sem eventos, arredondamento do foot, timer 1 ms sem ganho.
+- O que eu estava fazendo: transição 02e→02f. Humano escolheu 02f ("ok"); cartão criado, aguardando ok para executar.
+- Gate de partida desta sessão: `bash scripts/check.sh` → EXIT=0, `OK: scripts/check.sh passou`, bun 9 pass/0 fail;
+  `git status --short` vazio; HEAD `9cd4984`. Nenhuma mudança de código feita ainda em 02f.
+- 02e continua NÃO concluída (juiz visual negativo, §7); instância `wayland-aero-02e` encerrada pelo humano.
+- Próximo passo imediato (uma ação): receber o ok do cartão `docs/tasks/02f-higiene-configures.md` e começar
+  pelo TESTEbench (`frame_configure_hygiene.py`), mostrando-o falhar antes de instrumentar/alterar o compositor.
+- NÃO executar 02d, 02g, 02h, 02i, 05 nem 9-slice sem autorização explícita. NÃO reabrir 02e.
+- Descobertas laterais em §6: `list` mudou na tarefa 03 (parsers corrigidos), amostra com `buffer=None`,
+  `window_id` sob `cfg(bench)`, IPC sem eventos, arredondamento do foot, timer 1 ms sem ganho.
  
