@@ -413,12 +413,17 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   citada pelo humano. Registrado aqui como contexto; **ADR 0006 (aditivo/proposto) NÃO foi editado** — incluir
   prior art em ADR exige aprovação explícita (AGENTS.md §0.8 / §6).
 ## 7. Não medido / não validado (não trate como fato)
-- 02l (JUIZ VISUAL — RELATO FAVORÁVEL, confirmação formal em curso): humano (2026-11-20):
+- 02l (JUIZ VISUAL — RELATO FAVORÁVEL, confirmação formal pendente): humano (2026-11-20):
   **"vi na execução dos seus testes que o problema foi resolvido."** Veredito positivo registrado como dado.
   Como o relato veio da execução dos harnesses (que abrem janela winit + `foot`), e não de uma sessão manual
-  formal com 2 `foot`, executo agora o comando do RUNBOOK, deixo a aplicação **aberta** e peço arrasto lento e
-  rápido das bordas e da barra + "ok" explícito olhando a tela (cartão 02l:46, AGENTS.md §0.9). Até lá o item
-  fica como **confirmação pendente**; quem fecha a aplicação é o humano.
+  formal com 2 `foot`, abri instância do RUNBOOK (compositor 100840, 2 `foot`: 100924/100972) e pedi arrasto
+  lento/rápido + "ok" explícito olhando a tela (cartão 02l:46, AGENTS.md §0.9). A instância **encerrou com
+  shutdown gracioso** (`FRAME_SUMMARY samples=2`, sem `panicked`/SIGSEGV; foot com `Broken pipe`) — o agente
+  não executou nenhum encerramento; muito provavelmente o humano fechou a janela ao terminar o teste.
+  O log `/tmp/opencode/aero-02l-visual.log` contém medição de arrasto REAL das duas janelas
+  (`window_id=0` e `1`): `title_left_w=120`, `title_right_w=96` constantes em todas as amostras, com
+  `title_gap_w` variando (96→402/618) — prova complementar, não substitui o olho do humano.
+  Vou reabrir UMA instância e deixá-la aberta para o "ok" formal. Até lá, item NÃO concluído.
 - 02l/02k: fidelidade de PIXELS (amostragem de texto/botões na textura) e suavidade percebida em GPU real —
   **não medidas**. A prova objetiva nova (`SLICE_GEOM`) lê a geometria REAL dos elementos compostos, não os
   valores calculados para `RESIZE_SLICE`, mas ainda não amostra a textura; VM sem 3D, sem conclusão de
@@ -492,10 +497,10 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
 - Reproduzir: `python3 tests/integration/frame_resize_glue.py` → `title_n=3`, `declaradas=(120,96)`,
   `left/right=[120,120]/[96,96]`, `SLICE_GEOM` 9 fatias cobrindo o alvo. Baseline FALHA em `02l_baseline1.log`;
   3× OK em `02l_glue_final{1,2,3}.log` e `02l_glue_repeat{1,2,3}.log`; amostra transitória em `02l_glue_postgate2.log`.
-- Instância de validação visual ABERTA nesta sessão (2026-11-20): compositor PID 100840, shell 100852,
-  `foot` 100924 e 100972, socket `wayland-aero-02l`, log `/tmp/opencode/aero-02l-visual.log`, 2 frames
-  associados (`window_id=0` e `01`). NÃO encerrar — quem fecha é o humano. Instância 02f (PID 72480) já não
-  está rodando; não tentar encerrar PIDs.
+- Instância visual 1 (2026-11-20): compositor 100840, shell 100852, `foot` 100924/100972, socket
+  `wayland-aero-02l`, log `/tmp/opencode/aero-02l-visual.log`, 2 frames associados. Encerrou graciosamente
+  (`FRAME_SUMMARY samples=2`) sem ação do agente; provavelmente o humano fechou ao testar. NÃO tentar encerrar
+  PIDs antigos. Se reaberta, atualizar aqui com os novos PIDs antes de pedir o "ok".
 - Próximo passo imediato (NÃO executar): humano olhar a janela aberta, arrastar bordas e barra (lento e rápido),
   confirmar que texto/botões não achatam e bordas não piscam, e dar o "ok" explícito. Só então fechar a 02l.
 - NÃO mudar `target = content + extras`, move, conteúdo, ADR 0006 ou o debounce fora do grab; NÃO editar
