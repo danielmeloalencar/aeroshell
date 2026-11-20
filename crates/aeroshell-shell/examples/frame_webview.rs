@@ -11,7 +11,7 @@ use gdk4_wayland::{wayland_client, WaylandSurface};
 use gtk4::glib;
 use gtk4::prelude::*;
 use gtk4_layer_shell::LayerShell;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::io::{BufRead, Write};
 use std::os::unix::net::UnixStream;
 use std::rc::Rc;
@@ -53,8 +53,13 @@ struct FrameEntry {
     frame: AeroFrameV1,
     wl_surface: aero::wl_surface::WlSurface,
     window: gtk4::ApplicationWindow,
+    webview: WebView,
     insets: (i32, i32, i32, i32),
+    /// Target apresentado (conteúdo + insets); não dimensiona a WebView.
     total: (i32, i32),
+    /// Tamanho real do buffer WebView; só muda em crescimento excepcional.
+    canvas: (i32, i32),
+    presented: bool,
     window_id: u32,
 }
 
@@ -164,8 +169,8 @@ impl Dispatch<wl_pointer::WlPointer, ()> for SpikeState {
                     eprintln!("FRAMEWEB: button sem entry ativo (active={})", state.active);
                     return;
                 };
-                let (tw, th) = entry.total;
-                eprintln!("FRAMEWEB: button local=({x:.0},{y:.0}) total={tw}x{th} serial={serial}");
+                let (tw, th) = entry.canvas;
+                eprintln!("FRAMEWEB: button local=({x:.0},{y:.0}) canvas={tw}x{th} target={}x{} serial={serial}", entry.total.0, entry.total.1);
                 let frame = entry.frame.clone();
                 let Some(seat) = state.seat.clone() else {
                     return;
@@ -194,7 +199,7 @@ impl Dispatch<wl_pointer::WlPointer, ()> for SpikeState {
                     eprintln!("FRAMEWEB: titlebar -> move serial={serial}");
                     frame._move(&seat, serial);
                 }
-                // zona dos botões (tw-RIGHT_CONTROLS..tw): o JS da WebView trata.
+                // zona dos botões (canvas_w-RIGHT_CONTROLS..canvas_w): o JS trata.
             }
             _ => {}
         }
@@ -217,30 +222,40 @@ impl Dispatch<AeroFrameManagerV1, ()> for SpikeState {
             ..
         } = event;
         eprintln!("FRAMEWEB: frame_requested window_id={window_id} conteudo={width}x{height}");
-        if state.entries.iter().any(|e| e.window_id == window_id) {
-            eprintln!("FRAMEWEB: window_id={window_id} já tem WebView; ignorado");
+        // O associate acontece no realize, sem apresentar um buffer 200x200.
+        // O frame_requested enviado pelo próprio associate traz o output e só
+        // então fixa o canvas inicial e apresenta a janela (sem deadlock 02m).
+        if let Some(entry) = state
+            .entries
+            .iter_mut()
+            .find(|entry| entry.window_id == window_id)
+        {
+            if !entry.presented && width > 0 && height > 0 {
+                let (l, t, r, b) = entry.insets;
+                entry.canvas = (width + l + r, height + t + b);
+                entry
+                    .window
+                    .set_default_size(entry.canvas.0, entry.canvas.1);
+                entry.presented = true;
+                eprintln!(
+                    "FRAMEWEB: canvas inicial window_id={window_id} {}x{}",
+                    entry.canvas.0, entry.canvas.1
+                );
+                entry.window.present();
+            } else {
+                eprintln!("FRAMEWEB: window_id={window_id} já apresentado; ignorado");
+            }
             return;
         }
-        // 02m: o frame_requested do `map` vem com conteudo=0x0 (o cliente ainda
-        // não commitou tamanho) e o do `associate` — com o tamanho real — só é
-        // gerado DEPOIS da WebView existir. Não dá para adiar a criação. Usa o
-        // total já configurado da janela âncora (window_id=0): é o mesmo alvo que
-        // o Configure desta janela vai receber, e evita que o WebKit commite o
-        // buffer mínimo 200x200 antes do primeiro buffer real.
-        let initial_total = state
+        let initial_canvas = state
             .entries
             .first()
-            .filter(|e| e.total.0 > 0 && e.total.1 > 0)
-            .map(|e| e.total)
+            .map(|entry| entry.canvas)
             .unwrap_or((0, 0));
-        eprintln!(
-            "FRAMEWEB: frame_requested window_id={window_id} tamanho_inicial={}x{}",
-            initial_total.0, initial_total.1
-        );
         // Cria na próxima idle: este handler roda dentro do borrow do RUNTIME
         // (dispatch) e não pode reassumir o RUNTIME para associar a superfície.
         glib::idle_add_local(move || {
-            open_frame_window(window_id, initial_total.0, initial_total.1);
+            open_frame_window(window_id, initial_canvas.0, initial_canvas.1);
             glib::ControlFlow::Break
         });
     }
@@ -270,11 +285,31 @@ impl Dispatch<AeroFrameV1, ()> for SpikeState {
                 let total_w = width + l + r;
                 let total_h = height + t + b;
                 entry.total = (total_w, total_h);
+                let grows = total_w > entry.canvas.0 || total_h > entry.canvas.1;
+                if grows {
+                    entry.canvas = (entry.canvas.0.max(total_w), entry.canvas.1.max(total_h));
+                    entry
+                        .window
+                        .set_default_size(entry.canvas.0, entry.canvas.1);
+                }
                 eprintln!(
-                    "FRAMEWEB: configure serial={serial} conteudo={width}x{height} -> {total_w}x{total_h}"
+                    "FRAMEWEB: configure serial={serial} conteudo={width}x{height} target={total_w}x{total_h} canvas={}x{} grows={grows}",
+                    entry.canvas.0, entry.canvas.1
                 );
-                entry.window.set_default_size(total_w, total_h);
                 frame.ack_configure(serial);
+                let script =
+                    format!("window.aeroFramePainted && window.aeroFramePainted({serial});");
+                entry.webview.evaluate_javascript(
+                    &script,
+                    None,
+                    None,
+                    None::<&webkit6::gio::Cancellable>,
+                    |result| {
+                        if let Err(err) = result {
+                            eprintln!("FRAMEWEB: aeroFramePainted falhou: {err}");
+                        }
+                    },
+                );
             }
             FrameEvent::Closed => {
                 state.closed += 1;
@@ -287,6 +322,7 @@ impl Dispatch<AeroFrameV1, ()> for SpikeState {
 thread_local! {
     static RUNTIME: RefCell<Option<Runtime>> = const { RefCell::new(None) };
     static APP: RefCell<Option<Rc<gtk4::Application>>> = const { RefCell::new(None) };
+    static ACTIVATED: Cell<bool> = const { Cell::new(false) };
 }
 
 struct Runtime {
@@ -348,6 +384,11 @@ const TITLEBAR_HTML: &str = r#"<!doctype html>
   </div>
   <script>
     const send = (action) => window.webkit.messageHandlers.aero.postMessage({ action });
+    window.aeroFramePainted = (serial) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        window.webkit.messageHandlers.aero.postMessage({ action: 'frame_painted', serial });
+      }));
+    };
     document.getElementById('close').addEventListener('click', () => send('close'));
     document.getElementById('max').addEventListener('click', () => send('maximize'));
   </script>
@@ -356,6 +397,8 @@ const TITLEBAR_HTML: &str = r#"<!doctype html>
 fn associate_frame(
     wl_surface: aero::wl_surface::WlSurface,
     window: gtk4::ApplicationWindow,
+    webview: WebView,
+    canvas: (i32, i32),
     window_id: u32,
 ) {
     RUNTIME.with(|cell| {
@@ -371,8 +414,11 @@ fn associate_frame(
             frame,
             wl_surface,
             window,
+            webview,
             insets: (BORDER, TITLEBAR_H, BORDER, BORDER),
             total: (0, 0),
+            canvas,
+            presented: false,
             window_id,
         });
         eprintln!("FRAMEWEB: associate(window_id={window_id}) + set_insets({BORDER},{TITLEBAR_H},{BORDER},{BORDER}) \
@@ -380,11 +426,9 @@ fn associate_frame(
     });
 }
 
-/// Uma WebView por janela. O handler de mensagens captura o window_id DESTA
-/// WebView: o comando vai para a janela dona do frame, nunca para "a primeira".
-/// 02m: `total_w`/`total_h` já incluem os insets (vêm de `FrameEntry::total`) e
-/// definem o tamanho inicial antes do realize, evitando o buffer mínimo 200x200.
-fn open_frame_window(window_id: u32, total_w: i32, total_h: i32) {
+/// Uma WebView por janela. O associate ocorre no realize, mas o present espera
+/// o frame_requested do output para fixar o canvas antes do primeiro buffer.
+fn open_frame_window(window_id: u32, canvas_w: i32, canvas_h: i32) {
     let app = APP
         .with(|cell| cell.borrow().clone())
         .expect("APP não inicializado");
@@ -392,11 +436,8 @@ fn open_frame_window(window_id: u32, total_w: i32, total_h: i32) {
         .application(&*app)
         .title(format!("frame webview {window_id}"))
         .build();
-    // A doc fixada (/usr/share/gir-1.0/Gtk-4.0.gir:185031) diz que o default
-    // size é usado "if no other constraints apply". Chamado antes do present(),
-    // a janela ainda não foi realizada, então o WebKit recebe o tamanho real.
-    if total_w > 0 && total_h > 0 {
-        window.set_default_size(total_w, total_h);
+    if canvas_w > 0 && canvas_h > 0 {
+        window.set_default_size(canvas_w, canvas_h);
     }
     window.add_css_class("aero-frame");
     window.init_layer_shell();
@@ -409,12 +450,42 @@ fn open_frame_window(window_id: u32, total_w: i32, total_h: i32) {
     manager.register_script_message_handler("aero", None);
     manager.connect_script_message_received(Some("aero"), move |_, value| {
         let json = value.to_json(0).unwrap_or_default().to_string();
-        let action = serde_json::from_str::<serde_json::Value>(&json)
-            .ok()
-            .and_then(|v| v.get("action").and_then(|a| a.as_str()).map(str::to_owned));
+        let parsed =
+            serde_json::from_str::<serde_json::Value>(&json).unwrap_or(serde_json::Value::Null);
+        let action = parsed
+            .get("action")
+            .and_then(|a| a.as_str())
+            .map(str::to_owned);
         match action.as_deref() {
             Some("close") => window_ipc(&format!("close {window_id}")),
             Some("maximize") => window_ipc(&format!("maximize {window_id}")),
+            Some("frame_painted") => {
+                let Some(serial) = parsed
+                    .get("serial")
+                    .and_then(|serial| serial.as_u64())
+                    .and_then(|serial| u32::try_from(serial).ok())
+                else {
+                    eprintln!("FRAMEWEB: frame_painted com serial inválido: {json}");
+                    return;
+                };
+                RUNTIME.with(|cell| {
+                    let mut borrow = cell.borrow_mut();
+                    let Some(rt) = borrow.as_mut() else {
+                        return;
+                    };
+                    let frame = rt
+                        .state
+                        .entries
+                        .iter()
+                        .find(|entry| entry.window_id == window_id)
+                        .map(|entry| entry.frame.clone());
+                    if let Some(frame) = frame {
+                        frame.frame_painted(serial);
+                        let _ = rt.queue.flush();
+                        eprintln!("FRAMEWEB: frame_painted window_id={window_id} serial={serial}");
+                    }
+                });
+            }
             _ => eprintln!("FRAMEWEB: mensagem da WebView: {json}"),
         }
     });
@@ -436,12 +507,18 @@ fn open_frame_window(window_id: u32, total_w: i32, total_h: i32) {
             bootstrap_runtime(&wl_surface);
         }
         if RUNTIME.with(|cell| cell.borrow().is_some()) {
-            associate_frame(wl_surface, w.clone(), window_id);
+            associate_frame(
+                wl_surface,
+                w.clone(),
+                webview.clone(),
+                (canvas_w, canvas_h),
+                window_id,
+            );
         }
     });
 
     window.connect_map(move |_| eprintln!("FRAMEWEB map: layer surface criada (id={window_id})"));
-    window.present();
+    gtk4::prelude::WidgetExt::realize(&window);
 }
 
 /// Primeira WebView: deriva o Connection do backend do wl_surface do GTK
@@ -452,6 +529,7 @@ fn bootstrap_runtime(wl_surface: &aero::wl_surface::WlSurface) {
     let mut queue: wayland_client::EventQueue<SpikeState> = connection.new_event_queue();
     let qh = queue.handle();
     connection.display().get_registry(&qh, ());
+    let _ = queue.flush();
     let mut state = SpikeState::default();
     for _ in 0..30 {
         glib::MainContext::default().iteration(false);
@@ -473,6 +551,13 @@ fn main() {
     APP.with(|cell| *cell.borrow_mut() = Some(Rc::clone(&app)));
 
     app.connect_activate(move |_app| {
+        // GApplication pode ser ativado novamente por outro processo com o mesmo
+        // application_id. Reabrir window_id=0 causaria already_constructed e
+        // derrubaria a conexão privilegiada (e todas as decorações).
+        if ACTIVATED.with(|flag| flag.replace(true)) {
+            eprintln!("FRAMEWEB: activate repetido ignorado");
+            return;
+        }
         // Fundo do frame: sem fundo de tema, a área recém-exposta durante resize
         // mostra o que está atrás em vez de branco (a decoração é pintada só pelo HTML).
         let css = gtk4::CssProvider::new();

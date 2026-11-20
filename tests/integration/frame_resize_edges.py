@@ -160,9 +160,25 @@ for edge, (x, y) in EDGE_POINTS.items():
     rows.append((edge, det[-1].group(1) if det else None, grab[-1].group(1) if grab else None,
                  hit, (x, y)))
 
+CANVAS = (1280 + INSETS[0] + INSETS[2], 800 + INSETS[1] + INSETS[3])
+
+
+def hit_no_frame_02p(hit, point):
+    if hit is None or hit[0] == s_id_content[0]:
+        return False
+    local = (point[0] - frame_origin[0], point[1] - frame_origin[1])
+    expected_x = frame_origin[0]
+    expected_y = frame_origin[1]
+    if local[0] >= total[0] - (INSETS[2] + 96):
+        expected_x -= CANVAS[0] - total[0]
+    if local[1] >= total[1] - INSETS[3]:
+        expected_y -= CANVAS[1] - total[1]
+    return float(hit[1]) == float(expected_x) and float(hit[2]) == float(expected_y)
+
+
 ok = True
 for edge, detected, grab_edge, hit, point in rows:
-    on_frame = hit is not None and float(hit[1]) == float(frame_origin[0]) and float(hit[2]) == float(frame_origin[1])
+    on_frame = hit_no_frame_02p(hit, point)
     good = detected == edge and grab_edge == edge and on_frame and hit[0] != s_id_content[0]
     ok = ok and good
     print(f"{edge:11} ponto={str(point):12} hit_no_frame={on_frame} detectado={detected} grab={grab_edge} {'OK' if good else 'FALHA'}")

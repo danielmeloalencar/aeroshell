@@ -159,6 +159,8 @@ pub fn init_winit(
                             let output_scale = output.current_scale().fractional_scale();
                             let mut elements: Vec<AeroRenderElements<GlesRenderer>> =
                                 Vec::new();
+                            #[cfg(feature = "bench")]
+                            let mut titlebar_probe = None;
                             {
                                 let layer_map = smithay::desktop::layer_map_for_output(output);
                                 let (lower, upper): (Vec<_>, Vec<_>) = layer_map
@@ -246,71 +248,10 @@ pub fn init_winit(
                                                     geo.size.h + fgeo.extra_h(),
                                                 );
                                                 let buffer = el.buffer_size();
-                                                let mut rescaled = buffer.w > 0
-                                                    && buffer.h > 0
-                                                    && (buffer.w != target.w || buffer.h != target.h);
-                                                // 02n: swap atômico no release. O código acima
-                                                // abandonava o 9-slice no MESMO render em que
-                                                // o buffer final chegava (rescaled=true->false
-                                                // com buf 708x530 -> 768x582), apresentando o
-                                                // buffer recém-chegado ainda mid-resize.
-                                                // Enquanto houver release pendente, o congelado
-                                                // continua sendo composto via 9-slice. Só é
-                                                // aposentado quando o buffer casa com o alvo E
-                                                // a geração das slices casa com o congelado E o
-                                                // idle já enviou `source=final` E decorreu o
-                                                // curto assentamento. A troca acontece num
-                                                // único render (atômica).
-                                                if buffer.w > 0 && buffer.h > 0 {
-                                                    if let Some(mut rs) = state.release_swap {
-                                                        if rs.window_id == *_window_id {
-                                                            let final_buf = buffer.w == target.w
-                                                                && buffer.h == target.h;
-                                                            let gen_ok = rs.frozen_slice_gen
-                                                                == state.slice_generation;
-                                                            let mut keep_frozen = true;
-                                                            if final_buf && gen_ok && rs.final_sent {
-                                                                let now = std::time::Instant::now();
-                                                                let matched = match rs.matched_at {
-                                                                    Some(t) => t,
-                                                                    None => {
-                                                                        rs.matched_at = Some(now);
-                                                                        #[cfg(feature = "bench")]
-                                                                        eprintln!(
-                                                                            "RELEASE_SWAP_MATCH t={} window_id={} buf={}x{} gen={}",
-                                                                            crate::frame_diagnostics::now_ns(),
-                                                                            *_window_id, buffer.w, buffer.h,
-                                                                            state.slice_generation,
-                                                                        );
-                                                                        now
-                                                                    }
-                                                                };
-                                                                let waited = now.duration_since(matched);
-                                                                if waited
-                                                                    >= crate::state::RELEASE_SWAP_SETTLE
-                                                                {
-                                                                    #[cfg(feature = "bench")]
-                                                                    eprintln!(
-                                                                        "RELEASE_SWAP_ATOMIC t={} window_id={} buf={}x{} waited_ms={:.1}",
-                                                                        crate::frame_diagnostics::now_ns(),
-                                                                        *_window_id, buffer.w, buffer.h,
-                                                                        waited.as_secs_f64() * 1000.0,
-                                                                    );
-                                                                    // Aposenta o congelado neste
-                                                                    // único render: `rescaled`
-                                                                    // permanece false e o nativo
-                                                                    // entra já com o buffer final.
-                                                                    state.release_swap = None;
-                                                                    keep_frozen = false;
-                                                                }
-                                                            }
-                                                            if keep_frozen {
-                                                                rescaled = true;
-                                                                state.release_swap = Some(rs);
-                                                            }
-                                                        }
-                                                    }
-                                                }
+                                                // 02p: canvas fixo => TODO commit válido usa
+                                                // 9-slice, inclusive quando buffer == target.
+                                                // Não há caminho nativo/swap no release.
+                                                let rescaled = buffer.w > 0 && buffer.h > 0;
                                                 // 02k: linhas de corte = insets do frame (state.rs:36-56).
                                                 // `shadow` é 0 nesta fase; se passar a existir,
                                                 // entra nas fatias externas.
@@ -367,6 +308,47 @@ pub fn init_winit(
                                                 let delta_by = SlicePoint::new(delta.x, delta.y + shift_y);
                                                 let delta_rb = SlicePoint::new(delta.x + shift_x, delta.y + shift_y);
                                                 #[cfg(feature = "bench")]
+                                                if *_window_id == 0 {
+                                                    let region = smithay::utils::Rectangle::<
+                                                        i32,
+                                                        smithay::utils::Physical,
+                                                    >::new(loc, (dst_phys.w, t).into());
+                                                    let region = output
+                                                        .current_mode()
+                                                        .map(|mode| {
+                                                            let visible = smithay::utils::Rectangle::from_size(
+                                                                mode.size,
+                                                            );
+                                                            let region = region
+                                                                .intersection(visible)
+                                                                .unwrap_or(region);
+                                                            output
+                                                                .current_transform()
+                                                                .invert()
+                                                                .transform_rect_in(region, &mode.size)
+                                                        })
+                                                        .unwrap_or(region);
+                                                    titlebar_probe = Some(
+                                                        crate::frame_titlebar_probe::TitlebarFrame {
+                                                            window_id: *_window_id,
+                                                            region: smithay::utils::Rectangle::new(
+                                                                smithay::utils::Point::new(
+                                                                    region.loc.x,
+                                                                    region.loc.y,
+                                                                ),
+                                                                smithay::utils::Size::new(
+                                                                    region.size.w,
+                                                                    region.size.h,
+                                                                ),
+                                                            ),
+                                                            buffer: (buffer.w, buffer.h),
+                                                            target: (target.w, target.h),
+                                                            rescaled,
+                                                            release_pending: false,
+                                                        },
+                                                    );
+                                                }
+                                                #[cfg(feature = "bench")]
                                                 let frame_t_nanos;
                                                 #[cfg(feature = "bench")]
                                                 {
@@ -388,7 +370,9 @@ pub fn init_winit(
                                                     };
                                                     state.frame_diag.note_stretch(
                                                         *_window_id,
-                                                        rescaled,
+                                                        rescaled
+                                                            && state.resize_grab_active
+                                                                == Some(*_window_id),
                                                         max_scale,
                                                         std::time::Instant::now(),
                                                         crate::frame_diagnostics::now_ns(),
@@ -585,9 +569,17 @@ pub fn init_winit(
                                     crate::frame_pixel_probe::capture(
                                         renderer,
                                         &framebuffer,
-                                        state.slice_generation,
-                                        state.release_swap.is_some(),
+                                        0,
+                                        false,
                                     );
+                                    #[cfg(feature = "bench")]
+                                    if let Some(frame) = titlebar_probe {
+                                        crate::frame_titlebar_probe::capture(
+                                            renderer,
+                                            &framebuffer,
+                                            frame,
+                                        );
+                                    }
                                     Some(rendered)
                                 }
                                 Err(err) => {

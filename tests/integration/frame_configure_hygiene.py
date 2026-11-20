@@ -11,7 +11,7 @@ Instrumentação esperada do compositor (`--features bench`):
 
 Critério: configures de frame por motion <= 1/3; configure do cliente em TODOS
 os motions; nenhum configure `source=commit` durante o grab; um `source=final`
-após soltar com o tamanho REAL do conteúdo; buffer nativo em <=500 ms.
+após soltar com o tamanho REAL do conteúdo; canvas constante, 9-slice e paint confirmado.
 
 VM sem 3D: nenhuma conclusão de desempenho. Nenhuma amostra é descartada em
 silêncio — as linhas cruas usadas no veredito são impressas.
@@ -248,11 +248,11 @@ last_size = last_commit[-1][1] if last_commit else None
 settled_glue = [
     g for g in glue
     if t_release <= g[0] <= t_release + SETTLE_MS * 1_000_000
-    and not g[3] and g[1] == g[2] and min(g[1]) > 0
+    and g[3] and min(g[1]) > 0
 ]
-settled_buffers = [
-    b for b in buffer_commits
-    if t_release <= b[0] <= t_release + SETTLE_MS * 1_000_000 and b[1]
+painted_after = [
+    int(m.group(1)) for m in re.finditer(r"FRAME_PAINTED t=(\d+)", text)
+    if t_release <= int(m.group(1)) <= t_release + SETTLE_MS * 1_000_000
 ]
 
 print("\n--- trecho cru das medições (primeiras e últimas 8 linhas de cada fonte) ---")
@@ -277,7 +277,7 @@ print("por source (durante): " + repr({
     for src in sorted({c[4] for c in during_configs})
 }))
 print(f"apos soltar: finals={len(finals)} ultimo_cliente={last_size} "
-      f"glue_colados={len(settled_glue)} buffers_ok={len(settled_buffers)}")
+      f"glue_colados={len(settled_glue)} paints={len(painted_after)} buffers_ok={sum(1 for b in buffer_commits if b[1])}")
 
 if not during_motions:
     problems.append("nenhuma linha RESIZE_SYNC_MOTION no intervalo do arrasto")
@@ -300,8 +300,10 @@ elif last_size is not None and finals[0][3] != last_size:
     problems.append(f"final {finals[0][3]} != tamanho real do cliente {last_size}")
 if not settled_glue:
     problems.append(f"nenhum RESIZE_GLUE colado em {SETTLE_MS} ms após soltar")
-if not settled_buffers:
-    problems.append(f"nenhum FRAME_BUFFER_COMMIT ok=true em {SETTLE_MS} ms após soltar")
+if not painted_after:
+    problems.append(f"nenhum FRAME_PAINTED em {SETTLE_MS} ms após soltar")
+if len({g[2] for g in settled_glue}) > 1:
+    problems.append(f"canvas mudou no release: {sorted({g[2] for g in settled_glue})}")
 
 verdict = "FALHA" if problems else "OK"
 if problems:

@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-20 · tarefa `02j` executada e fechada no critério técnico (sem critério visual novo) · 02e/02f com juiz visual negativo · modo: SPIKE
+Última atualização: 2026-11-20 · tarefa `02p` FECHADA (canvas fixo + 9-slice permanente, pixels e juiz visual OK) · modo: SPIKE
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -271,11 +271,26 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   run1 `CAPTUROU` (`PAR diff_medio=0.00`), runs 2/3 `PAR_NAO_CAPTURADO`. `flashes_candidatos=0` e
   `diff_medio_max=4,81` nas 3 — insuficiente para explicar o que o humano viu (§7). Gate CHECK=0
   (`/tmp/opencode/02o_check_final.log`), clippy bench EXIT=0 (`/tmp/opencode/02o_clippy2.log`).
+- [x] 02p (CANVAS FIXO, FECHADA): shell com canvas inicial output+insets, nenhum `set_default_size`
+  no resize comum, 9-slice em TODO frame e `frame_painted(serial)` após double-rAF. `ReleaseSwap` e
+  timers 200/50/400 ms removidos; crescimento só com paint do serial pendente. **Teste full-res visto
+  falhando:** `/tmp/opencode/02p_pixel_baseline3.log` → 2 transientes de 1.910 pixels com target
+  constante, `changed_pixels=3820 native_frames=107 canvas_changes=1 VEREDITO: FALHA`; o humano também
+  viu o flicker rápido nessa execução. Depois, 3 execuções completas (`02p_pixel_after{2,3,4}.log`):
+  todas 8/8 motions, target 768x582, `changed_pixels=0 native_frames=0 canvas_changes=0 VEREDITO: OK`.
+  Growth real (`02p_pixel_growth1.log`): 1292x836→1344x1167, `growth_completed=1 changed_pixels=0`.
+  Regressões: insets do associate (`canvas_tracks_insets_from_initial_associate`, baseline 1280x800→
+  esperado 1292x836) e ativação repetida (`frame_repeated_activate.py`, ANTES `duplicate=True
+  shell_died=True associates=2`, DEPOIS tudo falso/1, `activate_ignorado=True`).
+  Vizinhos: buttons, 8 edges, resize glue, grab/configure/fixed-canvas hygiene, initial buffer,
+  window_id, follows_resize e diagnostics normal/faults OK. Gate `02p_check_final.log` EXIT=0;
+  clippy bench `02p_clippy_final.log` EXIT=0. ADR novo 0007; nenhum ADR anterior editado.
+- [x] 02p — JUIZ VISUAL DO HUMANO (2026-11-20): após testar a instância v2 com 2 `foot`, o humano
+  respondeu **"teste visual ok. Passou"**. Instância encerrada pelo próprio humano (notificações dos
+  processos); nenhum encerramento foi feito pelo agente. Tarefa FECHADA.
 ## 4. Em andamento
-- 02o EM ANDAMENTO / NÃO CONCLUÍDA: medição de pixels existe e é estável (180-186 frames, 0 erros EGL), mas
-  NÃO capturou o flicker que o humano viu nas 3 execuções ("nas 3x da medição o problema ocorre ainda").
-  1/3 capturou o par 9-slice/nativo (diff 0,00); 2/3 nem capturaram o par. Cartão 02o exige correlação com o juiz
-  e captura confiável — critérios NÃO fechados. **PARAR**: sem nova decisão não ajustar limiares nem corrigir.
+- Nenhuma nesta sessão. A 02p foi concluída com pixels, vizinhos, gate/clippy e juiz visual positivos (§3).
+- 02o SUBSTITUÍDA pela medição/correção 02p; não ajustar sua grade antiga nem reabrir sem novo pedido.
 - 02n: **JUIZ VISUAL NEGOU (2026-11-20)** — humano: "problema ainda ocorre". Técnica/gate/clippy provados 3× (§3),
   mas o dado visual prevalece; 0 frames inconsistentes no teste NÃO mede o que o humano viu (lacuna registrada em §7).
   A instância `wayland-aero-02n` (PID 118815, shell 118824) NÃO está mais em `ps` — terminou durante a 02o,
@@ -302,11 +317,8 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. `02o` — MEDIÇÃO PARCIAL: o humano viu flicker nas 3 execuções, mas a grade 64x40 reportou 0 flashes e
-   diff ≤4,81/255. PRÓXIMO PASSO É DO HUMANO: (a) autorizar cartão novo para uma medição/visualização que
-   enxergue o flicker (ex.: dump RAW por frame + reconstrução offline), (b) aceitar como dívida, (c) outro rumo.
-   NÃO ajustar limiares nem abrir correção sem decisão. Dúvida em aberto: flicker só no soltar ou também no
-   clique/arrasto da 02m? (o humano não respondeu ainda).
+0. `02o` — SUBSTITUÍDA: a 02p criou sonda full-res que reproduziu o flicker (2×1.910 pixels) e depois
+   comprovou canvas fixo sem transiente. A grade antiga não é mais critério; não reabrir sem novo pedido.
 1. `02n` — JUIZ NEGOU ("problema ainda ocorre"); instância já não existe. NÃO abrir 5ª correção sem decisão.
 2. `02j` — CONCLUÍDA; os 3 modos nomeados (`FRAME_NEVER_ACKED`, `FRAME_NEVER_DREW_AT_SIZE`,
    `FRAME_STRETCH_ACTIVE`) estão no log bench. Próximo passo natural (NÃO executado): correlacionar esses modos
@@ -318,6 +330,15 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
 7. `05-compatibilidade-protocolos.md` — RASCUNHO; 7 mensagens do `foot` registradas em §6. NÃO executar sem ok.
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- 02p (MEDIÇÃO, amostras preservadas): a 1ª sonda usou retângulo sem transform e foi INVALIDADA por
+  `sanity_titlebar=0` (`02p_pixel_baseline1.log`); não foi usada como evidência. A 2ª falha foi compilação
+  da sonda. O baseline válido só foi aceito com `sanity_titlebar=205` e os transientes crus.
+- 02p (REGRESSÕES DO JUIZ, corrigidas e testadas): o primeiro configure antes de `set_insets` deixava
+  canvas compositor=1280x800 vs shell=1292x836 e quebrava caps direito/inferior; reconciliação agora só
+  altera o canvas inicial antigo. Uma segunda ativação do `GApplication` reassociava id 0 e derrubava o
+  shell (`aero-02p-visual.log:9413-9414`); `ACTIVATED` agora torna o handler idempotente. Evidências em §3.
+- 02p (INFRA): `frame_resize_edges` não executou uma vez porque outra instância manual estava viva e o
+  application_id era compartilhado; repetido após o humano fechar → OK. Não foi contado como flake/produto.
 - 02n (MUDANÇA DE TESTE VIZINHO, transparente): `frame_configure_hygiene.py` classificava `source=final` só até
   +100 ms do release — janela do comportamento 02m. A 02n adia o final para o idle (medido 205-209 ms), então o
   teste reportou `final configs=0` com 1 final real no log cru. Ajustei SÓ a janela de classificação para
@@ -526,6 +547,9 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- 02p: desempenho/PSS/latência em GPU real NÃO medidos (VM sem 3D). Readback síncrono altera cadência;
+  os testes provam pixels/geometria/funcionamento, não fps. Multi-output e crescimentos repetidos além
+  de um salto não foram medidos. O critério visual nested com 2 `foot` foi APROVADO pelo humano (§3).
 - **02o (JUIZ VISUAL NEGOU A MEDIÇÃO — 2026-11-20): humano, ao observar as 3 execuções do harness de pixels,
   disse "nas 3x da medição o problema ocorre ainda".** Ou seja: o flicker aparece enquanto a grade 64x40 reporta
   `flashes_candidatos=0` e `diff_medio_max=4,81/255`. A medição NÃO capturou o que o humano vê — lacuna, não
@@ -669,21 +693,15 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- O que eu estava fazendo: 02o (medição de pixels, NÃO correção). `frame_pixel_probe.rs` sob `bench` lê o
-  framebuffer com `copy_framebuffer`+`map_texture`, grava grade 64x40 e o harness compara frames no release.
-  Readback estável (180-186 frames, 0 erros EGL), mas o humano viu flicker nas 3 execuções e a métrica não o
-  capturou (0 flashes, diff ≤4,81; par capturado em só 1/3). Cartão NÃO fechado; PARAR sem nova decisão.
-- Gate final nesta sessão (após a última edição de código): `bash scripts/check.sh` → CHECK=0, bun 9 pass/0 fail
-  (`/tmp/opencode/02o_check_final.log`);
+- 02p FECHADA: canvas fixo + 9-slice permanente, `frame_painted`, ReleaseSwap/timers removidos; ADR 0007.
+- Gate final: `bash scripts/check.sh` → EXIT=0 (`/tmp/opencode/02p_check_final.log`);
   `cargo clippy --workspace --all-targets --features bench -- -D warnings` → EXIT=0
-  (`/tmp/opencode/02o_clippy2.log`, após trocar divisão por `n.max(1)` — sem `allow`).
-- Reproduzir: `python3 tests/integration/frame_release_pixel_probe.py` → baseline sem instrumentação
-  NAO_CAPTUROU (`/tmp/opencode/02o_pixel_baseline2.log`); 3 execuções em `/tmp/opencode/02o_pixel_run{1,2,3}.log`.
-  Dumps crus em `/tmp/opencode/02o_pixels_*`; logs de compositor em `/tmp/pxp-comp-*.log`.
-- Instância visual: a 02n (`wayland-aero-02n`, PID 118815) terminou durante esta sessão sem ação do agente.
-  Nenhuma instância aberta agora; juiz visual da 02o está PENDENTE/NEGATIVO (§7), não encerrar nada.
-- PRÓXIMO PASSO (não executar): humano decidir entre novo cartão de medição (dump RAW por frame/reconstrução
-  offline) ou aceitar dívida. NÃO ajustar limiares, NÃO corrigir flicker, NÃO abrir 5ª correção sem ok.
-- Restrições: não mexer em 02m/02k/02l, `target`, move, conteúdo, protocolo, shell, ADRs ou dependências sem
-  aprovação; sem push; VM sem 3D (nada de desempenho). Desvio D-Bus e bug de detecção do par em §6.
-- Contexto em §6: cprussin é contribuidor (criador: Victor Berger/elinorbgr); prior art é contexto, não receita.
+  (`/tmp/opencode/02p_clippy_final.log`). Bun 9 pass/0 fail; testes Rust incluem as 2 regressões novas.
+- Reproduzir: `python3 tests/integration/frame_fixed_canvas_release_pixels.py` → OK; baseline preservado
+  em `02p_pixel_baseline3.log`; 3 finais em `02p_pixel_after{2,3,4}.log`; `...py growth` → growth real OK.
+- Regressões: `cargo test -p aeroshell-compositor canvas_tracks_insets_from_initial_associate` e
+  `python3 tests/integration/frame_repeated_activate.py` (ativação repetida não derruba mais os frames).
+- Juiz visual: humano disse "teste visual ok. Passou" na instância v2 com 2 `foot` e a encerrou; nenhuma
+  instância aberta agora. O agente não encerrou a aplicação.
+- Encerramento: o humano autorizou o commit local da 02p; sem push e sem iniciar outra fase/tarefa.
+  Não medir desempenho nesta VM; GPU real continua pendente.

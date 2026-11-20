@@ -401,13 +401,9 @@ impl PointerGrab<AeroState> for ResizeGrab {
     }
 
     fn unset(&mut self, data: &mut AeroState) {
-        // 02n: o release NÃO envia mais `source=final` no momento visual e NÃO
-        // reabilita o commit-hook. Entramos em `release_pending`: o commit-hook
-        // fica calado e o render força o 9-slice do buffer congelado até o idle
-        // enviar o final FORA do gesto (02n) e o buffer casar com as slices.
-        //
-        // Mantemos o `source=final` (cartão 02n: "manter o request"), só o
-        // deslocamos para o idle em `AeroState::tick_release_swap`.
+        // O canvas não muda no release. O configure final só sincroniza o
+        // conteúdo usado pelo hit-test/bookkeeping e reabilita o commit-hook;
+        // ele não redimensiona a WebView nem altera a composição 9-slice.
         let window_id = self.window.toplevel().and_then(|toplevel| {
             let surface = toplevel.wl_surface();
             data.associated_frames
@@ -415,30 +411,11 @@ impl PointerGrab<AeroState> for ResizeGrab {
                 .find(|(_, _, _, cs)| cs.as_ref() == Some(surface))
                 .map(|(_, _, id, _)| *id)
         });
-        let captured = window_id.and_then(|id| data.client_content_size(id).map(|c| (id, c)));
-        if let Some((window_id, content)) = captured {
-            let now = std::time::Instant::now();
-            data.release_swap = Some(crate::state::ReleaseSwap {
-                window_id,
-                frozen_slice_gen: data.slice_generation,
-                final_content: content,
-                released_at: now,
-                deadline: now + crate::state::RELEASE_SWAP_TIMEOUT,
-                final_sent: false,
-                matched_at: None,
-            });
-            #[cfg(feature = "bench")]
-            eprintln!(
-                "RELEASE_SWAP_BEGIN t={} window_id={} content={}x{}",
-                crate::frame_diagnostics::now_ns(),
-                window_id,
-                content.0,
-                content.1,
-            );
-        } else {
-            // Sem conteúdo para congelar: volta ao comportamento 02m de não
-            // deixar o commit-hook preso.
-            data.resize_grab_active = None;
+        data.resize_grab_active = None;
+        if let Some((window_id, content)) =
+            window_id.and_then(|id| data.client_content_size(id).map(|c| (id, c)))
+        {
+            data.send_frame_configure(window_id, content, "final");
         }
     }
 }
@@ -453,13 +430,6 @@ pub fn start_geometry_grab(
 ) -> bool {
     if !crate::protocols::aero_frame::serial_valid(state.last_button_serial, serial) {
         return false;
-    }
-    // 02n: um novo grab (move OU resize) cancela um swap pós-release pendente:
-    // o final adiado deixaria de corresponder ao tamanho que o usuário está
-    // agora manipulando, e o timeout/zero de resize_grab_active seriam
-    // reaplicados pelo fluxo normal deste grab.
-    if state.release_swap.take().is_some() {
-        state.resize_grab_active = None;
     }
     // window_id é lógico e estável; `elements().nth()` é ordem z e foi reordenado
     // pelo raise_element do clique que iniciou este grab.
@@ -491,10 +461,8 @@ pub fn start_geometry_grab(
             // "freeze grande" (source=grab-start) forçava um resize do GTK/WebKit:
             // por alguns frames o buffer grande chegava com layout antigo e o
             // 9-slice recortava pixels errados (flash no clique da borda).
-            // O buffer fica congelado no último tamanho assentado — o 9-slice
-            // já compõe com buffer < target (02k/02l). O configure
-            // source=final agora vai no IDLE do release (02n), não no unset,
-            // para não apresentar o buffer recém-chegado ainda mid-resize.
+            // O canvas permanece fixo; o 9-slice compõe qualquer target. O
+            // configure final no unset existe só para bookkeeping, sem resize.
             state.resize_grab_active = Some(window_id);
             let grab = ResizeGrab::new(window, start_data, edges, loc, size);
             pointer.set_grab(state, grab, serial, Focus::Clear);

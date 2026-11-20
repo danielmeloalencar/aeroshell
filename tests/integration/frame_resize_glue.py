@@ -7,8 +7,8 @@ associado:
               buffer=<w>x<h> rescaled=<bool>
 
 Invariante: target == conteúdo COMMITADO + extras (insets + shadow) e
-rescaled == (buffer != target). Após soltar o grab, o repaint do WebKit deve
-alcançar o alvo em ≤500 ms (rescaled=false e buffer==target).
+Na arquitetura 02p, todo frame associado usa 9-slice (rescaled=true) e o canvas
+permanece constante no grab/release; não existe mais swap para buffer nativo.
 
 VM sem 3D: nenhuma conclusão de desempenho; apenas geometria. Nenhuma amostra
 é descartada em silêncio — as linhas cruas são impressas.
@@ -196,15 +196,17 @@ for t, wid, content, target, buffer, rescaled, raw in during:
     want = (content[0] + extras[0], content[1] + extras[1])
     if any(abs(a - b) > TOL for a, b in zip(target, want)):
         problems.append(f"target {target} != content+extras {want}")
-    if rescaled != (buffer != target):
-        problems.append(f"rescaled={rescaled} mas buffer={buffer} target={target}")
+    if not rescaled:
+        problems.append(f"frame abandonou 9-slice: buffer={buffer} target={target}")
 
 settled = [g for g in glue if release_ns <= g[0] <= release_ns + SETTLE_MS * 1_000_000]
-ok_settle = [g for g in settled if not g[5] and g[4] == g[3] and min(g[2]) > 0]
+ok_settle = [g for g in settled if g[5] and min(g[2]) > 0]
 if not settled:
     problems.append(f"nenhuma linha RESIZE_GLUE nos {SETTLE_MS} ms após soltar")
 elif not ok_settle:
-    problems.append(f"após soltar: nenhuma linha com buffer==target e rescaled=false")
+    problems.append("após soltar: frame fora do 9-slice")
+elif len({g[4] for g in settled}) != 1:
+    problems.append(f"canvas mudou no release: {sorted({g[4] for g in settled})}")
 
 print(f"durante_grab={len(during)} apos_soltar={len(settled)} colados={len(ok_settle)}")
 
@@ -439,7 +441,7 @@ if problems:
 else:
     verdict = "OK"
 print(f"\nVEREDITO: {verdict}")
-print("(esperado: target == content + extras; rescaled == (buffer != target) no grab; "
-      "buffer==target e rescaled=false após soltar; edge_l/edge_r/title_h == insets e "
+print("(esperado: target == content + extras; 9-slice em todo frame; canvas constante; "
+      "edge_l/edge_r/title_h == insets e "
       f"sem salto de escala > {SNAP_LIMIT} durante o grab)")
 sys.exit(0 if verdict == "OK" else 1)

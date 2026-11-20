@@ -52,10 +52,9 @@ pub fn role_allowed(role: Option<&'static str>) -> bool {
 }
 
 impl AeroState {
-    /// Envia aero_frame.configure com o tamanho de CONTEÚDO e o duplo configure
-    /// da layer surface do frame com o total (conteúdo + insets + shadow).
-    /// O shell dimensiona a janela GTK a partir do configure (a lib C do
-    /// gtk4-layer-shell ignora o tamanho do zwlr configure em eixos não esticados).
+    /// Envia o conteúdo/target no protocolo aero e o canvas no layer-shell.
+    /// Resize comum mantém o canvas; apenas um target maior que ele cria um
+    /// crescimento pendente, concluído por `frame_painted(serial)`.
     pub fn send_frame_configure(
         &mut self,
         window_id: u32,
@@ -72,24 +71,47 @@ impl AeroState {
         };
         self.frame_configure_serial += 1;
         let serial = self.frame_configure_serial;
-        let frame_state = crate::aero_frame_protocol::aero_frame_v1::State::empty();
-        frame.configure(serial, content.0, content.1, frame_state);
-        self.pending_configures
-            .push((serial, std::time::Instant::now()));
-        self.frame_configured_content
-            .insert(frame_surface.clone(), content);
         let geo = self
             .frame_geometries
             .get(&frame_surface)
             .copied()
             .unwrap_or_default();
         let total = (content.0 + geo.extra_w(), content.1 + geo.extra_h());
+        let initial = self
+            .outputs
+            .first()
+            .and_then(|output| output.current_mode())
+            .map(|mode| (mode.size.w + geo.extra_w(), mode.size.h + geo.extra_h()))
+            .unwrap_or(total);
+        let canvas =
+            self.frame_canvases
+                .entry(frame_surface.clone())
+                .or_insert(crate::state::FrameCanvas {
+                    size: initial,
+                    pending_growth: None,
+                });
+        let configured = canvas.configured_size();
+        if canvas.pending_growth.is_none() && (total.0 > configured.0 || total.1 > configured.1) {
+            canvas.pending_growth = Some(crate::state::CanvasGrowth {
+                serial,
+                size: (configured.0.max(total.0), configured.1.max(total.1)),
+            });
+        }
+        let canvas_size = canvas.configured_size();
+        let canvas_growing = canvas.pending_growth.is_some();
+
+        let frame_state = crate::aero_frame_protocol::aero_frame_v1::State::empty();
+        frame.configure(serial, content.0, content.1, frame_state);
+        self.pending_configures
+            .push((serial, std::time::Instant::now()));
+        self.frame_configured_content
+            .insert(frame_surface.clone(), content);
         #[cfg(feature = "bench")]
         self.frame_diag.note_configure(
             window_id,
             serial,
             (content.0.max(0) as u32, content.1.max(0) as u32),
-            (total.0.max(0) as u32, total.1.max(0) as u32),
+            (canvas_size.0.max(0) as u32, canvas_size.1.max(0) as u32),
             Instant::now(),
             crate::frame_diagnostics::now_ns(),
         );
@@ -100,7 +122,7 @@ impl AeroState {
         {
             layer
                 .layer_surface()
-                .with_pending_state(|state| state.size = Some(total.into()));
+                .with_pending_state(|state| state.size = Some(canvas_size.into()));
             let _ = layer.layer_surface().send_configure();
         }
         tracing::info!(
@@ -110,6 +132,9 @@ impl AeroState {
             content_h = content.1,
             total_w = total.0,
             total_h = total.1,
+            canvas_w = canvas_size.0,
+            canvas_h = canvas_size.1,
+            canvas_growing,
             "frame configure (conteúdo do cliente)"
         );
         #[cfg(feature = "bench")]
@@ -120,9 +145,34 @@ impl AeroState {
                 .unwrap_or(0);
             eprintln!(
                 "FRAME_CONFIGURE t={t_nanos} serial={serial} window_id={window_id} \
-                 w={} h={} source={_source}",
-                content.0, content.1
+                 w={} h={} source={_source} canvas={}x{} growing={canvas_growing}",
+                content.0, content.1, canvas_size.0, canvas_size.1
             );
+        }
+    }
+
+    /// O associate pode enviar o primeiro configure antes de `set_insets`.
+    /// Reconcilia APENAS um canvas que ainda tem o tamanho inicial antigo;
+    /// crescimentos posteriores nunca são sobrescritos.
+    fn sync_initial_canvas_insets(
+        &mut self,
+        surface: &smithay::reexports::wayland_server::protocol::wl_surface::WlSurface,
+        old: crate::state::FrameGeometry,
+        new: crate::state::FrameGeometry,
+    ) {
+        let Some(mode) = self
+            .outputs
+            .first()
+            .and_then(|output| output.current_mode())
+        else {
+            return;
+        };
+        let previous_initial = (mode.size.w + old.extra_w(), mode.size.h + old.extra_h());
+        let initial = (mode.size.w + new.extra_w(), mode.size.h + new.extra_h());
+        if let Some(canvas) = self.frame_canvases.get_mut(surface) {
+            if canvas.size == previous_initial {
+                canvas.size = initial;
+            }
         }
     }
 
@@ -163,6 +213,7 @@ impl AeroState {
                 frame.closed();
                 state.frame_geometries.remove(&frame_surface);
                 state.frame_configured_content.remove(&frame_surface);
+                state.frame_canvases.remove(&frame_surface);
                 state
                     .frame_layer_surfaces
                     .retain(|l| l.wl_surface() != &frame_surface);
@@ -315,6 +366,7 @@ impl Dispatch<AeroFrameManagerV1, ()> for AeroState {
                             frame.closed();
                             state.frame_geometries.remove(&frame_surface);
                             state.frame_configured_content.remove(&frame_surface);
+                            state.frame_canvases.remove(&frame_surface);
                             state
                                 .frame_layer_surfaces
                                 .retain(|l| l.wl_surface() != &frame_surface);
@@ -405,13 +457,23 @@ impl Dispatch<AeroFrameV1, u32> for AeroState {
                 right,
                 bottom,
             } => {
-                if let Some((surface, _, _, _)) = state
+                if let Some(surface) = state
                     .associated_frames
                     .iter()
                     .find(|(_, _, id, _)| id == window_id)
+                    .map(|(surface, _, _, _)| surface.clone())
                 {
-                    let geo = state.frame_geometries.entry(surface.clone()).or_default();
-                    geo.insets = (left, top, right, bottom);
+                    let old = state
+                        .frame_geometries
+                        .get(&surface)
+                        .copied()
+                        .unwrap_or_default();
+                    let new = crate::state::FrameGeometry {
+                        insets: (left, top, right, bottom),
+                        ..old
+                    };
+                    state.frame_geometries.insert(surface.clone(), new);
+                    state.sync_initial_canvas_insets(&surface, old, new);
                 }
                 tracing::info!(window_id = *window_id, left, top, right, bottom, "insets");
             }
@@ -421,13 +483,23 @@ impl Dispatch<AeroFrameV1, u32> for AeroState {
                 right,
                 bottom,
             } => {
-                if let Some((surface, _, _, _)) = state
+                if let Some(surface) = state
                     .associated_frames
                     .iter()
                     .find(|(_, _, id, _)| id == window_id)
+                    .map(|(surface, _, _, _)| surface.clone())
                 {
-                    let geo = state.frame_geometries.entry(surface.clone()).or_default();
-                    geo.shadow = (left, top, right, bottom);
+                    let old = state
+                        .frame_geometries
+                        .get(&surface)
+                        .copied()
+                        .unwrap_or_default();
+                    let new = crate::state::FrameGeometry {
+                        shadow: (left, top, right, bottom),
+                        ..old
+                    };
+                    state.frame_geometries.insert(surface.clone(), new);
+                    state.sync_initial_canvas_insets(&surface, old, new);
                 }
                 tracing::info!(window_id = *window_id, left, top, right, bottom, "sombra");
             }
@@ -439,10 +511,6 @@ impl Dispatch<AeroFrameV1, u32> for AeroState {
                 {
                     let geo = state.frame_geometries.entry(surface.clone()).or_default();
                     geo.titlebar_slices = (left.max(0), right.max(0));
-                    // 02n: nova declaração de slices invalida o congelado: o
-                    // buffer atual passa a ter uma "versão" diferente daquela
-                    // capturada no release, e o swap espera o buffer novo.
-                    state.slice_generation = state.slice_generation.wrapping_add(1);
                 }
                 tracing::info!(window_id = *window_id, left, right, "fatias da titlebar");
             }
@@ -532,24 +600,57 @@ impl Dispatch<AeroFrameV1, u32> for AeroState {
                     tracing::info!(serial, ack_ms, "ack_configure");
                 }
             }
+            FrameRequest::FramePainted { serial } => {
+                let frame_surface = state
+                    .associated_frames
+                    .iter()
+                    .find(|(_, frame, _, _)| frame == resource)
+                    .map(|(surface, _, _, _)| surface.clone());
+                let mut growth_completed = false;
+                let mut _painted_size = None;
+                if let Some(surface) = frame_surface {
+                    if let Some(canvas) = state.frame_canvases.get_mut(&surface) {
+                        if canvas
+                            .pending_growth
+                            .is_some_and(|growth| growth.serial == serial)
+                        {
+                            if let Some(growth) = canvas.pending_growth.take() {
+                                canvas.size = growth.size;
+                                growth_completed = true;
+                            }
+                        }
+                        _painted_size = Some(canvas.configured_size());
+                    }
+                }
+                #[cfg(feature = "bench")]
+                if let Some(size) = _painted_size {
+                    state
+                        .frame_diag
+                        .note_buffer(*window_id, (size.0.max(0) as u32, size.1.max(0) as u32));
+                }
+                #[cfg(feature = "bench")]
+                eprintln!(
+                    "FRAME_PAINTED t={} serial={serial} window_id={} growth_completed={growth_completed}",
+                    crate::frame_diagnostics::now_ns(),
+                    *window_id,
+                );
+                tracing::info!(
+                    window_id = *window_id,
+                    serial,
+                    growth_completed,
+                    "frame painted"
+                );
+            }
             FrameRequest::Destroy => {
                 if let Some(pos) = state
                     .associated_frames
                     .iter()
                     .position(|(_, frame, _, _)| frame == resource)
                 {
-                    let (surface, _, window_id, _) = state.associated_frames.remove(pos);
-                    // 02n: janela destruída com swap pendente — cancelar o
-                    // estado sem pânico e liberar o commit-hook.
-                    if state
-                        .release_swap
-                        .is_some_and(|rs| rs.window_id == window_id)
-                    {
-                        state.release_swap = None;
-                        state.resize_grab_active = None;
-                    }
+                    let (surface, _, _, _) = state.associated_frames.remove(pos);
                     state.frame_geometries.remove(&surface);
                     state.frame_configured_content.remove(&surface);
+                    state.frame_canvases.remove(&surface);
                     state
                         .frame_layer_surfaces
                         .retain(|l| l.wl_surface() != &surface);

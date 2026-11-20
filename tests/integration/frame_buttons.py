@@ -132,9 +132,20 @@ print(f"conteudo inicial={start} frame_origin={FRAME_ORIGIN} total={total0}")
 client = probe(CONTENT_ORIGIN[0] + start[0] // 2, CONTENT_ORIGIN[1] + start[1] // 2)
 print(f"surface do cliente (probe no conteúdo) = {client[0]}")
 
+CANVAS = (OUTPUT_SIZE[0] + INSETS[0] + INSETS[2], OUTPUT_SIZE[1] + INSETS[1] + INSETS[3])
+
+
+def on_frame_hit(hit, total):
+    """No cap direito, a origem do ponteiro é target→canvas (02p)."""
+    expected = (FRAME_ORIGIN[0] - (CANVAS[0] - total[0]), FRAME_ORIGIN[1])
+    return (
+        hit is not None and hit[0] != client[0]
+        and hit[1] == float(expected[0]) and hit[2] == float(expected[1])
+    )
+
 print("\n=== maximizar (1º clique) ===")
 hit, cmd, own = click(*button_center("max"))
-on_frame = hit is not None and hit[1] == FRAME_ORIGIN[0] and hit[2] == FRAME_ORIGIN[1]
+on_frame = on_frame_hit(hit, total0)
 print(f"hit-test no botão max: {hit} hit_no_frame={on_frame} (surface do cliente={client[0]})")
 print(f"frame_host viu o press={own}")
 print(f"comando que chegou ao IPC via JS={cmd}")
@@ -144,14 +155,16 @@ print(f"conteudo depois de maximizar={maxed} (esperado ≈ {OUTPUT_SIZE} arredon
 print("\n=== restaurar (2º clique no mesmo botão) ===")
 hit2, cmd2, own2 = click(*button_center("max"))
 restored = content()
-on_frame2 = hit2 is not None and hit2[1] == FRAME_ORIGIN[0] and hit2[2] == FRAME_ORIGIN[1]
+total_max = (maxed[0] + INSETS[0] + INSETS[2], maxed[1] + INSETS[1] + INSETS[3])
+on_frame2 = on_frame_hit(hit2, total_max)
 print(f"hit-test no botão max: {hit2} hit_no_frame={on_frame2}")
 print(f"frame_host viu o press={own2}")
 print(f"comando via JS ao IPC={cmd2}; conteudo={restored}")
 
 print("\n=== fechar ===")
 hit3, cmd3, own3 = click(*button_center("close"))
-on_frame3 = hit3 is not None and hit3[1] == FRAME_ORIGIN[0] and hit3[2] == FRAME_ORIGIN[1]
+total_restored = (restored[0] + INSETS[0] + INSETS[2], restored[1] + INSETS[1] + INSETS[3])
+on_frame3 = on_frame_hit(hit3, total_restored)
 print(f"hit-test no botão close: {hit3} hit_no_frame={on_frame3}")
 print(f"frame_host viu o press={own3}")
 print(f"comando via JS ao IPC={cmd3}")

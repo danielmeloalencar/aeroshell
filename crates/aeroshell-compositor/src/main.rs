@@ -12,6 +12,8 @@ mod frame_metrics;
 // 02o: readback de pixels do framebuffer; exclusivo de `bench`.
 #[cfg(feature = "bench")]
 mod frame_pixel_probe;
+#[cfg(feature = "bench")]
+mod frame_titlebar_probe;
 mod grab;
 mod input;
 mod protocols;
@@ -169,8 +171,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     event_loop.run(None, &mut data, |data| {
-        // 02n: o idle envia o `source=final` adiado e aplica o timeout do swap.
-        data.state.tick_release_swap();
         #[cfg(feature = "bench")]
         data.state.check_frame_timeouts();
         let _ = data;
@@ -602,6 +602,87 @@ mod protocol_tests {
         assert_eq!(h.client.closed, 1, "janela inexistente deve gerar closed");
         assert_eq!(h.client.configured, 0);
         assert_eq!(h.data.state.frames.len(), 1);
+    }
+
+    #[test]
+    fn canvas_tracks_insets_from_initial_associate() {
+        let mut h = Harness::new(true);
+        let output = smithay::output::Output::new(
+            "test-02p".to_owned(),
+            smithay::output::PhysicalProperties {
+                size: (0, 0).into(),
+                subpixel: smithay::output::Subpixel::Unknown,
+                make: "AeroShell".to_owned(),
+                model: "test".to_owned(),
+            },
+        );
+        output.change_current_state(
+            Some(smithay::output::Mode {
+                size: (1280, 800).into(),
+                refresh: 60_000,
+            }),
+            None,
+            None,
+            None,
+        );
+        h.data.state.outputs = vec![output];
+        h.create_surface();
+        assert!(h.associate(0).is_none());
+        let frame = h.client.frames.first().unwrap().clone();
+        let surface = h.data.state.associated_frames.first().unwrap().0.clone();
+        assert_eq!(
+            h.data.state.frame_canvases.get(&surface).unwrap().size,
+            (1280, 800),
+            "pré-condição: configure do associate ocorre antes dos insets"
+        );
+
+        frame.set_insets(6, 30, 6, 6);
+        h.pump();
+        assert_eq!(
+            h.data.state.frame_canvases.get(&surface).unwrap().size,
+            (1292, 836),
+            "canvas do compositor deve coincidir com output + insets do shell"
+        );
+    }
+
+    #[test]
+    fn frame_painted_only_completes_matching_growth_serial() {
+        let mut h = Harness::new(true);
+        h.create_surface();
+        assert!(h.associate(0).is_none());
+        let frame = h.client.frames.first().unwrap().clone();
+        let surface = h.data.state.associated_frames.first().unwrap().0.clone();
+        h.data.state.frame_canvases.insert(
+            surface.clone(),
+            crate::state::FrameCanvas {
+                size: (100, 100),
+                pending_growth: Some(crate::state::CanvasGrowth {
+                    serial: 42,
+                    size: (200, 220),
+                }),
+            },
+        );
+
+        frame.frame_painted(41);
+        h.pump();
+        let canvas = h.data.state.frame_canvases.get(&surface).unwrap();
+        assert_eq!(canvas.size, (100, 100));
+        assert!(canvas.pending_growth.is_some(), "serial antigo foi aceito");
+
+        frame.frame_painted(42);
+        h.pump();
+        let canvas = h.data.state.frame_canvases.get(&surface).unwrap();
+        assert_eq!(canvas.size, (200, 220));
+        assert!(canvas.pending_growth.is_none());
+
+        frame.frame_painted(42);
+        h.pump();
+        let canvas = h.data.state.frame_canvases.get(&surface).unwrap();
+        assert_eq!(canvas.size, (200, 220));
+        assert!(
+            canvas.pending_growth.is_none(),
+            "paint duplicado recriou growth"
+        );
     }
 
     #[test]

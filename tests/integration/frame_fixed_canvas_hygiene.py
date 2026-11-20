@@ -1,24 +1,15 @@
 #!/usr/bin/env python3
-"""02n: swap atômico no release — nenhum frame com buffer inconsistente.
+"""02p: canvas fixo no release — 9-slice permanente, sem ReleaseSwap.
 
-Especificação do humano (2026-11-20): no release de um resize com arrasto, o
-compositor deve CONTINUAR apresentando o buffer congelado via 9-slice (já correto
-no target final) e só aposentar o congelado quando o buffer novo casar com a
-referência/versão das slices — swap atômico num único render. O `source=final`
-é adiado para idle (~150-250 ms).
+Substitui a métrica 02n, cuja exigência de aposentar o 9-slice para o buffer
+nativo foi removida pela nova arquitetura. Agora são falhas no release:
+  - qualquer frame `rescaled=false` (caminho nativo);
+  - qualquer mudança de canvas/buffer em resize que cabe no canvas inicial;
+  - qualquer linha RELEASE_SWAP_* ou ausência do configure final de bookkeeping.
 
-Métrica objetiva (sem julgar pixels, só sequência de estados no log bench):
-  - `frames_buffer_inconsistente` = frames após o `source=final` em que o tamanho
-    do buffer MUDA e, no MESMO render, `rescaled` cai de true para false (o
-    compositor troca 9-slice -> Surface nativo com o layout ainda mid-resize).
-    Baseline medido em /tmp/gh-comp-110069.log: 1 (708x530 rescaled=true ->
-    768x582 rescaled=false no mesmo frame).
-  - `swaps_atomicos` = transições em que o buffer muda para o tamanho final
-    ENQUANTO o 9-slice ainda está ativo (rescaled=true), e só depois o
-    9-slice é aposentado (rescaled=false com buf==target). É o swap invisível.
-
-Todas as linhas RESIZE_SLICE cruas são impressas; nenhuma amostra é descartada.
-VM sem 3D: só geometria/sequência, nenhuma conclusão de desempenho.
+O teste de PIXELS full-res desta mesma transição fica em
+`frame_fixed_canvas_release_pixels.py`. Todas as linhas RESIZE_SLICE cruas são
+impressas; nenhuma amostra é descartada. VM sem 3D: sem conclusão de desempenho.
 """
 import atexit
 import os
@@ -154,30 +145,23 @@ for x in post:
     print(f"  t={dt:+9.2f}ms buf={x['buf'][0]}x{x['buf'][1]} "
           f"target={x['target'][0]}x{x['target'][1]} rescaled={x['rescaled']}")
 
-# Buffer muda e 9-slice cai no MESMO render = frame inconsistente (baseline=1).
-inconsistentes = []
-atomicos = 0
-for prev, cur in zip(post, post[1:]):
-    buf_changed = cur["buf"] != prev["buf"]
-    slice_dropped = prev["rescaled"] and not cur["rescaled"]
-    buf_at_target = cur["buf"] == cur["target"]
-    if buf_changed and slice_dropped:
-        inconsistentes.append(cur)
-    # buffer chegou ao target ainda com 9-slice ativo -> swap vai ser atômico
-    if buf_changed and buf_at_target and cur["rescaled"]:
-        atomicos += 1
+native = [x for x in post if not x["rescaled"]]
+canvas_changes = sum(1 for prev, cur in zip(post, post[1:]) if cur["buf"] != prev["buf"])
+release_swap_events = [l for l in log().splitlines() if "RELEASE_SWAP" in l]
 
-print(f"\nframes_buffer_inconsistente={len(inconsistentes)} swaps_atomicos={atomicos} "
-      f"source_final={len(final_ts)}")
+print(f"\nframes_fora_9slice={len(native)} canvas_changes={canvas_changes} "
+      f"release_swap_events={len(release_swap_events)} source_final={len(final_ts)}")
 problems = []
-if inconsistentes:
-    for x in inconsistentes:
-        problems.append(
-            f"buffer {x['buf'][0]}x{x['buf'][1]} com 9-slice abandonado no mesmo render "
-            f"(target {x['target'][0]}x{x['target'][1]})"
-        )
-if atomicos < 1:
-    problems.append("nenhum swap atômico: buffer nunca alcançou o target com 9-slice ativo")
+if native:
+    problems.append(f"{len(native)} frames abandonaram o 9-slice")
+if canvas_changes:
+    problems.append(f"canvas mudou {canvas_changes} vez(es) no release")
+if release_swap_events:
+    problems.append(f"ReleaseSwap ainda emitiu {len(release_swap_events)} eventos")
+if not post:
+    problems.append("nenhum frame após source=final")
+if len(final_ts) != 1:
+    problems.append(f"source_final={len(final_ts)} (esperado 1)")
 
 print()
 if problems:

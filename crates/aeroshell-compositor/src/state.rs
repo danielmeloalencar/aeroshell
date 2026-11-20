@@ -1,11 +1,6 @@
 //! Estado global do compositor. Não conhece o backend concreto.
 
-use std::{
-    collections::HashMap,
-    ffi::OsString,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{collections::HashMap, ffi::OsString, sync::Arc, time::Instant};
 
 use smithay::{
     desktop::{PopupManager, Space, Window, WindowSurfaceType},
@@ -35,36 +30,27 @@ use smithay::{
 
 use crate::{cli::Options, CalloopData};
 
-/// 02n: atraso do `source=final` após o release (fora do momento visual).
-pub const RELEASE_IDLE_DELAY: Duration = Duration::from_millis(200);
-/// 02n: o 9-slice do buffer final é mantido por este intervalo antes de o
-/// congelado ser aposentado. Dá tempo ao WebKit assentar o layout e garante
-/// que o swap para nativo ocorra num render separado e atômico.
-pub const RELEASE_SWAP_SETTLE: Duration = Duration::from_millis(50);
-/// 02n: timeout de segurança; aposenta o congelado mesmo sem sinal do cliente.
-/// Coerência: 200 ms (idle) + ~80 ms (commit do WebKit, medido) + 50 ms (settle)
-/// = 330 ms < 400 ms.
-pub const RELEASE_SWAP_TIMEOUT: Duration = Duration::from_millis(400);
-
-/// 02n: estado do swap atômico após o release de um resize com arrasto.
-///
-/// Enquanto `Some`, o render FORÇA o caminho 9-slice (buffer congelado) mesmo
-/// quando `buffer_size == total_final` — o código antigo trocava para
-/// `Surface(el)` nesse instante e apresentava o buffer recém-chegado com layout
-/// mid-resize por 1+ frame (flicker medido em /tmp/gh-comp-110069.log).
+/// Crescimento excepcional do canvas, confirmado pelo paint do shell.
 #[derive(Debug, Clone, Copy)]
-pub struct ReleaseSwap {
-    pub window_id: u32,
-    /// Geração das `titlebar_slices` no instante do congelamento.
-    pub frozen_slice_gen: u64,
-    /// Conteúdo final capturado no release; enviado no idle com `source=final`.
-    pub final_content: (i32, i32),
-    pub released_at: Instant,
-    pub deadline: Instant,
-    /// `source=final` já enviado (fora do momento visual).
-    pub final_sent: bool,
-    /// Instante em que buffer==alvo E a geração das slices casou (1ª vez).
-    pub matched_at: Option<Instant>,
+pub struct CanvasGrowth {
+    pub serial: u32,
+    pub size: (i32, i32),
+}
+
+/// O canvas é independente do target apresentado. Seu tamanho só muda quando
+/// o target não cabe mais e o shell confirma o paint daquele configure.
+#[derive(Debug, Clone, Copy)]
+pub struct FrameCanvas {
+    pub size: (i32, i32),
+    pub pending_growth: Option<CanvasGrowth>,
+}
+
+impl FrameCanvas {
+    pub fn configured_size(&self) -> (i32, i32) {
+        self.pending_growth
+            .map(|growth| growth.size)
+            .unwrap_or(self.size)
+    }
 }
 
 /// Geometria declarada pelo cliente para um frame (ADR 0004): insets movem o
@@ -166,13 +152,8 @@ pub struct AeroState {
     /// enquanto o grab decide o tamanho: reenviar o tamanho atrasado do cliente
     /// "puxa" a moldura para trás e gera um storm de configures (02f).
     pub resize_grab_active: Option<u32>,
-    /// 02n: swap atômico pendente após o release de um resize com arrasto.
-    /// `resize_grab_active` continua `Some` até o idle enviar `source=final`
-    /// para que o commit-hook também fique calado nesse intervalo.
-    pub release_swap: Option<ReleaseSwap>,
-    /// 02n: geração das `titlebar_slices`; incrementada em `SetTitlebarSlices`.
-    /// O congelado só é aposentado quando a geração casar com a do buffer.
-    pub slice_generation: u64,
+    /// Canvas fixo de cada frame; o target continua sendo conteúdo + extras.
+    pub frame_canvases: HashMap<WlSurface, FrameCanvas>,
 
     /// Última ação de geometry para medir latência até o frame atualizado.
     pub last_geometry_action: Option<(String, std::time::Instant)>,
@@ -290,8 +271,7 @@ impl AeroState {
             ),
             last_button_serial: None,
             resize_grab_active: None,
-            release_swap: None,
-            slice_generation: 0,
+            frame_canvases: HashMap::new(),
             shell_manager: None,
             window_surfaces: HashMap::new(),
             frame_geometries: HashMap::new(),
@@ -387,11 +367,30 @@ impl AeroState {
             if content_rect.to_f64().contains(pos) {
                 continue;
             }
+            // O ponteiro usa as coordenadas do CANVAS, enquanto o hit-test é
+            // no target apresentado. Caps direito/inferior são deslocados pela
+            // mesma diferença do 9-slice; assim botões HTML e edges continuam
+            // recebendo as posições das bordas corretas sem mudar move/resize.
+            let local = pos - frame_loc.to_f64();
+            let target = frame_rect.size;
+            let canvas = self
+                .frame_canvases
+                .get(frame_surface)
+                .map(|canvas| canvas.configured_size())
+                .unwrap_or((target.w, target.h));
+            let right_cap = fgeo.insets.2 + fgeo.titlebar_slices.1;
+            let mut pointer_origin = frame_loc.to_f64();
+            if local.x >= (target.w - right_cap) as f64 {
+                pointer_origin.x -= (canvas.0 - target.w) as f64;
+            }
+            if local.y >= (target.h - fgeo.insets.3) as f64 {
+                pointer_origin.y -= (canvas.1 - target.h) as f64;
+            }
             // Smithay (input/pointer/mod.rs:795) calcula o local do cliente como
             // `event.location - loc`: o ponto devolvido aqui é a ORIGEM GLOBAL da
             // superfície (não o hit local), para que enter/motion cheguem certos.
-            tracing::debug!(?pos, ?frame_rect, ?content_rect, hit_frame = ?frame_surface.id(), "hit-test frame (região de decoração)");
-            return Some((frame_surface.clone(), frame_loc.to_f64()));
+            tracing::debug!(?pos, ?frame_rect, ?content_rect, ?pointer_origin, hit_frame = ?frame_surface.id(), "hit-test frame (região de decoração)");
+            return Some((frame_surface.clone(), pointer_origin));
         }
         if let Some((window, location)) = self.space.element_under(pos) {
             if let Some((s, p)) =
@@ -421,48 +420,6 @@ impl AeroState {
             "FRAME_SUMMARY samples={} mean_ms={mean:.3} p95_ms={p95:.3}",
             values.len()
         );
-    }
-
-    /// 02n: chamado no idle do event loop. Envia o `source=final` adiado e
-    /// aplica o timeout de segurança. A aposentadoria do congelado depende do
-    /// tamanho do buffer e acontece no render (`winit.rs`), que registra
-    /// `matched_at`; aqui só se garante que o estado não fique preso.
-    pub fn tick_release_swap(&mut self) {
-        let Some(rs) = self.release_swap else {
-            return;
-        };
-        let now = Instant::now();
-
-        if !rs.final_sent && now.duration_since(rs.released_at) >= RELEASE_IDLE_DELAY {
-            if let Some(pending) = self.release_swap.as_mut() {
-                pending.final_sent = true;
-            }
-            self.resize_grab_active = None;
-            self.send_frame_configure(rs.window_id, rs.final_content, "final");
-            #[cfg(feature = "bench")]
-            eprintln!(
-                "RELEASE_SWAP_FINAL t={} window_id={} delay_ms={:.1}",
-                crate::frame_diagnostics::now_ns(),
-                rs.window_id,
-                now.duration_since(rs.released_at).as_secs_f64() * 1000.0,
-            );
-        }
-
-        if now >= rs.deadline {
-            if !rs.final_sent {
-                // Segurança: nunca deixar o shell sem o configure final.
-                self.send_frame_configure(rs.window_id, rs.final_content, "final");
-            }
-            #[cfg(feature = "bench")]
-            eprintln!(
-                "RELEASE_SWAP_TIMEOUT t={} window_id={} final_sent={}",
-                crate::frame_diagnostics::now_ns(),
-                rs.window_id,
-                rs.final_sent,
-            );
-            self.release_swap = None;
-            self.resize_grab_active = None;
-        }
     }
 
     /// Chamado no idle do event loop: registra uma vez cada `ack_configure`

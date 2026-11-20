@@ -33,10 +33,10 @@
       à regra geral de que layer surfaces passam pelo LayerMap do Smithay.
 
       DUPLO CONFIGURE: compositor envia `zwlr_layer_surface_v1.configure` com o
-      tamanho TOTAL (conteúdo + insets + shadow) e `aero_frame_v1.configure`
-      com o tamanho do CONTEÚDO + state na MESMA transação (mesmo lote de
-      saída). O `ack_configure` de aero continua a gatear a aplicação da
-      geometria; sem ack até 100 ms a configuração é descartada.
+      tamanho do CANVAS e `aero_frame_v1.configure` com o tamanho do CONTEÚDO +
+      state na MESMA transação (mesmo lote de saída). O target apresentado é
+      conteúdo + insets + shadow, independente do canvas. `ack_configure`
+      confirma apenas o recebimento; paint real é confirmado por frame_painted.
     </description>
 
     <enum name="error">
@@ -88,8 +88,12 @@
         |         +-- insets: movedor do conteúdo
         +-- shadow_extents: apenas visual, NÃO move o conteúdo
 
-      A superfície do frame mede conteúdo + insets + shadow_extents. O cliente
-      exclui a sombra da área de input com wl_surface.set_input_region.
+      A superfície do frame é um canvas FIXO, inicialmente >= output + insets +
+      shadow_extents. O compositor apresenta SEMPRE o recorte 9-slice do canvas
+      no target (conteúdo + insets + shadow_extents); resize comum não muda o
+      tamanho do canvas. O canvas só cresce quando o target não cabe, após o
+      paint correspondente ser confirmado por frame_painted. O cliente exclui a
+      sombra da área de input com wl_surface.set_input_region.
     </description>
 
     <enum name="state" bitfield="true">
@@ -169,9 +173,19 @@
     </request>
 
     <request name="ack_configure">
-      <description summary="confirma uma configuração atômica">
-        O compositor aplica a geometria no commit seguinte; sem ack até o
-        timeout, a configuração é descartada.
+      <description summary="confirma o recebimento de uma configuração">
+        Não significa que o WebKit pintou. O paint usado para liberar um
+        crescimento de canvas é confirmado separadamente por frame_painted.
+      </description>
+      <arg name="serial" type="uint"/>
+    </request>
+
+    <request name="frame_painted">
+      <description summary="paint real do canvas após um configure">
+        O shell envia somente depois de o paint correspondente ter ocorrido
+        (double-rAF → postMessage no frame WebView). Para crescimento de canvas,
+        o serial deve ser o do configure pendente mais recente. Seriais antigos,
+        desconhecidos ou de outro frame são ignorados.
       </description>
       <arg name="serial" type="uint"/>
     </request>

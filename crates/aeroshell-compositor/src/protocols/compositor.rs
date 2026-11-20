@@ -1,7 +1,7 @@
 //! wl_compositor, wl_shm e buffer.
 
 use smithay::{
-    backend::renderer::utils::on_commit_buffer_handler,
+    backend::renderer::{buffer_dimensions, utils::on_commit_buffer_handler},
     delegate_compositor, delegate_shm,
     reexports::wayland_server::{
         protocol::{wl_buffer, wl_surface::WlSurface},
@@ -51,22 +51,15 @@ impl CompositorHandler for AeroState {
                     .buffer
                 {
                     Some(smithay::wayland::compositor::BufferAssignment::NewBuffer(buffer)) => {
-                        smithay::wayland::shm::with_buffer_contents(buffer, |_, _, data| {
-                            (data.width, data.height)
-                        })
-                        .ok()
+                        buffer_dimensions(buffer).map(|size| (size.w, size.h))
                     }
                     _ => None,
                 }
             });
-            let expected = self.frame_configured_content.get(surface).map(|(w, h)| {
-                let geo = self
-                    .frame_geometries
-                    .get(surface)
-                    .copied()
-                    .unwrap_or_default();
-                (w + geo.extra_w(), h + geo.extra_h())
-            });
+            let expected = self
+                .frame_canvases
+                .get(surface)
+                .map(|canvas| canvas.configured_size());
             let ok = committed.is_some() && committed == expected;
             let t_nanos = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
