@@ -102,6 +102,11 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   dos foot"**. Prova no log `/tmp/opencode/aero-04b-fix.log`: após o 4º `foot` (`toplevel mapeado ...
   wl_surface@3[4]`), o painel listou `0 "foot" | 1 "foot" | 2 "foot" | 3 "foot"` e publicou 4 rects. Humano fechou
   a aplicação. **04b FECHADA.**
+- [x] 04b (revalidação visual a pedido do humano, 2026-11-20): nova instância (`wayland-aero-04b-recheck`, compositor
+  PID 54736 + shell PID 54794) com 3 `foot` e 3 botões; humano: **"ok tudo isso está funcionando"**. Clicou nos botões
+  em sequência, confirmou elevação e responsividade contínua e abriu um 4º `foot` a partir de um `foot`. Log cru
+  `/tmp/opencode/aero-04b-recheck.log`: 4º `foot` após `04:53:54`, lista final `0..3 "foot"`, 4 rects, 40 respostas
+  `list` (bridge vivo). Humano fechou a aplicação; nenhum PID meu ficou órfão.
 ## 4. Em andamento
 - Nenhuma tarefa em andamento: 04b fechada com ok visual; 02c segue bloqueada (decisão pendente do humano).
 - 02c BLOQUEADA: duas abordagens tentadas e insuficientes no critério de pendência — (1) configure no motion e
@@ -214,8 +219,8 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- O que eu estava fazendo: fechamento de 04b após o ok visual do humano ("tudo foi ok agora, inclusive abrir outro
-  foot via comando em um dos foot"); a instância foi fechada pelo humano.
+- O que eu estava fazendo: 04b fechada e REEVALIDADA a pedido do humano ("ok tudo isso está funcionando", com 4
+  `foot` e cliques seguidos nos botões); a instância foi fechada pelo humano.
 - O que funcionou: `python3 tests/integration/react_panel.py` → `OK: painel React listou 2 e 3 janelas; clique no
   botão da janela de trás elevou só ela; bridge continuou respondendo`; log `/tmp/opencode/aero-04b-fix.log` com
   4 `foot` e 4 botões; `bash scripts/check.sh` green (EXIT=0, bun 9/9).
