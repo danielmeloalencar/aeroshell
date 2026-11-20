@@ -178,12 +178,23 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
       29,43–31,94 contra insets 6/30; snap 0,0727); depois 3× OK (`02k_glue_final{1,2,3}.log`: 6,00/30,00,
       snap 0,0163, `SLICE_COMPOSE n=9` em todas as amostras). Gate `02k_check_final.log` EXIT=0; clippy bench
       `02k_clippy_final.log` EXIT=0; vizinhos OK conforme §6. Critério VISUAL ainda pendente (§7).
+- [x] 02l (código, critério técnico): protocolo `set_titlebar_slices(left,right)` (autorização explícita do
+      humano em 2026-11-20), `FrameGeometry.titlebar_slices`, handler, shell declarando `(120,96)` e HTML com
+      zona fixa do título; 9-slice com 3 fatias no topo (texto/botões com escala 1:1, só o intervalo estica) e
+      deslocamento das bordas direita/inferior para cobrir o alvo. **Teste primeiro visto falhando**:
+      `02l_baseline1.log` → `title_n={1} declaradas={(0,0)} left=[696.00,834.00] right=[0.00,0.00]` e
+      VEREDITO FALHA (zona do texto crescia com `slice_sx`). Depois 3× seguidas OK (`02l_glue_final{1,2,3}.log`):
+      `title_n={3} declaradas={(120,96)} left=[120,120] right=[96,96] gap=[480,618]`, `SLICE_COMPOSE n=9`,
+      `SLICE_GEOM` com 9 fatias cobrindo x 54→762 e y 50→580 (`02l_after5.log`). Gate
+      `02l_check_final3.log` EXIT=0, bun 9 pass/0 fail; clippy bench `02l_clippy_final3.log` EXIT=0;
+      vizinhos OK, `frame_resize_sync.py` FALHA esperada. Critério VISUAL: ver §7.
 ## 4. Em andamento
-- 02k NÃO CONCLUÍDA: código/teste/gate/clippy prontos (§3), **mas o juiz visual não deu o "ok"**. Humano:
-  "praticamente resolveu, com um único detalhe ainda, o conteúdo da barra de título achata no sentido
-  horizontal enquanto está fazendo o resize". O relato veio durante o teste de resize; nenhuma instância visual
-  02k com 2 `foot` foi aberta pelo agente nesta rodada. Corrigir exige mudar a receita do cartão
-  (faixa top esticada em X, cartão 02k:37) — aguardando decisão; NÃO corrigir por conta própria (§6, §7).
+- 02l EM EXECUÇÃO: código/teste/gate/clippy prontos (§3); falta a validação visual com juiz humano (§7).
+  Humano (2026-11-20): **"vi na execução dos seus testes que o problema foi resolvido."** Registrado como dado
+  favorável, mas veio da execução dos harnesses, não de uma sessão visual formal com 2 `foot`; por §0.9 ainda
+  é necessário abrir a aplicação, deixá-la aberta e obter o "ok" olhando a tela.
+- 02k: o achatamento relatado pelo juiz foi tratado pela 02l (cartão novo aprovado), sem alterar a 02k.
+  02k segue sem "ok" visual formal próprio; não reabrir sem novo pedido (§6/§7).
 - 02j FECHADA no critério técnico (§3): instrumentação auditável, gate verde, 6× `VEREDITO: OK`, strings de
   produção = 0. **Não há critério visual novo no cartão**; esta tarefa não muda aparência, geometria, cadência
   nem textura. Só não pode ser chamada de "validada visualmente" — ver §7.
@@ -198,11 +209,8 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. `02l` — DECISÃO DO HUMANO (2026-11-20): abrir cartão novo para o achatamento da titlebar, mantendo a 02k
-   intacta. Rascunho criado em `docs/tasks/02l-titlebar-sem-achatamento.md`, **aguarda confirmação para
-   executar** (AGENTS.md §0.2). A decisão 0 do rascunho (como o shell informa as linhas de corte extras) é
-   bloqueante: a opção recomendada mexe em `protocols/aero_frame_v1.xml`, arquivo protegido, e exige
-   aprovação explícita antes de qualquer edição. 02k segue NÃO CONCLUÍDA no visual (§6/§7).
+0. `02l` — decisão técnica pronta (§3). Próximo e único passo pendente: validação visual com 2 `foot`,
+   aplicação deixada aberta e "ok" explícito do humano (§7). NÃO iniciar outra tarefa antes disso.
 1. `02j` — CONCLUÍDA; os 3 modos nomeados (`FRAME_NEVER_ACKED`, `FRAME_NEVER_DREW_AT_SIZE`,
    `FRAME_STRETCH_ACTIVE`) estão no log bench. Próximo passo natural (NÃO executado): correlacionar esses modos
    com um novo arrasto REAL e só então decidir a causa da queixa visual de 02e/02f.
@@ -213,6 +221,19 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
 6. `05-compatibilidade-protocolos.md` — RASCUNHO; 7 mensagens do `foot` registradas em §6. NÃO executar sem ok.
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- 02l (DESCOBERTA DURANTE A TAREFA, necessária ao critério visual): a 02k deixava as fatias direita/inferior
+  nas coordenadas do buffer congelado (1292×836) enquanto o alvo era 708×530 — `SLICE_GEOM` mostrava
+  canto em x=1340/y=880. Corrigido na 02l com deslocamento por borda (`delta_rx`, `delta_by`, `delta_rb`);
+  as 9 fatias passaram a cobrir x 54→762 e y 50→580 (`02l_after5.log`). Reportado no relatório como mudança
+  de autoria, não estava no rascunho original.
+- 02l (AMOSTRA TRANSITÓRIA, NÃO descartada): `02l_glue_postgate2.log` falhou com `snap=0.4602 em sx`. A causa
+  não é a 02l: o buffer ficou em 708×530 (tamanho antigo) por 6 frames antes de virar 1292×836
+  (`/tmp/glue-comp-99721.log:243,257`), trocando `slice_scale_x` de 1,0086 para 0,5484. As zonas protegidas
+  permaneceram constantes (`title_left_w=120`, `title_right_w=96`) nas duas linhas. É o congelamento do buffer
+  da 02k com corrida de escalonamento; 3 repetições seguidas depois (`02l_glue_repeat{1,2,3}.log`) OK.
+  Registrado como dívida pré-existente, sem alterar o gate para esconder.
+- 02l (AUTORIZAÇÃO): humano aprovou explicitamente a edição de `protocols/aero_frame_v1.xml` em 2026-11-20
+  ("Protocolo novo (Recomendado)"). Nenhum ADR editado; nenhuma dependência nova.
 - 02k (RELATO VISUAL do humano, 2026-11-20 — DADO, prevalece sobre a medição automática): "notei no seu teste
   de resize que praticamente resolveu, com um único detalhe ainda, o conteúdo da barra de título achata no
   sentido horizontal enquanto está fazendo o resize". Onde: faixa top do 9-slice em
@@ -392,15 +413,17 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   citada pelo humano. Registrado aqui como contexto; **ADR 0006 (aditivo/proposto) NÃO foi editado** — incluir
   prior art em ADR exige aprovação explícita (AGENTS.md §0.8 / §6).
 ## 7. Não medido / não validado (não trate como fato)
-- 02k (JUIZ VISUAL PENDENTE — "ok" NÃO dado): humano relatou achatamento horizontal do conteúdo da titlebar
-  durante o resize (texto do relato em §6). Item **NÃO validado**; tarefa NÃO concluída (cartão 02k:47,
-  AGENTS.md §0.9). O relato veio do teste de resize do agente, não de uma sessão visual formal: ainda não abri
-  instância 02k com 2 `foot` nesta rodada. Após a decisão em §5, próximo passo: executar o comando manual do
-  RUNBOOK, deixar a aplicação **aberta**, pedir arrasto lento e rápido das bordas e da barra e esperar o "ok"
-  explícito do humano — quem fecha a aplicação é o humano.
-- 02k: fidelidade dos pixels da titlebar (posição/largura de texto e botões por frame) e suavidade percebida —
-  **não medidas**; a instrumentação é auto-referencial (§6) e tudo foi em VM sem 3D. Nenhuma conclusão de
-  desempenho em GPU real.
+- 02l (JUIZ VISUAL — RELATO FAVORÁVEL, confirmação formal em curso): humano (2026-11-20):
+  **"vi na execução dos seus testes que o problema foi resolvido."** Veredito positivo registrado como dado.
+  Como o relato veio da execução dos harnesses (que abrem janela winit + `foot`), e não de uma sessão manual
+  formal com 2 `foot`, executo agora o comando do RUNBOOK, deixo a aplicação **aberta** e peço arrasto lento e
+  rápido das bordas e da barra + "ok" explícito olhando a tela (cartão 02l:46, AGENTS.md §0.9). Até lá o item
+  fica como **confirmação pendente**; quem fecha a aplicação é o humano.
+- 02l/02k: fidelidade de PIXELS (amostragem de texto/botões na textura) e suavidade percebida em GPU real —
+  **não medidas**. A prova objetiva nova (`SLICE_GEOM`) lê a geometria REAL dos elementos compostos, não os
+  valores calculados para `RESIZE_SLICE`, mas ainda não amostra a textura; VM sem 3D, sem conclusão de
+  desempenho. O relato do humano prevalece sobre a medição (AGENTS.md §0.4).
+- 02k: Juiz visual do achatamento foi atendido pela 02l; 02k não tem "ok" visual próprio e não é reaberta.
 - 02j (VALIDAÇÃO VISUAL REALIZADA, RESULTADO NEGATIVO): teste manual com aplicação aberta (PID 84904, socket
   `wayland-aero-02j-visual`) e instrução explícita de olhar barra e bordas; humano respondeu: **"no teste manual
   pude ver que o flicker é geral, incluindo as bordas"**. Veredito: **NÃO validado**; o "ok" NÃO foi dado.
@@ -460,25 +483,21 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- O que eu estava fazendo: 02k (cartão `9769d94`) — 9-slice + congelamento do buffer prontos e críticos
-  técnicos fechados (§3), mas o juiz visual relatou achatamento horizontal do conteúdo da titlebar. Parei
-  antes de mudar a receita do cartão; aguardando decisão em §5. Código/teste/STATE ainda não comitados nesta rodada.
+- O que eu estava fazendo: 02l — código/teste/gate/clippy prontos (§3) e juiz relatou "problema resolvido" ao
+  ver os testes. Falta SÓ a confirmação visual formal (§7): vou abrir a instância do RUNBOOK com 2 `foot`.
 - Gate final (após a última mudança de código): `bash scripts/check.sh` → `CHECK_EXIT=0`,
-  `OK: scripts/check.sh passou`, bun 9 pass / 0 fail (`/tmp/opencode/02k_check_final.log`);
-  `cargo clippy --workspace --all-targets --features bench -- -D warnings` → EXIT=0 (`02k_clippy_final.log`);
-  `cargo fmt --all -- --check` → EXIT=0. Gate de partida verde (`02k_start_check.log`).
-- Reproduzir o estado atual: `python3 tests/integration/frame_resize_glue.py` (~7 s; imprime faixas 6,00/30,00,
-  snap 0,0163, `SLICE_COMPOSE n=9`); baseline que falhou em `02k_baseline2.log`; 3× OK em
-  `/tmp/opencode/02k_glue_final{1,2,3}.log`. Vizinhos em `02k_*_final.log` / `02k_*_retry{1,2}.log`.
-- Nenhuma instância 02k foi aberta pelo agente nesta rodada; o relato do achatamento veio do teste automático.
-  Instância 02f (PID 72480) segue aberta e reprovada; NÃO encerrar — quem fecha é o humano.
-- DECISÃO DO HUMANO (2026-11-20): abrir cartão novo, mantendo a 02k intacta. Rascunho
-  `docs/tasks/02l-titlebar-sem-achatamento.md` escrito e comitado; NÃO executar sem confirmação (AGENTS.md §0.2).
-- Próximo passo imediato (NÃO executar): humano confirmar o rascunho 02l e responder a decisão 0 (como o shell
-  informa as linhas de corte extras). Só depois: teste primeiro visto falhando, implementação, validação visual
-  com 2 `foot`, aplicação deixada aberta e "ok" explícito (AGENTS.md §0.9).
-- NÃO mudar `target = content + extras`, move, conteúdo, protocolo/XML, ADR 0006 ou o debounce fora do grab;
-  NÃO corrigir o achatamento sozinho; NÃO encerrar PID 72480; sem push.
+  `OK: scripts/check.sh passou`, bun 9 pass / 0 fail (`/tmp/opencode/02l_check_final3.log`);
+  `cargo clippy --workspace --all-targets --features bench -- -D warnings` → EXIT=0 (`02l_clippy_final3.log`);
+  `cargo fmt --all` EXIT=0. Vizinhos OK; `frame_resize_sync.py` FALHA esperada.
+- Reproduzir: `python3 tests/integration/frame_resize_glue.py` → `title_n=3`, `declaradas=(120,96)`,
+  `left/right=[120,120]/[96,96]`, `SLICE_GEOM` 9 fatias cobrindo o alvo. Baseline FALHA em `02l_baseline1.log`;
+  3× OK em `02l_glue_final{1,2,3}.log` e `02l_glue_repeat{1,2,3}.log`; amostra transitória em `02l_glue_postgate2.log`.
+- Instância de validação visual (se aberta nesta sessão): socket `wayland-aero-02l`, 2 `foot`; NÃO encerrar —
+  quem fecha é o humano. Instância 02f (PID 72480) segue aberta e reprovada; NÃO encerrar.
+- Próximo passo imediato (NÃO executar): humano olhar a janela aberta, arrastar bordas e barra (lento e rápido),
+  confirmar que texto/botões não achatam e bordas não piscam, e dar o "ok" explícito. Só então fechar a 02l.
+- NÃO mudar `target = content + extras`, move, conteúdo, ADR 0006 ou o debounce fora do grab; NÃO editar
+  protocolo sem aprovação; NÃO encerrar PIDs de instância; sem push.
 - Contexto preservado em §6: cprussin é contribuidor (criador: Victor Berger/elinorbgr); prior art é contexto,
   não receita para copiar Chromium/CEF.
  
