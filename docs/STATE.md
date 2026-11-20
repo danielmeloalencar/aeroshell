@@ -555,6 +555,11 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
   relatou o flash; a instância encerrou graciosamente depois (sem ação do agente). NÃO reabrir uma terceira
   sem decisão — registrar e pedir.
 - Humano confirmou 02m e a decisão 0 = shell + spike; cartão em `docs/tasks/02m-flash-buffer-inicial.md`.
+- Instância visual ABERTA (2026-11-20): compositor 105748 (bash pai 105740), shell 105755, `foot` 105827 e
+  105864, socket `wayland-aero-02m`, log `/tmp/opencode/aero-02m-visual.log`, 2 associates (0 e 1). NÃO encerrar:
+  quem fecha é o humano. Ressalva: nesta instância `tamanho_inicial=1292x836` (configure final da janela 0 ainda
+  não tinha chegado), contra `708x530` no harness — ambos evitam 200×200, mas o juiz visual é quem decide se
+  ainda há flash de compressão. Sem `--features bench` nesta instância, logo não há `RESIZE_SLICE` no log.
 - Próximo passo imediato (NÃO executar neste momento): abrir a validação visual do RUNBOOK (seção §3/§7 do
   cartão) com 2 `foot`, deixar aberta; humano clica/arrasta as bordas da 1ª e da 2ª janela e dá o "ok" explícito.
   Só com esse "ok" fecham 02m e 02l. Quem fecha a aplicação é o humano.
