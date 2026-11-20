@@ -84,6 +84,14 @@ pub struct AeroState {
     pub cursor_over_interactive: bool,
     /// Frames do protocolo privado (S5).
     pub frames: Vec<(crate::aero_frame_protocol::aero_frame_v1::AeroFrameV1, u32)>,
+    /// Manager vinculado pelo shell: permite anunciar `frame_requested` quando uma
+    /// janela nova mapeia sem frame (fonte do window_id no shell_privilegiado).
+    pub shell_manager:
+        Option<crate::aero_frame_protocol::aero_frame_manager_v1::AeroFrameManagerV1>,
+    /// window_id lógico -> superfície do cliente. Estável mesmo quando o Space é
+    /// reordenado: `elements()` é ordem z e muda a cada `raise_element`, então
+    /// `nth(window_id)` apontaria para a janela errada após um clique.
+    pub window_surfaces: HashMap<u32, WlSurface>,
     /// Associações frame ↔ superfície. Marca SEM role: layer_surface é suportado;
     /// xdg_toplevel recebe `closed` e fica deferido (ADR 0004).
     pub associated_frames: Vec<(
@@ -137,6 +145,17 @@ pub struct AeroState {
 }
 
 impl AeroState {
+    /// Resolve um window_id (atribuído no map) para a Window correspondente.
+    /// NUNCA usar `space.elements().nth(window_id)`: `elements()` é ordem z e muda
+    /// a cada `raise_element` (input.rs `focus_on_press`), fazendo o id 0 apontar
+    /// para outra janela depois de um clique.
+    pub fn window_for_id(&self, window_id: u32) -> Option<&Window> {
+        let surface = self.window_surfaces.get(&window_id)?;
+        self.space
+            .elements()
+            .find(|w| w.toplevel().map(|t| t.wl_surface()) == Some(surface))
+    }
+
     pub fn new(
         event_loop: &mut EventLoop<CalloopData>,
         display: Display<Self>,
@@ -210,6 +229,8 @@ impl AeroState {
             #[cfg(feature = "bench")]
             frame_commit_samples: Vec::new(),
             last_button_serial: None,
+            shell_manager: None,
+            window_surfaces: HashMap::new(),
             frame_geometries: HashMap::new(),
             frame_configured_content: HashMap::new(),
             frame_configure_serial: 0,

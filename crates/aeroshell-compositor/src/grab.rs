@@ -380,7 +380,9 @@ pub fn start_geometry_grab(
     if !crate::protocols::aero_frame::serial_valid(state.last_button_serial, serial) {
         return false;
     }
-    let Some(window) = state.space.elements().nth(window_id as usize).cloned() else {
+    // window_id é lógico e estável; `elements().nth()` é ordem z e foi reordenado
+    // pelo raise_element do clique que iniciou este grab.
+    let Some(window) = state.window_for_id(window_id).cloned() else {
         return false;
     };
     let Some(loc) = state.space.element_location(&window) else {

@@ -46,6 +46,7 @@ impl XdgShellHandler for AeroState {
         }
         tracing::info!("novo toplevel xdg-surface mapeado");
         let window = Window::new_wayland_window(surface);
+        let client_surface = window.toplevel().map(|t| t.wl_surface().clone());
         // Margem para a decoração do frame (insets superiores) ficar visível e
         // cascata para janelas empilhadas não coincidirem exatamente.
         let n = self.space.elements().count() as i32;
@@ -60,13 +61,24 @@ impl XdgShellHandler for AeroState {
         }
         // Cliente inicial adiado: o frame associou window_id=n antes de o cliente
         // existir; liga agora à superfície recém-mapeada.
-        let wl = self
-            .space
-            .elements()
-            .nth(n as usize)
-            .and_then(|w| w.toplevel().map(|t| t.wl_surface().clone()));
-        if let Some(wl) = wl {
+        if let Some(wl) = client_surface {
+            self.window_surfaces.insert(n as u32, wl.clone());
             self.bind_pending_frame_client(n as u32, wl);
+        }
+        // Janelas que mapeiam SEM frame precisam ser anunciadas ao shell para que
+        // ele crie uma WebView por window_id. O associate do cliente inicial cobre
+        // só o id 0 (cold-start); sem isto o segundo cliente nunca recebe decoração.
+        let window_id = n as u32;
+        if !self.frames.iter().any(|(_, id)| *id == window_id) {
+            if let Some(manager) = &self.shell_manager {
+                let size = self.client_content_size(window_id).unwrap_or((0, 0));
+                manager.frame_requested(
+                    window_id,
+                    size.0,
+                    size.1,
+                    crate::aero_frame_protocol::aero_frame_v1::State::empty(),
+                );
+            }
         }
     }
 

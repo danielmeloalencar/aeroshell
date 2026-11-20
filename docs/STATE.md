@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-19 · commit: `8f3e985` (na entrada desta sessão; ver `git log --oneline -3`) · modo: SPIKE
+Última atualização: 2026-11-20 · commit: `8f5a97b` (na entrada da tarefa 02b; ver `git log --oneline -3`) · modo: SPIKE
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -31,13 +31,20 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
       no S1 (`XDG_RUNTIME_DIR` inexistente) passou a mostrar `Error: PermissionDenied` + log do compositor;
       `finally` e trap TERM/INT encerram só o PID iniciado (provado: filho 13317 morreu ao matar o pai 13302);
       `grep -rn "pkill -x" tests/` vazio. Causa do flake antigo NÃO identificada (não reproduziu).
+- [x] 02b (código): 2 `foot` com frame HTML cada; ✕/maximizar roteados por `window_id`. Prova:
+      `python3 tests/integration/frame_window_id.py` → OK (`associate: [0, 1]`, `close 1`, janela 0 permanece).
+- [x] 02b (causa raiz): `window_id` é lógico/estável, mas 6 resolvers usavam `space.elements().nth(id)` (ordem z,
+      reordenada por `raise_element` no clique). Mapa estável `window_surfaces` + `window_for_id()` em `state.rs`.
+      Prova: `tests/integration/frame_follows_resize.py` ANTES: A inalterada / B mudou (`100→60`, `696→732`);
+      DEPOIS: A mudou (`60→20`, `696→732`) / B idêntica — mesmo comando, 1 execução cada.
+- [x] 02b (não regressão): `frame_buttons.py`, `frame_resize_edges.py`, `frame_follows_resize.py` → 3× OK.
+      `bash scripts/check.sh` → `OK: scripts/check.sh passou` (EXIT=0).
 ## 4. Em andamento
-- [ ] **QUEBRADO** — frame por janela com `window_id` próprio. Código na branch `wip/window-id` (`f448dab`):
-      só 1 janela decorada, mover às vezes move a outra, resize não acompanha. O teste `frame_window_id.py` existe
-      nessa branch e NÃO foi rodado com sucesso. `master` (`bf44f22` + docs) é o estado bom: 1 janela decorada,
-      resize acompanha com atraso/fundo branco no gap. Cartão: `docs/tasks/02b-window-id.md`.
+- [ ] 02b — código pronto e gate verde; falta SOMENTE a confirmação visual do humano com 2 `foot` (critério 4 do
+      cartão). Aplicação deve ser deixada aberta; quem fecha é o humano (`AGENTS.md §0.9`). Cartão:
+      `docs/tasks/02b-window-id.md`.
 ## 5. Próximas tarefas (ordem; cada uma tem um cartão em docs/tasks/)
-1. `02b-window-id.md` — 2 janelas decoradas, frame segue o resize; teste novo escrito primeiro.
+1. `02b-window-id.md` — validação visual final (2 janelas no nested, mover/resize/✕/foco), depois fechar tarefa.
 2. `03-runtime-bun-sdk.md` — `aero.windows.list/focus/close`, snapshot + patches; tipos TS gerados de `aeroshell-ipc`.
 3. Passo 4 — Painel React (`useWindows()`), clique foca a janela certa; testar com 2 e 3 janelas (cartão a criar).
 4. Decisão sobre modo produto (sua).
@@ -61,20 +68,31 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
 - Erro meu corrigido nesta sessão: eu havia rebaixado `docs/plano-mestre.md` a histórico. O usuário corrigiu: é o
   plano ATIVO e um dos documentos mais importantes (visão, fases, onde queremos chegar). Banner removido, texto
   original restaurado; só os ponteiros de atualização de `progress.md` viraram `STATE.md`. Não repetir.
+- 02b (relato do humano, 2026-11-19/20, 2 foot): 2 janelas deslocadas, só UMA decorada; arrastar/resize move a outra;
+  ✕ e maximizar não faziam nada; clicar na janela focada focalava a outra. DUAS causas, ambas corrigidas nesta sessão:
+  (1) o map não anunciava `frame_requested` para a 2ª janela; (2) `nth(window_id)` usava ordem z. Confirmado por log.
+- 02b (dívida menor): `window_id` ainda é `space.elements().count()` no map; se uma janela fecha e outra abre, o id
+  pode ser reatribuído. O mapa `window_surfaces` é limpo no hook de destruição, mas ids monotonicamente estáveis
+  (não reutilizados) ficam para uma tarefa futura se o cenário aparecer.
 ## 7. Não medido / não validado (não trate como fato)
 - Latência de resize com WebKit real; latência de ponteiro; qualquer desempenho em GPU real (tudo foi em VM sem 3D).
 - Número de processos/PSS com `related-view` foi medido só em VM; ADR 0001 está "aceito provisoriamente".
 - Estabilidade do `ext-background-effect` (blur): não implementado; Smithay 0.7 não tem handler.
 - Nenhuma validação visual com juiz humano foi feita nestas duas últimas sessões (só documentação). Item visual só entra
   na seção 3 com o "ok" do humano registrado, conforme `AGENTS.md §0.9`.
+- 02b: confirmação visual das 2 janelas PENDENTE — o agente deve deixar o nested aberto e o humano dar o "ok".
+- 02b (honestidade metodológica): a parte de **foco** do `frame_follows_resize.py` foi adicionada DEPOIS da correção
+  do `nth`; logo ela não foi vista falhando antes. A parte de resize foi vista falhando antes (A inalterada, B mudou).
+  O foco foi medido depois: 1º clique → `wl_surface@3[1]` (A); 2º clique em A → nenhum `focus=true` para B.
 ## 8. Ambiente
 Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), gtk4-layer-shell, Rust via rustup, Bun.
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- O que eu estava fazendo: tarefa 00 — gate confiável; 3 gates verdes, diagnóstico do S1 e PIDs próprios.
-- O que funcionou: falha induzida no S1 mostra stderr real; trap TERM/INT mata o filho pelo PID; nenhum `pkill -x` em `tests/`.
-- Comando exato para reproduzir o estado atual: `git status --short && bash scripts/check.sh && (grep -rn "pkill -x" tests/ || echo NENHUM)`
-- Próximo passo imediato (uma ação): abrir `docs/tasks/02b-window-id.md` — escrever `frame_follows_resize.py` PRIMEIRO e ver falhando na `wip/window-id`.
-- Descobertas laterais registradas na seção 6 (não corrigidas): protocolos duplicados no `AGENTS.md`, título órfão, causa do flake do S1 desconhecida.
+- O que eu estava fazendo: tarefa 02b — code completa, gate verde, 4 testes de integração OK.
+- O que funcionou: `frame_requested` para 2 janelas, WebView por window_id, resolução estável (`window_for_id`).
+  ANTES/DEPOIS do resize provados com o mesmo comando; foco por clique medido (nunca em B).
+- Comando exato: `python3 tests/integration/frame_follows_resize.py && python3 tests/integration/frame_window_id.py && bash scripts/check.sh`
+- Próximo passo imediato (uma ação): abrir o nested com 2 `foot`, deixar aberto, pedir o "ok" visual ao humano (critério 4).
+- Descobertas laterais em §6: protocolos duplicados no `AGENTS.md`, flake do S1 sem causa, reatribuição de `window_id`.
  

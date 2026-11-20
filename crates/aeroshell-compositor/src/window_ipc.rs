@@ -72,7 +72,7 @@ impl AeroState {
                 out
             }
             "focus" => {
-                let Some(window) = id.and_then(|i| self.space.elements().nth(i).cloned()) else {
+                let Some(window) = id.and_then(|i| self.window_for_id(i as u32).cloned()) else {
                     return "ERR janela inexistente".to_owned();
                 };
                 self.space.raise_element(&window, true);
@@ -87,7 +87,7 @@ impl AeroState {
                 "OK".to_owned()
             }
             "close" => {
-                let Some(window) = id.and_then(|i| self.space.elements().nth(i).cloned()) else {
+                let Some(window) = id.and_then(|i| self.window_for_id(i as u32).cloned()) else {
                     return "ERR janela inexistente".to_owned();
                 };
                 if let Some(toplevel) = window.toplevel() {
@@ -96,7 +96,7 @@ impl AeroState {
                 "OK".to_owned()
             }
             "maximize" => {
-                let Some(window) = id.and_then(|i| self.space.elements().nth(i).cloned()) else {
+                let Some(window) = id.and_then(|i| self.window_for_id(i as u32).cloned()) else {
                     return "ERR janela inexistente".to_owned();
                 };
                 let Some(toplevel) = window.toplevel() else {

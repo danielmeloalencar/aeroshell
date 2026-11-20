@@ -8,11 +8,13 @@
 
 use gdk4_wayland::prelude::*;
 use gdk4_wayland::{wayland_client, WaylandSurface};
+use gtk4::glib;
 use gtk4::prelude::*;
 use gtk4_layer_shell::LayerShell;
 use std::cell::RefCell;
 use std::io::{BufRead, Write};
 use std::os::unix::net::UnixStream;
+use std::rc::Rc;
 use wayland_client::{protocol::wl_registry, Dispatch, Proxy, QueueHandle};
 use webkit6::prelude::*;
 use webkit6::{UserContentManager, WebView};
@@ -199,13 +201,30 @@ impl Dispatch<wl_pointer::WlPointer, ()> for SpikeState {
 
 impl Dispatch<AeroFrameManagerV1, ()> for SpikeState {
     fn event(
-        _state: &mut Self,
+        state: &mut Self,
         _proxy: &AeroFrameManagerV1,
-        _event: aero::aero_frame_manager_v1::Event,
+        event: aero::aero_frame_manager_v1::Event,
         _data: &(),
         _conn: &wayland_client::Connection,
         _qh: &QueueHandle<Self>,
     ) {
+        let aero::aero_frame_manager_v1::Event::FrameRequested {
+            window_id,
+            width,
+            height,
+            ..
+        } = event;
+        eprintln!("FRAMEWEB: frame_requested window_id={window_id} conteudo={width}x{height}");
+        if state.entries.iter().any(|e| e.window_id == window_id) {
+            eprintln!("FRAMEWEB: window_id={window_id} já tem WebView; ignorado");
+            return;
+        }
+        // Cria na próxima idle: este handler roda dentro do borrow do RUNTIME
+        // (dispatch) e não pode reassumir o RUNTIME para associar a superfície.
+        glib::idle_add_local(move || {
+            open_frame_window(window_id);
+            glib::ControlFlow::Break
+        });
     }
 }
 
@@ -249,6 +268,7 @@ impl Dispatch<AeroFrameV1, ()> for SpikeState {
 
 thread_local! {
     static RUNTIME: RefCell<Option<Runtime>> = const { RefCell::new(None) };
+    static APP: RefCell<Option<Rc<gtk4::Application>>> = const { RefCell::new(None) };
 }
 
 struct Runtime {
@@ -336,11 +356,91 @@ fn associate_frame(
     });
 }
 
-fn main() {
-    let app = gtk4::Application::builder()
-        .application_id("dev.aeroshell.frame-webview")
+/// Uma WebView por janela. O handler de mensagens captura o window_id DESTA
+/// WebView: o comando vai para a janela dona do frame, nunca para "a primeira".
+fn open_frame_window(window_id: u32) {
+    let app = APP
+        .with(|cell| cell.borrow().clone())
+        .expect("APP não inicializado");
+    let window = gtk4::ApplicationWindow::builder()
+        .application(&*app)
+        .title(format!("frame webview {window_id}"))
         .build();
-    app.connect_activate(move |app| {
+    window.add_css_class("aero-frame");
+    window.init_layer_shell();
+    window.set_namespace(Some("aeroshell-frame-webview"));
+    // Teclado NUNCA no frame: interatividade none (só ponteiro na decoração).
+    window.set_keyboard_mode(gtk4_layer_shell::KeyboardMode::None);
+
+    // WebView transparente com a barra de título HTML.
+    let manager = UserContentManager::new();
+    manager.register_script_message_handler("aero", None);
+    manager.connect_script_message_received(Some("aero"), move |_, value| {
+        let json = value.to_json(0).unwrap_or_default().to_string();
+        let action = serde_json::from_str::<serde_json::Value>(&json)
+            .ok()
+            .and_then(|v| v.get("action").and_then(|a| a.as_str()).map(str::to_owned));
+        match action.as_deref() {
+            Some("close") => window_ipc(&format!("close {window_id}")),
+            Some("maximize") => window_ipc(&format!("maximize {window_id}")),
+            _ => eprintln!("FRAMEWEB: mensagem da WebView: {json}"),
+        }
+    });
+    let webview = WebView::builder().user_content_manager(&manager).build();
+    webview.set_background_color(&gtk4::gdk::RGBA::new(0.0, 0.0, 0.0, 0.0));
+    webview.load_html(TITLEBAR_HTML, Some("aero://frame/"));
+    window.set_child(Some(&webview));
+
+    window.connect_realize(move |w| {
+        let gdk_surface = w.surface().expect("janela sem GdkSurface");
+        let ws = gdk_surface
+            .downcast_ref::<WaylandSurface>()
+            .expect("GdkSurface não é WaylandSurface");
+        let Some(wl_surface) = ws.wl_surface() else {
+            eprintln!("FRAMEWEB: wl_surface=None no realize");
+            return;
+        };
+        if RUNTIME.with(|cell| cell.borrow().is_none()) {
+            bootstrap_runtime(&wl_surface);
+        }
+        if RUNTIME.with(|cell| cell.borrow().is_some()) {
+            associate_frame(wl_surface, w.clone(), window_id);
+        }
+    });
+
+    window.connect_map(move |_| eprintln!("FRAMEWEB map: layer surface criada (id={window_id})"));
+    window.present();
+}
+
+/// Primeira WebView: deriva o Connection do backend do wl_surface do GTK
+/// (mesmo guest) e espera o registry sem roundtrip bloqueante.
+fn bootstrap_runtime(wl_surface: &aero::wl_surface::WlSurface) {
+    let backend = wl_surface.backend().upgrade().expect("backend sumiu");
+    let connection = wayland_client::Connection::from_backend(backend);
+    let mut queue: wayland_client::EventQueue<SpikeState> = connection.new_event_queue();
+    let qh = queue.handle();
+    connection.display().get_registry(&qh, ());
+    let mut state = SpikeState::default();
+    for _ in 0..30 {
+        glib::MainContext::default().iteration(false);
+        let _ = queue.dispatch_pending(&mut state);
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    eprintln!("FRAMEWEB: manager no guest = {}", state.manager.is_some());
+    if state.manager.is_some() {
+        RUNTIME.with(|cell| *cell.borrow_mut() = Some(Runtime { queue, state }));
+    }
+}
+
+fn main() {
+    let app = Rc::new(
+        gtk4::Application::builder()
+            .application_id("dev.aeroshell.frame-webview")
+            .build(),
+    );
+    APP.with(|cell| *cell.borrow_mut() = Some(Rc::clone(&app)));
+
+    app.connect_activate(move |_app| {
         // Fundo do frame: sem fundo de tema, a área recém-exposta durante resize
         // mostra o que está atrás em vez de branco (a decoração é pintada só pelo HTML).
         let css = gtk4::CssProvider::new();
@@ -351,76 +451,13 @@ fn main() {
             gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );
 
-        let window = gtk4::ApplicationWindow::builder()
-            .application(app)
-            .title("frame webview")
-            .build();
-        window.add_css_class("aero-frame");
-        window.init_layer_shell();
-        window.set_namespace(Some("aeroshell-frame-webview"));
-        // Teclado NUNCA no frame: interatividade none (só ponteiro na decoração).
-        window.set_keyboard_mode(gtk4_layer_shell::KeyboardMode::None);
+        // Janela 0 também é a âncora: associa window_id=0 e libera o cliente
+        // inicial adiado (cold-start temporário).
+        open_frame_window(0);
 
-        // WebView transparente com a barra de título HTML.
-        let manager = UserContentManager::new();
-        manager.register_script_message_handler("aero", None);
-        manager.connect_script_message_received(Some("aero"), move |_, value| {
-            let json = value.to_json(0).unwrap_or_default().to_string();
-            let action = serde_json::from_str::<serde_json::Value>(&json)
-                .ok()
-                .and_then(|v| v.get("action").and_then(|a| a.as_str()).map(str::to_owned));
-            let window_id = RUNTIME.with(|cell| {
-                cell.borrow()
-                    .as_ref()
-                    .and_then(|rt| rt.state.entries.first().map(|e| e.window_id))
-                    .unwrap_or(0)
-            });
-            match action.as_deref() {
-                Some("close") => window_ipc(&format!("close {window_id}")),
-                Some("maximize") => window_ipc(&format!("maximize {window_id}")),
-                _ => eprintln!("FRAMEWEB: mensagem da WebView: {json}"),
-            }
-        });
-        let webview = WebView::builder().user_content_manager(&manager).build();
-        webview.set_background_color(&gtk4::gdk::RGBA::new(0.0, 0.0, 0.0, 0.0));
-        webview.load_html(TITLEBAR_HTML, Some("aero://frame/"));
-        window.set_child(Some(&webview));
-
-        window.connect_realize(|w| {
-            let gdk_surface = w.surface().expect("janela sem GdkSurface");
-            let ws = gdk_surface
-                .downcast_ref::<WaylandSurface>()
-                .expect("GdkSurface não é WaylandSurface");
-            let Some(wl_surface) = ws.wl_surface() else {
-                eprintln!("FRAMEWEB: wl_surface=None no realize");
-                return;
-            };
-            let backend = wl_surface.backend().upgrade().expect("backend sumiu");
-            let connection = wayland_client::Connection::from_backend(backend);
-            let mut queue: wayland_client::EventQueue<SpikeState> = connection.new_event_queue();
-            let qh = queue.handle();
-            connection.display().get_registry(&qh, ());
-            let mut state = SpikeState::default();
-            for _ in 0..30 {
-                gtk4::glib::MainContext::default().iteration(false);
-                let _ = queue.dispatch_pending(&mut state);
-                std::thread::sleep(std::time::Duration::from_millis(2));
-            }
-            eprintln!("FRAMEWEB: manager no guest = {}", state.manager.is_some());
-            if state.manager.is_some() {
-                RUNTIME.with(|cell| {
-                    *cell.borrow_mut() = Some(Runtime { queue, state });
-                });
-                associate_frame(wl_surface, w.clone(), 0);
-            }
-        });
-
-        window.connect_map(|_| eprintln!("FRAMEWEB map: layer surface criada"));
-        window.present();
-
-        gtk4::glib::timeout_add_local(std::time::Duration::from_millis(20), || {
+        glib::timeout_add_local(std::time::Duration::from_millis(20), || {
             dispatch_nonblocking();
-            gtk4::glib::ControlFlow::Continue
+            glib::ControlFlow::Continue
         });
     });
     app.run();

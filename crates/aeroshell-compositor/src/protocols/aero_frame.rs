@@ -102,7 +102,7 @@ impl AeroState {
 
     /// Tamanho de conteúdo real da janela cliente, se já mapeada e com buffer.
     pub fn client_content_size(&self, window_id: u32) -> Option<(i32, i32)> {
-        let window = self.space.elements().nth(window_id as usize)?;
+        let window = self.window_for_id(window_id)?;
         let geo = self.space.element_geometry(window)?;
         (geo.size.w > 0 && geo.size.h > 0).then_some((geo.size.w, geo.size.h))
     }
@@ -125,6 +125,9 @@ impl AeroState {
         };
         entry.3 = Some(client.clone());
         add_destruction_hook::<AeroState, _>(&client, |state, dead| {
+            // O id pode ser reatribuído a uma janela nova; não deixe o mapa
+            // estável apontando para a superfície que acabou de morrer.
+            state.window_surfaces.retain(|_, cs| *cs != *dead);
             if let Some(pos) = state
                 .associated_frames
                 .iter()
@@ -149,7 +152,7 @@ impl AeroState {
 
 impl GlobalDispatch<AeroFrameManagerV1, ()> for AeroState {
     fn bind(
-        _state: &mut Self,
+        state: &mut Self,
         _handle: &DisplayHandle,
         _client: &Client,
         resource: New<AeroFrameManagerV1>,
@@ -157,7 +160,7 @@ impl GlobalDispatch<AeroFrameManagerV1, ()> for AeroState {
         data_init: &mut DataInit<'_, Self>,
     ) {
         tracing::info!("cliente privilegiado vinculou aero_frame_manager_v1");
-        let _ = data_init.init(resource, ());
+        state.shell_manager = Some(data_init.init(resource, ()));
     }
 
     fn can_view(client: Client, _global_data: &()) -> bool {
@@ -240,9 +243,7 @@ impl Dispatch<AeroFrameManagerV1, ()> for AeroState {
                         frame.closed();
                         state.frames.push((frame.clone(), window_id));
                         let client_surface = state
-                            .space
-                            .elements()
-                            .nth(window_id as usize)
+                            .window_for_id(window_id)
                             .and_then(|w| w.toplevel().map(|t| t.wl_surface().clone()));
                         state.associated_frames.push((
                             surface.clone(),
@@ -267,9 +268,7 @@ impl Dispatch<AeroFrameManagerV1, ()> for AeroState {
                 manager.frame_requested(window_id, size.w, size.h, frame_state);
                 state.frames.push((frame.clone(), window_id));
                 let client_surface = state
-                    .space
-                    .elements()
-                    .nth(window_id as usize)
+                    .window_for_id(window_id)
                     .and_then(|w| w.toplevel().map(|t| t.wl_surface().clone()));
                 state.associated_frames.push((
                     surface.clone(),
