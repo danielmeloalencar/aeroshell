@@ -578,7 +578,18 @@ pub fn init_winit(
                                     [0.08, 0.08, 0.10, 1.0]
                                 },
                             ) {
-                                Ok(rendered) => Some(rendered),
+                                Ok(rendered) => {
+                                    // 02o: ler os pixels REAIS já compostos, antes do submit.
+                                    // Só sob `bench` e com AERO_PIXEL_DUMP_DIR definida.
+                                    #[cfg(feature = "bench")]
+                                    crate::frame_pixel_probe::capture(
+                                        renderer,
+                                        &framebuffer,
+                                        state.slice_generation,
+                                        state.release_swap.is_some(),
+                                    );
+                                    Some(rendered)
+                                }
                                 Err(err) => {
                                     tracing::warn!("render_output falhou: {err}");
                                     None

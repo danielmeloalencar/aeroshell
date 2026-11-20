@@ -9,6 +9,9 @@ mod cli;
 mod frame_diagnostics;
 #[cfg(feature = "bench")]
 mod frame_metrics;
+// 02o: readback de pixels do framebuffer; exclusivo de `bench`.
+#[cfg(feature = "bench")]
+mod frame_pixel_probe;
 mod grab;
 mod input;
 mod protocols;

@@ -263,11 +263,23 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   Gate: `bash scripts/check.sh` → CHECK=0, bun 9 pass/0 fail (`/tmp/opencode/02n_check_final3.log`);
   `cargo clippy --workspace --all-targets --features bench -- -D warnings` → EXIT=0
   (`/tmp/opencode/02n_clippy_final.log`).
+- [~] 02o (MEDIÇÃO, NÃO CORREÇÃO — PARCIAL): instrumentação `frame_pixel_probe.rs` sob `bench` lê pixels reais do
+  framebuffer com `ExportMem::copy_framebuffer`+`map_texture` (API real Smithay 0.7.0) e grava grade 64x40 em
+  `/tmp/opencode/02o_pixels_*/frame_*.bin`. Baseline sem instrumentação:
+  `/tmp/opencode/02o_pixel_baseline2.log` → `frames_capturados=0 ... VEREDITO_MEDICAO: NAO_CAPTUROU`.
+  Depois: 180-186 `PIXEL_FRAME` por execução, 0 erros EGL; 3 execuções em `/tmp/opencode/02o_pixel_run{1,2,3}.log`:
+  run1 `CAPTUROU` (`PAR diff_medio=0.00`), runs 2/3 `PAR_NAO_CAPTURADO`. `flashes_candidatos=0` e
+  `diff_medio_max=4,81` nas 3 — insuficiente para explicar o que o humano viu (§7). Gate CHECK=0
+  (`/tmp/opencode/02o_check_final.log`), clippy bench EXIT=0 (`/tmp/opencode/02o_clippy2.log`).
 ## 4. Em andamento
+- 02o EM ANDAMENTO / NÃO CONCLUÍDA: medição de pixels existe e é estável (180-186 frames, 0 erros EGL), mas
+  NÃO capturou o flicker que o humano viu nas 3 execuções ("nas 3x da medição o problema ocorre ainda").
+  1/3 capturou o par 9-slice/nativo (diff 0,00); 2/3 nem capturaram o par. Cartão 02o exige correlação com o juiz
+  e captura confiável — critérios NÃO fechados. **PARAR**: sem nova decisão não ajustar limiares nem corrigir.
 - 02n: **JUIZ VISUAL NEGOU (2026-11-20)** — humano: "problema ainda ocorre". Técnica/gate/clippy provados 3× (§3),
   mas o dado visual prevalece; 0 frames inconsistentes no teste NÃO mede o que o humano viu (lacuna registrada em §7).
-  Instância deixada aberta: compositor PID 118815, socket `wayland-aero-02n`, 2 `foot` (PIDs 118897/118942).
-  NÃO encerrar PIDs. **PARAR**: cartão 02n proíbe 5ª correção sem nova decisão do humano.
+  A instância `wayland-aero-02n` (PID 118815, shell 118824) NÃO está mais em `ps` — terminou durante a 02o,
+  sem intervenção do agente. **PARAR**: cartão 02n proíbe 5ª correção sem nova decisão do humano.
 - 02m (3ª abordagem): juiz CONFIRMOU que clique/arrasto está resolvido (§3). Sintoma NOVO no release com arrasto
   (flicker) é o alvo da 02n (autorizada). Press/arrasto NÃO foi alterado pela 02n.
 - 02l EM EXECUÇÃO: código/teste/gate/clippy prontos (§3); falta a validação visual com juiz humano (§7).
@@ -290,18 +302,20 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. `02n` — JUIZ NEGOU ("problema ainda ocorre"); instância aberta, não encerrar. PRÓXIMO PASSO É DO HUMANO:
-   (a) autorizar nova abordagem com cartão próprio, (b) aceitar como dívida e fechar 02m/02l/02n como parciais
-   no visual, (c) outro rumo. NÃO abrir 5ª correção sem decisão explícita. Antes de diagnosticar, perguntar ao
-   humano se o flicker segue só no soltar ou voltou no press/arrasto (02m aprovada).
-1. `02j` — CONCLUÍDA; os 3 modos nomeados (`FRAME_NEVER_ACKED`, `FRAME_NEVER_DREW_AT_SIZE`,
+0. `02o` — MEDIÇÃO PARCIAL: o humano viu flicker nas 3 execuções, mas a grade 64x40 reportou 0 flashes e
+   diff ≤4,81/255. PRÓXIMO PASSO É DO HUMANO: (a) autorizar cartão novo para uma medição/visualização que
+   enxergue o flicker (ex.: dump RAW por frame + reconstrução offline), (b) aceitar como dívida, (c) outro rumo.
+   NÃO ajustar limiares nem abrir correção sem decisão. Dúvida em aberto: flicker só no soltar ou também no
+   clique/arrasto da 02m? (o humano não respondeu ainda).
+1. `02n` — JUIZ NEGOU ("problema ainda ocorre"); instância já não existe. NÃO abrir 5ª correção sem decisão.
+2. `02j` — CONCLUÍDA; os 3 modos nomeados (`FRAME_NEVER_ACKED`, `FRAME_NEVER_DREW_AT_SIZE`,
    `FRAME_STRETCH_ACTIVE`) estão no log bench. Próximo passo natural (NÃO executado): correlacionar esses modos
    com um novo arrasto REAL e só então decidir a causa da queixa visual de 02e/02f.
-2. `02f` — NÃO CONCLUÍDA: juiz visual negou ("moldura ainda chega atrasada"). NÃO reabrir sem novo pedido.
-3. `02g` — shell: fonte de fd GLib no `wl_display` mantendo timer de segurança de 50 ms; limite 1 h, reverter se piorar.
-4. `02h` — medições de ambiente VM (sem mudança de código): baseline / Skia CPU / GSK cairo / b+c, 3 repetições.
-5. `02i` — correções de documentação (somente docs): presentation-time, background_effect, WPE, cartões 02c/02d, F1.
-6. `05-compatibilidade-protocolos.md` — RASCUNHO; 7 mensagens do `foot` registradas em §6. NÃO executar sem ok.
+3. `02f` — NÃO CONCLUÍDA: juiz visual negou ("moldura ainda chega atrasada"). NÃO reabrir sem novo pedido.
+4. `02g` — shell: fonte de fd GLib no `wl_display` mantendo timer de segurança de 50 ms; limite 1 h, reverter se piorar.
+5. `02h` — medições de ambiente VM (sem mudança de código): baseline / Skia CPU / GSK cairo / b+c, 3 repetições.
+6. `02i` — correções de documentação (somente docs): presentation-time, background_effect, WPE, cartões 02c/02d, F1.
+7. `05-compatibilidade-protocolos.md` — RASCUNHO; 7 mensagens do `foot` registradas em §6. NÃO executar sem ok.
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
 - 02n (MUDANÇA DE TESTE VIZINHO, transparente): `frame_configure_hygiene.py` classificava `source=final` só até
@@ -503,7 +517,22 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
 - `docs/architecture/WINDOW-COMPOSITING.md` e `docs/architecture/ARCHITECTURE.md` são a referência de prior art
   citada pelo humano. Registrado aqui como contexto; **ADR 0006 (aditivo/proposto) NÃO foi editado** — incluir
   prior art em ADR exige aprovação explícita (AGENTS.md §0.8 / §6).
+- 02o (desvio de infraestrutura, fora da tarefa): abrir um 2º nested enquanto a instância 02n está viva faz o
+  `frame_webview` novo ativar a instância antiga e morrer (`application_id("dev.aeroshell.frame-webview")` em
+  `frame_webview.rs:470`; log `/tmp/pxp-comp-120110.log`: "conexão privilegiada do shell caiu"). Contorno no harness
+  02o: `DBUS_SESSION_BUS_ADDRESS` privado via `dbus-daemon --session --nofork`, sem encerrar a 02n.
+- 02o (bug de detecção corrigido, não limiar): o cartão exigia `buf==target` no frame 9-slice, mas com o readback
+  ativo o buffer chega ao target no mesmo frame em que o 9-slice cai. A comparação correta é entre o último frame
+  `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
+  o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- **02o (JUIZ VISUAL NEGOU A MEDIÇÃO — 2026-11-20): humano, ao observar as 3 execuções do harness de pixels,
+  disse "nas 3x da medição o problema ocorre ainda".** Ou seja: o flicker aparece enquanto a grade 64x40 reporta
+  `flashes_candidatos=0` e `diff_medio_max=4,81/255`. A medição NÃO capturou o que o humano vê — lacuna, não
+  amostra descartada. Não escrever "sem flicker" com base nesses números. Causas em aberto (suposições, não
+  conclusão): agregação 20x20 pode apagar o transiente; o flicker pode estar fora da janela amostrada ou ser
+  percepção de movimento não capturada por diff de médias. Par 9-slice/nativo foi capturado em só 1/3 execuções
+  (diff 0,00) — insuficiente para confirmar ou refutar a hipótese "visualmente idênticos" da 02n (§6).
 - **02n (JUIZ VISUAL NEGOU — 2026-11-20): humano, ao arrastar E SOLTAR bordas das 2 janelas na instância aberta
   `wayland-aero-02n` (2 `foot`): "problema ainda ocorre."** Dado prevalece sobre os 3× `VEREDITO: OK` do teste
   automatizado (AGENTS.md §0.4). O teste mede SÓ a sequência de estados (`rescaled`, tamanho do buffer, serial do
@@ -511,7 +540,7 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   descartada. A hipótese "visualmente idênticos em tema uniforme" (§6) segue SEM confirmação e pode explicar a
   divergência: o 9-slice do buffer 708 e o nativo 768 podem diferir mesmo com scale=1.
   Não foi registrado se o flicker voltou no press/arrasto (02m aprovada) ou segue só no soltar — perguntar ao humano
-  antes de qualquer diagnóstico. NÃO corrigir sem decisão; NÃO encerrar a instância.
+  antes de qualquer diagnóstico. NÃO corrigir sem decisão; a instância 02n já não existe (§4).
 - 02n (NÃO MEDIDO): desempenho em GPU real — VM sem 3D; só funcionamento/geometria foram medidos. Diferença de
   pixels entre 9-slice(708) e nativo(768) com tema não-uniforme também não foi medida (hipótese em §6).
 - 02l (JUIZ VISUAL NEGATIVO PARCIAL — 2026-11-20, teste feito na instância 100840/101188): humano:
@@ -640,22 +669,21 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- O que eu estava fazendo: 02n (4ª correção autorizada, completa a 02m). Compositor mantém o 9-slice do buffer
-  congelado no release, adia `source=final` para o idle (200 ms), exige `buffer==target` + geração de slices casa
-  + assentamento (50 ms) e aposenta o congelado num único render; timeout 400 ms e cancelamento em novo grab /
-  janela destruída. Teste novo FALHOU no baseline e passou 3×; gate/clippy verdes (§3). Falta SÓ o juiz visual.
-- Gate final (após a última mudança de código): `bash scripts/check.sh` → CHECK=0, bun 9 pass/0 fail
-  (`/tmp/opencode/02n_check_final3.log`); `cargo clippy --workspace --all-targets --features bench -- -D warnings`
-  → EXIT=0 (`/tmp/opencode/02n_clippy_final.log`). Reexecutar ao fechar a sessão se houver nova edição.
-- Reproduzir: `python3 tests/integration/frame_release_swap_hygiene.py` → `frames_buffer_inconsistente=0
-  swaps_atomicos=1 VEREDITO: OK`. Baseline cru FALHOU em `/tmp/opencode/02n_release_baseline2.log`;
-  3× limpas em `/tmp/opencode/02n_release_clean{1,2,3}.log`.
-- JUIZ VISUAL (2026-11-20, instância `wayland-aero-02n`, 2 `foot` — **AINDA ABERTA, não encerrar**): humano
-  arrastou e soltou bordas das 2 janelas e disse **"problema ainda ocorre"**. Veredito NEGATIVO prevalece sobre
-  3× teste OK (§7). Press/arrasto da 02m estava aprovado; não foi registrado se regrediu.
-- PARAR. Próximo passo é decisão do humano: nova abordagem (novo cartão) / aceitar como dívida / outro rumo.
-  NÃO abrir 5ª correção, NÃO mexer no código, NÃO encerrar PIDs 118815/118897/118942 sem pedido. Cartão 02n.
-- NÃO mudar `target = content + extras`, move, conteúdo, 9-slice da 02k/02l, press/arrasto da 02m, ADR 0006,
-  protocolo, shell ou dependências sem aprovação; NÃO encerrar PIDs de instância; sem push. VM sem 3D: sem
-  medição de desempenho/GPU real (§7). Ressalva "visualmente idêntico em tema uniforme" é hipótese (§6).
+- O que eu estava fazendo: 02o (medição de pixels, NÃO correção). `frame_pixel_probe.rs` sob `bench` lê o
+  framebuffer com `copy_framebuffer`+`map_texture`, grava grade 64x40 e o harness compara frames no release.
+  Readback estável (180-186 frames, 0 erros EGL), mas o humano viu flicker nas 3 execuções e a métrica não o
+  capturou (0 flashes, diff ≤4,81; par capturado em só 1/3). Cartão NÃO fechado; PARAR sem nova decisão.
+- Gate final nesta sessão (após a última edição de código): `bash scripts/check.sh` → CHECK=0, bun 9 pass/0 fail
+  (`/tmp/opencode/02o_check_final.log`);
+  `cargo clippy --workspace --all-targets --features bench -- -D warnings` → EXIT=0
+  (`/tmp/opencode/02o_clippy2.log`, após trocar divisão por `n.max(1)` — sem `allow`).
+- Reproduzir: `python3 tests/integration/frame_release_pixel_probe.py` → baseline sem instrumentação
+  NAO_CAPTUROU (`/tmp/opencode/02o_pixel_baseline2.log`); 3 execuções em `/tmp/opencode/02o_pixel_run{1,2,3}.log`.
+  Dumps crus em `/tmp/opencode/02o_pixels_*`; logs de compositor em `/tmp/pxp-comp-*.log`.
+- Instância visual: a 02n (`wayland-aero-02n`, PID 118815) terminou durante esta sessão sem ação do agente.
+  Nenhuma instância aberta agora; juiz visual da 02o está PENDENTE/NEGATIVO (§7), não encerrar nada.
+- PRÓXIMO PASSO (não executar): humano decidir entre novo cartão de medição (dump RAW por frame/reconstrução
+  offline) ou aceitar dívida. NÃO ajustar limiares, NÃO corrigir flicker, NÃO abrir 5ª correção sem ok.
+- Restrições: não mexer em 02m/02k/02l, `target`, move, conteúdo, protocolo, shell, ADRs ou dependências sem
+  aprovação; sem push; VM sem 3D (nada de desempenho). Desvio D-Bus e bug de detecção do par em §6.
 - Contexto em §6: cprussin é contribuidor (criador: Victor Berger/elinorbgr); prior art é contexto, não receita.
