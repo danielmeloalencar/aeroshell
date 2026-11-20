@@ -1,4 +1,4 @@
-# Tarefa 04b — Painel React na WebView: lista janelas e foca a clicada (executada; aguarda juiz visual)
+# Tarefa 04b — Painel React na WebView: lista janelas e foca a clicada (FECHADA — ok visual do humano em 2026-11-20)
 
 > Cartão de tarefa: um agente deve conseguir executá-la lendo só AGENTS.md, STATE.md, RUNBOOK.md e este arquivo.
 > Uma tarefa por sessão. Se o objetivo mudar no meio, PARE e pergunte.
@@ -21,8 +21,9 @@ No nested com 2 e depois 3 `foot`, o painel em React/TSX mostra id + título das
 2. Pré-filtro `python3 tests/integration/react_panel.py` (escrito PRIMEIRO, visto falhando com "bundle ausente"):
    com 2 e 3 `foot`, o painel lista ids/títulos; um clique no 1º botão (a janela de trás) inverte a ordem de render
    no log do compositor; as outras janelas permanecem. Usar PIDs próprios, sem `pkill` genérico.
-   Nota: o cartão previa a 2ª linha, mas ela já nasce na frente — clicar nela não mudaria a ordem e o teste daria
-   falso negativo. O 1º botão é a janela de trás, então prova a elevação.
+   Nota final: a ordem inicial varia entre execuções, então o teste escolhe dinamicamente o botão da janela de trás
+   (lendo a ordem de render do log). Também verifica que o bridge continua respondendo após o clique — sem isso,
+   o clique elevava a janela mas os botões ficavam mortos na tela (causa raiz corrigida em `df89000`).
 3. Teste manual (humano): abrir o nested do RUNBOOK com o painel e 2 `foot`, depois 3; verificar na tela que a lista
    acompanha abrir/fechar janela e que o clique eleva só a janela clicada. O agente deixa a aplicação **aberta** e pede
    o "ok"; quem fecha é o humano (AGENTS.md §0.9).
@@ -37,6 +38,8 @@ A WebView não tem Bun e não abre Unix socket. O caminho mínimo proposto é: o
 usando a mesma API de `window_ipc.rs`. Isso **adiciona um tipo de mensagem ao bridge privado** (não é `protocols/*.xml`).
 Alternativa: servir o painel pelo dev server Bun com WebSocket até o runtime — mais peças e fora do escopo desta fatia.
 **Confirmar o caminho do bridge antes de começar.**
+Decisão aprovada e implementada: o JS posta `{type:"ipc", command, seq}`, o Rust encaminha ao soquete
+`AERO_WINDOW_IPC_SOCK` e responde com `window.__aeroReply(seq, lines)` via `evaluate_javascript`.
 
 ## Se você encontrar OUTRO problema
 Anote em `docs/STATE.md §6` (1 a 3 linhas: sintoma, onde, hipótese) e VOLTE à tarefa.

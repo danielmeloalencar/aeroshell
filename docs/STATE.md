@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-20 · tarefa ativa: 04b (pré-filtros verdes — aguarda juiz visual) · modo: SPIKE
+Última atualização: 2026-11-20 · tarefa ativa: nenhuma (04b fechada com ok visual) · modo: SPIKE
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -92,21 +92,28 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   clique na 1ª linha elevou só ela`. Escrito antes e visto falhando (`bundle ausente`). O teste prova: bundle servido
   por `aero://panel/app.js`, lista `(id,título)` entregue via bridge, clique injetado no 1º botão inverte a ordem
   de render (`wl_surface@3[1]` sobe) sem alterar as demais.
-- [x] 04b (gate): `bash scripts/check.sh` → `OK: scripts/check.sh passou`, `EXIT=0`, `bun test 9 pass / 0 fail`.
-  `rustfmt` corrigiu a formatação do bridge antes do gate final; gate verde numa única execução.
+- [x] 04b (travamento do bridge): causa raiz reproduzida e corrigida. `forward()` esperava o `.` que só o `list`
+  envia; `focus` responde `OK` e o main loop congelava (botões na tela, porém mortos). Teste de regressão escrito
+  antes e visto falhando: `FALHA: bridge parou de responder após o clique`. Com `shutdown(Shutdown::Write)`:
+  `bridge continuou respondendo` com 2 e 3 janelas. Commit `df89000`.
+- [x] 04b (gate final): `bash scripts/check.sh` → `OK: scripts/check.sh passou`, `EXIT=0`, `bun test 9 pass / 0 fail`.
+- [x] 04b (juiz visual — 2026-11-20): humano: **"tudo foi ok agora, inclusive abrir outro foot via comando em um
+  dos foot"**. Prova no log `/tmp/opencode/aero-04b-fix.log`: após o 4º `foot` (`toplevel mapeado ...
+  wl_surface@3[4]`), o painel listou `0 "foot" | 1 "foot" | 2 "foot" | 3 "foot"` e publicou 4 rects. Humano fechou
+  a aplicação. **04b FECHADA.**
 ## 4. Em andamento
-- 04b: **aguarda o "ok" visual do humano**. Aplicação deixada aberta (compositor PID 49681 + shell PID 49719,
-  socket `wayland-aero-04b-vis2`, 2 `foot`); o humano fecha. Sem o ok, o critério visual fica em §7.
-- 02c segue bloqueada (decisão pendente do humano).
+- Nenhuma tarefa em andamento: 04b fechada com ok visual; 02c segue bloqueada (decisão pendente do humano).
 - 02c BLOQUEADA: duas abordagens tentadas e insuficientes no critério de pendência — (1) configure no motion e
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). Não abrir validação visual até a decisão.
 ## 5. Próximas tarefas (ordem; cada uma tem um cartão em docs/tasks/)
-1. `02d-frame-resize-diagnostico.md` — RASCUNHO criado, aguarda o "ok" do humano. Medir 5 cadências × 3
+1. `05-compatibilidade-protocolos.md` — RASCUNHO, aguarda decisão do humano. 7 mensagens do `foot` registradas em
+   §6 como requisito do projeto; levantar na versão fixada do Smithay antes de implementar. NÃO executar sem ok.
+2. `02d-frame-resize-diagnostico.md` — RASCUNHO criado, aguarda o "ok" do humano. Medir 5 cadências × 3
    execuções + juiz visual para decidir entre Plano B e redefinição de critério (decisão do humano em 2026-11-20:
    "Manter parcial, cartão novo").
-2. Decisão sobre modo produto (sua), **após** o juiz visual de 04b.
-3. (Opcional) corrigir S3: hoje falha no baseline por input region de layer surface — ver §6.
+3. Decisão sobre modo produto (sua) — o juiz visual da fatia vertical (04b) já foi obtido em 2026-11-20.
+4. (Opcional) corrigir S3: hoje falha no baseline por input region de layer surface — ver §6.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
 - 04b: `tests/integration/s3_input.sh` falha **também no baseline** (`0fc05e7`, worktree isolado): a input region
   é aplicada (`rects=[(24,8,189,36)]`) mas o clique "dentro" dá `under=None`. Não é regressão do painel React;
@@ -182,16 +189,8 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   pode ser reatribuído. O mapa `window_surfaces` é limpo no hook de destruição, mas ids monotonicamente estáveis
   (não reutilizados) ficam para uma tarefa futura se o cenário aparecer.
 ## 7. Não medido / não validado (não trate como fato)
-- 04b: **VEREDITO VISUAL NEGATIVO (2026-11-20)** — humano: "nada disso funcionou"; viu 2 `foot` sem decoração e
-  2 botões no canto inferior esquerdo que não respondiam ao clique. O pré-filtro antigo mediu só a elevação no log
-  e **não mediu se o bridge continuava vivo depois do clique**: lacuna corrigida em `react_panel.py`.
-- 04b (causa raiz, reproduzida): `bridge::forward()` bloqueava em `BufReader::lines()` após `focus`, porque o IPC
-  responde `OK` (sem o `.` que só o `list` envia) e a conexão ficava aberta. O main loop do shell congelava — botões
-  na tela, porém mortos. Prova crua: `/tmp/opencode/react_panel_trava_antes2.log` → `FALHA: bridge parou de responder
-  após o clique`, com a ordem de render já invertida. Correção: `stream.shutdown(Shutdown::Write)` após enviar o
-  comando (`bridge.rs`); depois, `/tmp/opencode/react_panel_trava_depois.log` → `bridge continuou respondendo` com
-  2 e 3 janelas. Nova instância aberta para o humano: compositor PID 53098 + shell PID 53151, 3 `foot`,
-  socket `wayland-aero-04b-fix`, log `/tmp/opencode/aero-04b-fix.log`. O agente NÃO encerrou; quem fecha é o humano.
+- 04b: nada pendente — veredito visual POSITIVO do humano e causa do travamento registrados em §3. Instância da
+  validação fechada pelo próprio humano; nenhum PID meu ficou órfão.
 - 03: latência do IPC, taxa de perda e reconexão NÃO medidos (S4 do plano mestre, fora do cartão).
 - Latência de resize com WebKit real; latência de ponteiro; qualquer desempenho em GPU real (tudo foi em VM sem 3D).
 - Número de processos/PSS com `related-view` foi medido só em VM; ADR 0001 está "aceito provisoriamente".
@@ -212,14 +211,14 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- O que eu estava fazendo: 04b NÃO validada — humano deu veredito visual negativo ("nada disso funcionou");
-  registrei a lacuna de medição em §7 e os 7 protocolos faltantes como requisito em §6 + rascunho `docs/tasks/05`.
-- O que funcionou (apenas pré-filtros, NÃO prova visual): `python3 tests/integration/react_panel.py` → `OK: painel
-  React listou 2 e 3 janelas; clique na 1ª linha elevou só ela`; `bash scripts/check.sh` green (bun 9/9).
+- O que eu estava fazendo: fechamento de 04b após o ok visual do humano ("tudo foi ok agora, inclusive abrir outro
+  foot via comando em um dos foot"); a instância foi fechada pelo humano.
+- O que funcionou: `python3 tests/integration/react_panel.py` → `OK: painel React listou 2 e 3 janelas; clique no
+  botão da janela de trás elevou só ela; bridge continuou respondendo`; log `/tmp/opencode/aero-04b-fix.log` com
+  4 `foot` e 4 botões; `bash scripts/check.sh` green (EXIT=0, bun 9/9).
 - Comando exato para reproduzir: `python3 tests/integration/react_panel.py` (sobe/encerra os próprios PIDs).
-- Próximo passo imediato (uma ação): **não corrigir no escuro**. Perguntar ao humano O QUE na tela falhou
-  (painel invisível? lista vazia? clique sem elevar?) e criar a medição que faltava antes de qualquer mudança.
-  Depois decidir 05 (compatibilidade) com o humano. NÃO executar 02d.
+- Próximo passo imediato (uma ação): perguntar ao humano qual cartão entra na próxima sessão — 05 (compatibilidade
+  Wayland, 7 mensagens do `foot`) ou 02d (diagnóstico do resize). NÃO executar nenhum dos dois sem ok.
 - NÃO executar 02d (resize) nem tentar terceira abordagem sem autorização explícita.
 - Descobertas laterais em §6: IPC sem eventos (patches vêm do `list`), `send_close` assíncrono (teste com polling),
   arredondamento do foot, timer 1 ms sem ganho, `frame_resize_edges.py` intermitente, flake do S1.
