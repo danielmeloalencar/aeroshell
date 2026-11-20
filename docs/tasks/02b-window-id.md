@@ -55,19 +55,20 @@ Ao final: atualizar STATE.md (§3, §4, §5, §9) e comitar localmente (sem push
   (A mudou, B idêntica). Medição de foco por clique adicionada depois: foco nunca em B.
 - Critério 3: `frame_resize_edges.py` e `frame_buttons.py` → OK (nenhuma regressão).
 - Critério 5: `bash scripts/check.sh` → `OK: scripts/check.sh passou` (EXIT=0, gate completo).
-- Critério 4 (visual): PENDENTE — requer o "ok" do humano com a aplicação aberta.
+- Critério 4 (visual): VALIDADO pelo humano em 2026-11-20 — "ok validado e fechada a instancia" (2 `foot` no nested).
+- Tarefa 02b: FECHADA.
 - Causa raiz corrigida: `nth(window_id)` (ordem z) trocado por `window_for_id()` (mapa estável) em `grab.rs`,
   `window_ipc.rs`, `aero_frame.rs` e `xdg_shell.rs`; `frame_webview.rs` cria uma WebView por window_id.
 - Detalhe extra (relato do humano após "ok" parcial): clique na BARRA da janela de trás não a elevava. Corrigido em
   `input.rs`: fallback por `surface_under` + `associated_frames` quando `element_under` (que ignora layers) falha.
-  ANTES `barra eleva A=False`; DEPOIS `True`, foco em A. Critério 4 (visual) segue pendente para este detalhe.
+  ANTES `barra eleva A=False`; DEPOIS `True`, foco em A. Validado visualmente pelo humano.
 - Amostra falha registrada (não descartada): `frame_resize_edges.py` falhou 1× em 3 no `BottomRight` porque os pontos
   são calculados uma vez e um probe aplicou `content_w=1002`; causa em `STATE.md §6`, teste a corrigir depois.
 - 3º detalhe (relato do humano): barra da janela da frente sobre o conteúdo da de trás fazia o clique "passar direto".
   Causas: `surface_under` checava o cliente antes da decoração; `focus_on_press` usava `element_under` (ignora layers).
   Corrigido: decoração primeiro (z-order do topo) e `surface_under` como fonte única de foco.
   Prova ANTES/DEPOIS em `frame_follows_resize.py`: superfície `(200,100)` cliente de A → frame de B; frente `120→80`
-  → `120→120`. Critério 4 (visual) segue pendente para este detalhe.
+  → `120→120`. Validado visualmente pelo humano; instância fechada pelo próprio humano.
 - Amostra falha registrada: `frame_follows_resize.py` falhou 1× com `ConnectionRefusedError` no socket IPC inicial;
   `ipc()` agora espera até 15 s. Também 1 execução com asserção de foco inválida (B já focada) — corrigida para
   "foco não salta para A".

@@ -53,15 +53,15 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
       `foco=[]` (B já estava focada, foco não saltou para A), `barra da frente não passa=True`.
 - [x] Gate final desta rodada: `bash scripts/check.sh` → `OK: scripts/check.sh passou` (EXIT=0);
       `frame_follows_resize.py`, `frame_window_id.py`, `frame_buttons.py`, `frame_resize_edges.py` → 4× OK.
+- [x] 02b — VALIDAÇÃO VISUAL DO HUMANO (2026-11-20): "ok validado e fechada a instancia", após testar na janela
+      aberta com 2 `foot` o clique na barra da janela da frente sobre o conteúdo da de trás; o próprio humano fechou
+      a aplicação (`AGENTS.md §0.9`). Tarefa 02b FECHADA.
 ## 4. Em andamento
-- [ ] 02b — código pronto e gate verde; falta SOMENTE a confirmação visual do humano para o clique na barra da janela
-      da FRENTE quando ela cobre o conteúdo da de trás (critério 4). Aplicação deixada aberta; quem fecha é o humano
-      (`AGENTS.md §0.9`).
+- Nenhuma. Próxima: `03-runtime-bun-sdk.md` (Aguardando sua autorização para iniciar).
 ## 5. Próximas tarefas (ordem; cada uma tem um cartão em docs/tasks/)
-1. `02b-window-id.md` — validação visual final (2 janelas no nested, mover/resize/✕/foco), depois fechar tarefa.
-2. `03-runtime-bun-sdk.md` — `aero.windows.list/focus/close`, snapshot + patches; tipos TS gerados de `aeroshell-ipc`.
-3. Passo 4 — Painel React (`useWindows()`), clique foca a janela certa; testar com 2 e 3 janelas (cartão a criar).
-4. Decisão sobre modo produto (sua).
+1. `03-runtime-bun-sdk.md` — `aero.windows.list/focus/close`, snapshot + patches; tipos TS gerados de `aeroshell-ipc`.
+2. Passo 4 — Painel React (`useWindows()`), clique foca a janela certa; testar com 2 e 3 janelas (cartão a criar).
+3. Decisão sobre modo produto (sua).
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
 - Atraso da decoração no resize (frame repinta depois do conteúdo; VM sem 3D piora). Causas baratas aplicadas
   (frame usa geometria commitada; fundo transparente). Timer de 20 ms no frame_webview.rs ainda existe (loop de despacho).
@@ -106,10 +106,8 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
 - Latência de resize com WebKit real; latência de ponteiro; qualquer desempenho em GPU real (tudo foi em VM sem 3D).
 - Número de processos/PSS com `related-view` foi medido só em VM; ADR 0001 está "aceito provisoriamente".
 - Estabilidade do `ext-background-effect` (blur): não implementado; Smithay 0.7 não tem handler.
-- Nenhuma validação visual com juiz humano foi feita nestas duas últimas sessões (só documentação). Item visual só entra
-  na seção 3 com o "ok" do humano registrado, conforme `AGENTS.md §0.9`.
-- 02b: confirmação visual PENDENTE para o clique na barra da janela da FRENTE sobre o conteúdo da de trás — deixar o
-  nested aberto e o humano dar o "ok".
+- Nenhuma validação visual pendente: 02b foi validada pelo humano em 2026-11-20 (registro em §3). Demais itens visuais
+  das seções anteriores seguem como histórico, não reabertos nesta sessão.
 - 02b (honestidade metodológica): **resize**, **clique na barra da janela de trás** e **barra da frente sobre conteúdo**
   foram vistos FALHANDO antes das respectivas correções. A medição de **foco** foi adicionada depois do `nth` e não
   foi vista falhando antes; medida depois: foco em A, nunca em B. No 3º caso, B já estava focada: o critério medido
@@ -119,11 +117,11 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- O que eu estava fazendo: tarefa 02b — 3º detalhe visual (barra da frente sobre conteúdo da de trás); gate verde.
-- O que funcionou: `surface_under` prioriza decoração (z-order do topo) sobre conteúdo; `focus_on_press` usa
-  `surface_under` como fonte única. ANTES `frente 120→80`; DEPOIS `120→120`, superfície do frame, foco não salta.
-- Comando exato: `python3 tests/integration/frame_follows_resize.py && bash scripts/check.sh`
-- Próximo passo imediato (uma ação): abrir o nested com 2 `foot`, deixar aberto, pedir o "ok" visual deste 3º detalhe.
+- O que eu estava fazendo: tarefa 02b — FECHADA; `ok` do humano registrado e instância fechada pelo próprio humano.
+- O que funcionou: 2 frames HTML, ações por `window_id`, clique na decoração eleva/foca a dona, barra da frente
+  sobre conteúdo da de trás não "passa direto". Gate completo verde; 4 testes de integração OK.
+- Comando exato: `python3 tests/integration/frame_follows_resize.py && python3 tests/integration/frame_window_id.py && bash scripts/check.sh`
+- Próximo passo imediato (uma ação): abrir `docs/tasks/03-runtime-bun-sdk.md` e aguardar autorização para iniciar.
 - Descobertas laterais em §6: `frame_resize_edges.py` intermitente (causa identificada), flake do S1 sem causa,
-  `ConnectionRefusedError` no IPC do teste (corrigido com espera de 15 s).
+  `ConnectionRefusedError` no IPC do teste (corrigido), reatribuição de `window_id` após close.
  
