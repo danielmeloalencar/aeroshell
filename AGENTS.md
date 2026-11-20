@@ -152,7 +152,8 @@ AeroShell é um framework para criar compositores Wayland completos cuja parte v
 WebKitGTK. Compositor em Rust + Smithay; política em Bun/TypeScript. Roda nested
 (janela dentro do compositor atual) para desenvolvimento e em sessão real (TTY).
  
-Plano completo: `docs/architecture.md`. Status atual: `docs/STATE.md` (fonte única). `docs/progress.md` é histórico.
+Plano mestre (ativo, visão e fases): `docs/plano-mestre.md`. Arquitetura: `docs/architecture.md`.
+Status atual: `docs/STATE.md` (fonte única). `docs/progress.md` é histórico.
 Decisões: `docs/adr/`. Modelo de ameaça: `docs/security-model.md`.
  
 ## 2. Decisões congeladas (NÃO reabra sem aprovação explícita)

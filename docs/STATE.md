@@ -25,7 +25,7 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
 - [x] Regra de validação visual com juiz humano (agente executa/deixa aberto, humano testa e fecha) — `AGENTS.md §0.9`,
       `§0.7` e checklist `§9`; prova: `git diff -- AGENTS.md`
 - [x] `docs/progress.md` despromovido a histórico — `AGENTS.md:3,154,262,272`, `plan.md`, `README.md`, `justfile`
-      e aviso no topo de `docs/plano-mestre.md`; prova: `grep -rn "progress" AGENTS.md plan.md README.md justfile`
+      e ponteiros em `docs/plano-mestre.md` (plano ATIVO, preservado); prova: `grep -rn "progress" AGENTS.md plan.md README.md justfile`
 - [x] `AGENTS_SESSAO_ADENDO.md` removido a pedido do usuário (protocolo de sessão já vive no próprio `AGENTS.md`).
 ## 4. Em andamento
 - [ ] **QUEBRADO** — frame por janela com `window_id` próprio. Código na branch `wip/window-id` (`f448dab`):
@@ -54,6 +54,9 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   As referências a `progress.md` como fonte única JÁ foram corrigidas (tarefa 05); estes itens seguem pendentes.
 - Flake do S1: `bun test` falhou uma vez com exit 1 em ~16 s sob carga; isolado passou em 7,67 s. Registrado, NÃO
   descartado. Correção na tarefa 00. Reexecutar até passar é proibido pelo `AGENTS.md §0.5`.
+- Erro meu corrigido nesta sessão: eu havia rebaixado `docs/plano-mestre.md` a histórico. O usuário corrigiu: é o
+  plano ATIVO e um dos documentos mais importantes (visão, fases, onde queremos chegar). Banner removido, texto
+  original restaurado; só os ponteiros de atualização de `progress.md` viraram `STATE.md`. Não repetir.
 ## 7. Não medido / não validado (não trate como fato)
 - Latência de resize com WebKit real; latência de ponteiro; qualquer desempenho em GPU real (tudo foi em VM sem 3D).
 - Número de processos/PSS com `related-view` foi medido só em VM; ADR 0001 está "aceito provisoriamente".
@@ -66,7 +69,7 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
 - O que eu estava fazendo: tarefa 05 — `docs/progress.md` rebaixado a arquivo histórico em todos os documentos ativos.
-- O que funcionou: `AGENTS.md`, `plan.md`, `README.md`, `justfile` e aviso no topo de `plano-mestre.md` agora apontam para `STATE.md`.
+- O que funcionou: ponteiros em `AGENTS.md`, `plan.md`, `README.md`, `justfile` e `plano-mestre.md` apontam para `STATE.md`; o plano mestre permanece ativo.
 - Comando exato para reproduzir o estado atual: `grep -rn "progress\\|fonte única" AGENTS.md plan.md README.md justfile docs/STATE.md docs/plano-mestre.md | head -30 && bash scripts/check.sh`
 - Próximo passo imediato (uma ação): abrir `docs/tasks/00-gate-confiavel.md` — S1 imprime stderr, mata o PID que iniciou, prova com falha induzida e 3 gates verdes seguidos.
 - Descobertas laterais registradas na seção 6 (não corrigidas): protocolos duplicados no `AGENTS.md`, título órfão, flake do S1.

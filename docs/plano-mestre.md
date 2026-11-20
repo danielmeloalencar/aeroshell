@@ -1,11 +1,7 @@
 # AeroShell — Plano de Trabalho (Agents.md)
 
-> **HISTÓRICO — NÃO SEGUIR.** O plano abaixo é o documento original de F0 e está desatualizado.
-> As regras ativas estão em `AGENTS.md`; o estado atual em `docs/STATE.md`; os comandos em `docs/RUNBOOK.md`.
-> Referências a `docs/progress.md` nele são históricas — aquele arquivo também não é fonte de verdade.
->
-> Documento-guia original, mantido só como registro. Na época, toda implementação
-> devia seguir este plano. Mudanças de arquitetura exigem ADR (regra 3). **Sempre commitar
+> Documento-guia para agentes e desenvolvedores. Toda implementação deve seguir
+> este plano. Mudanças de arquitetura exigem ADR (regra 3). **Sempre commitar
 > quando uma etapa for validada** (regra 10): commits pequenos, descritivos e
 > com o gate que os autorizou. Idioma do projeto: português (PT-BR).
 
@@ -205,7 +201,7 @@ Ajustes só com justificativa em ADR.
    superfície; fail-secure no lock; segredos nunca em logs.
 6. DX é o produto: dev frontend cria desktop completo (incluindo lock/login) sem
    saber Wayland. Toda API pública com tipos, JSDoc e exemplo.
-7. Manter `docs/adr/`, `docs/security-model.md` e `docs/progress.md` atualizados.
+7. Manter `docs/adr/`, `docs/security-model.md` e `docs/STATE.md` atualizados. `docs/progress.md` é só histórico.
 8. **Testar lock, PAM e greetd apenas em VM/ambiente isolado. Avisar antes de
    qualquer passo que altere `/etc/pam.d` ou config do display manager do host.**
 9. Se um requisito conflitar com a realidade técnica (ex.: WPE inviável),
@@ -214,12 +210,12 @@ Ajustes só com justificativa em ADR.
     em seus critérios de aceite (`cargo check`, `bun test`, lint, gate medido),
     criar um commit pequeno e descritivo **antes de avançar** para o próximo
     passo. O commit deve incluir o código, os testes, o ADR e a atualização de
-    `docs/progress.md` relacionados à etapa. Convenção: `tipo(escopo): descrição
+    `docs/STATE.md` relacionados à etapa. Convenção: `tipo(escopo): descrição
     — gate <id> OK`. Nunca acumular duas etapas validadas em um único commit,
     nunca deixar uma etapa validada sem commit. Se uma etapa falhar, **não
     commitar** como se estivesse pronta: registrar o resultado em
-    `docs/progress.md` e commitar apenas esse registro cheio de dados, com
-    mensagem `docs(progress): resultado <id> — NO-GO`.
+    `docs/STATE.md` e commitar apenas esse registro cheio de dados, com
+    mensagem `docs(state): resultado <id> — NO-GO`.
 
 ---
 
@@ -328,7 +324,7 @@ propor alternativa (regra 9).
 ### 7.3 Gates go/no-go (resumo)
 
 Cada linha abaixo, quando validada, **deve ser commitada na hora** (regra 10).
-Em caso de NO-GO, commitar só o registro com dados em `docs/progress.md`.
+Em caso de NO-GO, commitar só o registro com dados em `docs/STATE.md`.
 
 | Spike | Métrica | Gate | Commit ao validar |
 |---|---|---|---|
