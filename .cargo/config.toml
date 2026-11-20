@@ -1,0 +1,5 @@
+# Onde o ts-rs grava os bindings gerados (relativo à raiz do workspace).
+# `generate:types` em package.json roda `cargo test -p aeroshell-ipc --features export-bindings`.
+[env]
+TS_RS_EXPORT_DIR = { value = "packages/sdk/src/generated", relative = true }
+TS_RS_LARGE_INT = "number"

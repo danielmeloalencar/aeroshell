@@ -1,4 +1,3 @@
-//! Mensagens do IPC (a implementar no S4).
+//! Mensagens do IPC. Os tipos de estado vivem em `types.rs` (fonte dos bindings TS).
 
-/// Revisão de um snapshot. Patches com revisão obsoleta são rejeitados.
-pub type Revision = u64;
+pub use crate::types::Revision;

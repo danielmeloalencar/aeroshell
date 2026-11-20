@@ -1,4 +1,8 @@
 //! Protocolo IPC AeroShell: snapshot + patches revisionados e comandos atômicos.
-//! F0/S4: mensagens e codec serão implementados aqui. Tipos TS gerados via ts-rs.
+//! Fase 0: transporte textual por linha no compositor; tipos TS gerados via ts-rs.
+//! O codec binário (F0/S4) ainda não existe — não inventar API aqui.
 
 pub mod messages;
+pub mod types;
+
+pub use types::{Patch, Revision, Snapshot, WindowChange, WindowInfo};

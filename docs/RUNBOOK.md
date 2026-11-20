@@ -31,11 +31,26 @@ Teste manual: arraste a barra (move), as bordas de 6 px (resize), botões max/�
 Para encerrar: feche a janela do compositor. Confirme com
 `ps -eo pid,etime,args | grep -E "aeroshell|frame_webview|WebKit" | grep -v grep` que nada sobrou.
  
+## Runtime Bun / SDK (tarefa 03)
+Tipos TS gerados do Rust (não editar à mão):
+```
+bun run generate:types   # cargo test -p aeroshell-ipc --features export-bindings
+```
+Com o nested acima aberto e 2 `foot`, em outro terminal do mesmo diretório:
+```
+export AERO_WINDOW_IPC_SOCK=<o caminho passado ao compositor>
+bun run packages/runtime/src/main.ts --list          # imprime "<id>\t<título>" por janela
+bun run packages/runtime/src/main.ts --focus 0       # eleva a janela 0
+bun run packages/runtime/src/main.ts --close 1       # fecha só a janela 1
+```
+O socket IPC só existe se `AERO_WINDOW_IPC_SOCK` estiver definido ao iniciar o compositor.
+
 ## Testes de integração (precisam de display; rodar à mão, não no CI)
 ```
 python3 tests/integration/frame_resize_edges.py   # 8 arestas/cantos
 python3 tests/integration/frame_buttons.py        # max/restaurar/fechar
 python3 tests/integration/frame_window_id.py      # 2 janelas, cada frame com o próprio window_id
+python3 tests/integration/sdk_cli.py              # 03: --list/--focus/--close do runtime Bun
 python3 tests/integration/supervisor_lifecycle.py # kill -9 do compositor derruba os filhos
 python3 tests/integration/supervisor_real.py      # fluxo real shell privilegiado
 python3 tests/bench/run_frame_bench.py            # benchmark de protocolo (VM ruidosa: sem conclusão)

@@ -1,6 +1,7 @@
 //! IPC de controle de janelas (mecanismo em Rust; política em TS via SDK).
 //! Socket Unix separado do Wayland, protocolo de texto por linha:
-//!   list            -> uma linha `W id x y w h` por janela, terminada por `.`
+//!   list            -> uma linha `W id x y w h <titulo-json>` por janela, terminada por `.`
+//!                      (titulo-json é uma string JSON, para preservar espaços/UTF-8/newlines)
 //!   focus <id>      -> OK
 //!   close <id>      -> OK
 //!   maximize <id>   -> OK (alterna maximizado)
@@ -16,10 +17,28 @@ use std::{
 
 use calloop::channel;
 use smithay::{
-    reexports::wayland_protocols::xdg::shell::server::xdg_toplevel, utils::SERIAL_COUNTER,
+    desktop::Window,
+    reexports::wayland_protocols::xdg::shell::server::xdg_toplevel,
+    utils::SERIAL_COUNTER,
+    wayland::{compositor::with_states, shell::xdg::XdgToplevelSurfaceData},
 };
 
 use crate::state::AeroState;
+
+/// Título atual do toplevel, lido dos atributos da superfície no event loop.
+/// Fonte: smithay 0.7.0 `wayland/shell/xdg/mod.rs:364` (`XdgToplevelSurfaceRoleAttributes.title`).
+fn window_title(window: &Window) -> String {
+    let Some(toplevel) = window.toplevel() else {
+        return String::new();
+    };
+    with_states(toplevel.wl_surface(), |states| {
+        states
+            .data_map
+            .get::<XdgToplevelSurfaceData>()
+            .and_then(|data| data.lock().ok().and_then(|attrs| attrs.title.clone()))
+    })
+    .unwrap_or_default()
+}
 
 pub type Command = (String, mpsc::Sender<String>);
 
@@ -60,13 +79,24 @@ impl AeroState {
         match op {
             "list" => {
                 let mut out = String::new();
-                for (i, window) in self.space.elements().enumerate() {
-                    if let Some(geo) = self.space.element_geometry(window) {
-                        out.push_str(&format!(
-                            "W {} {} {} {} {}\n",
-                            i, geo.loc.x, geo.loc.y, geo.size.w, geo.size.h
-                        ));
-                    }
+                // `space.elements()` é ordem z e muda a cada raise_element: usar o
+                // enumerate aqui faria `--close <id>` fechar a janela errada (02b).
+                // Iteramos o mapa lógico e resolvemos via window_for_id.
+                let mut ids: Vec<u32> = self.window_surfaces.keys().copied().collect();
+                ids.sort_unstable();
+                for id in ids {
+                    let Some(window) = self.window_for_id(id) else {
+                        continue;
+                    };
+                    let Some(geo) = self.space.element_geometry(window) else {
+                        continue;
+                    };
+                    let title = serde_json::to_string(&window_title(window))
+                        .unwrap_or_else(|_| "\"\"".to_owned());
+                    out.push_str(&format!(
+                        "W {} {} {} {} {} {}\n",
+                        id, geo.loc.x, geo.loc.y, geo.size.w, geo.size.h, title
+                    ));
                 }
                 out.push('.');
                 out
