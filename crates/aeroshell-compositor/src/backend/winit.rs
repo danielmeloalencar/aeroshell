@@ -6,8 +6,12 @@ use smithay::{
     backend::{
         renderer::{
             damage::OutputDamageTracker,
-            element::{surface::WaylandSurfaceRenderElement, AsRenderElements, Kind},
+            element::{
+                surface::WaylandSurfaceRenderElement, utils::RescaleRenderElement,
+                AsRenderElements, Kind,
+            },
             gles::GlesRenderer,
+            ImportAll, ImportMem,
         },
         winit::{self, WinitEvent},
     },
@@ -22,6 +26,14 @@ use smithay::{
 };
 
 use crate::{cli::Options, CalloopData};
+
+// Padrão anvil v0.7.0 (anvil/src/render.rs): um enum cobre o elemento normal e
+// o elemento reescalado. Fonte: docs.rs/smithay/0.7.0/.../macro.render_elements.html
+smithay::backend::renderer::element::render_elements! {
+    pub AeroRenderElements<R> where R: ImportAll + ImportMem;
+    Surface = WaylandSurfaceRenderElement<R>,
+    Rescaled = RescaleRenderElement<WaylandSurfaceRenderElement<R>>,
+}
 
 pub struct WinitBackend;
 
@@ -132,7 +144,7 @@ pub fn init_winit(
                             // o render_element do seu cliente (ou seja, ABAIXO dele), mantendo
                             // o OutputDamageTracker — nada de draw direto no framebuffer.
                             let output_scale = output.current_scale().fractional_scale();
-                            let mut elements: Vec<WaylandSurfaceRenderElement<GlesRenderer>> =
+                            let mut elements: Vec<AeroRenderElements<GlesRenderer>> =
                                 Vec::new();
                             {
                                 let layer_map = smithay::desktop::layer_map_for_output(output);
@@ -144,7 +156,7 @@ pub fn init_winit(
                                 for layer in upper {
                                     if let Some(geo) = layer_map.layer_geometry(layer) {
                                         elements.extend(AsRenderElements::render_elements::<
-                                            WaylandSurfaceRenderElement<GlesRenderer>,
+                                            AeroRenderElements<GlesRenderer>,
                                         >(
                                             layer,
                                             renderer,
@@ -168,7 +180,7 @@ pub fn init_winit(
                                     // Fonte: smithay-0.7.0/src/desktop/space/mod.rs:403,464.
                                     let render_loc = geo.loc - window.geometry().loc;
                                     elements.extend(AsRenderElements::render_elements::<
-                                        WaylandSurfaceRenderElement<GlesRenderer>,
+                                        AeroRenderElements<GlesRenderer>,
                                     >(
                                         window,
                                         renderer,
@@ -180,7 +192,7 @@ pub fn init_winit(
                                     // Frame deste cliente: depois do cliente = abaixo dele.
                                     let client_surface = window.toplevel().map(|t| t.wl_surface());
                                     render_order.push(format!("client@{:?}", client_surface.map(|s| s.id())));
-                                    if let Some((frame_surface, _, _, _)) = state
+                                    if let Some((frame_surface, _, _window_id, _)) = state
                                         .associated_frames
                                         .iter()
                                         .find(|(_, _, _, cs)| cs.as_ref() == client_surface)
@@ -212,7 +224,40 @@ pub fn init_winit(
                                         });
                                         match element {
                                             Ok(Some(el)) => {
-                                                elements.push(el);
+                                                // Alvo = conteúdo JÁ COMMITADO + insets/shadow.
+                                                // O buffer da decoração é assíncrono (WebKit);
+                                                // enquanto ele não alcança o alvo, escalamos no
+                                                // render para manter a borda colada (ADR 0006).
+                                                let target = smithay::utils::Size::<i32, smithay::utils::Logical>::new(
+                                                    geo.size.w + fgeo.extra_w(),
+                                                    geo.size.h + fgeo.extra_h(),
+                                                );
+                                                let buffer = el.buffer_size();
+                                                let rescaled = buffer.w > 0
+                                                    && buffer.h > 0
+                                                    && (buffer.w != target.w || buffer.h != target.h);
+                                                #[cfg(feature = "bench")]
+                                                {
+                                                    let t_nanos = std::time::SystemTime::now()
+                                                        .duration_since(std::time::UNIX_EPOCH)
+                                                        .map(|d| d.as_nanos())
+                                                        .unwrap_or(0);
+                                                    eprintln!(
+                                                        "RESIZE_GLUE t={t_nanos} window_id={_window_id} content={}x{} target={}x{} buffer={}x{} rescaled={rescaled}",
+                                                        geo.size.w, geo.size.h, target.w, target.h, buffer.w, buffer.h,
+                                                    );
+                                                }
+                                                if rescaled {
+                                                    let scale = UtilsScale::from((
+                                                        target.w as f64 / buffer.w as f64,
+                                                        target.h as f64 / buffer.h as f64,
+                                                    ));
+                                                    elements.push(AeroRenderElements::Rescaled(
+                                                        RescaleRenderElement::from_element(el, loc, scale),
+                                                    ));
+                                                } else {
+                                                    elements.push(AeroRenderElements::Surface(el));
+                                                }
                                                 placed_frames.push(frame_surface.clone());
                                                 render_order.push(format!("frame@{:?}", frame_surface.id()));
                                             }
@@ -249,14 +294,14 @@ pub fn init_winit(
                                             Kind::Unspecified,
                                         )
                                     }) {
-                                        elements.push(el);
+                                        elements.push(AeroRenderElements::Surface(el));
                                     }
                                 }
 
                                 for layer in lower {
                                     if let Some(geo) = layer_map.layer_geometry(layer) {
                                         elements.extend(AsRenderElements::render_elements::<
-                                            WaylandSurfaceRenderElement<GlesRenderer>,
+                                            AeroRenderElements<GlesRenderer>,
                                         >(
                                             layer,
                                             renderer,

@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-20 · tarefa ativa: nenhuma (04b fechada com ok visual) · modo: SPIKE
+Última atualização: 2026-11-20 · tarefa ativa: 02e (código + gate prontos; aguarda juiz visual) · modo: SPIKE
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -107,19 +107,38 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   em sequência, confirmou elevação e responsividade contínua e abriu um 4º `foot` a partir de um `foot`. Log cru
   `/tmp/opencode/aero-04b-recheck.log`: 4º `foot` após `04:53:54`, lista final `0..3 "foot"`, 4 rects, 40 respostas
   `list` (bridge vivo). Humano fechou a aplicação; nenhum PID meu ficou órfão.
+- [x] 02e (código): `winit.rs` usa `AeroRenderElements` (`render_elements!` do Smithay 0.7.0, padrão anvil v0.7.0)
+  e `RescaleRenderElement::from_element(el, loc, scale)` quando `buffer_size() != conteúdo_commitado + extras`.
+  Caminho normal (`Surface`) inalterado; move não escala; damage inalterado (`age=0` + `request_redraw`).
+  Fonte das APIs: `smithay-0.7.0/src/backend/renderer/element/utils/elements.rs:12-30`, `surface.rs:269`.
+- [x] 02e (teste escrito ANTES, visto falhando): `tests/integration/frame_resize_glue.py` → baseline sem
+  instrumentação `FALHA: nenhuma linha RESIZE_GLUE` (`/tmp/opencode/glue_baseline.log`); instrumentado sem escala
+  `FALHA: rescaled=False mas buffer=(708,530) target=(714,530)`, `VEREDITO: FALHA`
+  (`/tmp/opencode/glue_instrumented_sem_escala.log`).
+- [x] 02e (prova espacial, 3 execuções seguidas, nenhuma amostra descartada): `glue_final{1,2,3}.log` e
+  `02e_glue_gate{1,2,3}.log` → todas `VEREDITO: OK`; `durante_grab` 182/141/165 e 87/96/117; `apos_soltar`
+  89/71/67 e 46/66/63; em todas existe `buffer==target` com `rescaled=false` após soltar. Mecanismo exercitado:
+  `/tmp/glue-comp-58730.log`, `-58852.log`, `-58966.log` com 104–118 linhas `rescaled=true` por execução.
+- [x] 02e (vizinhos): `frame_resize_edges.py`, `frame_follows_resize.py`, `frame_buttons.py`,
+  `frame_window_id.py` → 4× OK. `frame_resize_sync.py` (métrica antiga) → `VEREDITO: FALHA`, inalterado.
+- [x] 02e (gate): `bash scripts/check.sh` → `OK: scripts/check.sh passou` (EXIT=0, bun 9 pass / 0 fail);
+  `cargo clippy --workspace --all-targets --features bench -- -D warnings` → EXIT=0.
+- [x] 02e (ADR aditivo): `docs/adr/0006-frame-resize-composicao-elastica.md` com causa raiz (pipeline WebKit),
+  decisão, alternativas preteridas e gatilhos de reavaliação. Nenhum ADR aceito editado.
 ## 4. Em andamento
-- Nenhuma tarefa em andamento: 04b fechada com ok visual; 02c segue bloqueada (decisão pendente do humano).
+- 02e EM ANDAMENTO: código, teste, ADR e gate prontos; **falta o juiz visual** (critério 4 do cartão).
+  Instância de validação será aberta com 2 `foot`; sem o "ok" do humano o item fica em §7 como não validado.
 - 02c BLOQUEADA: duas abordagens tentadas e insuficientes no critério de pendência — (1) configure no motion e
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
-  do humano (`AGENTS.md §3.12`, regra das duas tentativas). Não abrir validação visual até a decisão.
-## 5. Próximas tarefas (ordem; cada uma tem um cartão em docs/tasks/)
-1. `05-compatibilidade-protocolos.md` — RASCUNHO, aguarda decisão do humano. 7 mensagens do `foot` registradas em
-   §6 como requisito do projeto; levantar na versão fixada do Smithay antes de implementar. NÃO executar sem ok.
-2. `02d-frame-resize-diagnostico.md` — RASCUNHO criado, aguarda o "ok" do humano. Medir 5 cadências × 3
-   execuções + juiz visual para decidir entre Plano B e redefinição de critério (decisão do humano em 2026-11-20:
-   "Manter parcial, cartão novo").
-3. Decisão sobre modo produto (sua) — o juiz visual da fatia vertical (04b) já foi obtido em 2026-11-20.
-4. (Opcional) corrigir S3: hoje falha no baseline por input region de layer surface — ver §6.
+  do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
+## 5. Próximas tarefas (ordem autorizada pelo humano em 2026-11-20; abrir cartão antes de executar)
+1. `02f` — higiene dos configures (compositor): `last_sent_size`/`last_sent_at` no grab (≥150 ms), pular
+   configure no commit-hook durante grab, um configure final com o tamanho real ao soltar.
+2. `02g` — shell: fonte de fd GLib no `wl_display` mantendo timer de segurança de 50 ms; limite 1 h, reverter se piorar.
+3. `02h` — medições de ambiente VM (sem mudança de código): baseline / Skia CPU / GSK cairo / b+c, 3 repetições.
+4. `02i` — correções de documentação (somente docs): presentation-time, background_effect, WPE, cartões 02c/02d, F1.
+5. `05-compatibilidade-protocolos.md` — RASCUNHO; 7 mensagens do `foot` registradas em §6. NÃO executar sem ok.
+- `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
 - 04b: `tests/integration/s3_input.sh` falha **também no baseline** (`0fc05e7`, worktree isolado): a input region
   é aplicada (`rects=[(24,8,189,36)]`) mas o clique "dentro" dá `under=None`. Não é regressão do painel React;
@@ -196,7 +215,23 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   (não reutilizados) ficam para uma tarefa futura se o cenário aparecer.
 - Gate 04b: aviso não bloqueante em `cargo test` — `unused dependency gdk4-wayland` em `crates/aeroshell-shell/Cargo.toml:26`.
   Não é erro (clippy e gate passam); remover dependência exige conferir uso em builds com feature, fora desta tarefa.
+- 02e (descoberta lateral, pré-existente da tarefa 03): `window_ipc.rs` passou a devolver
+  `W id x y w h <titulo-json>` ordenado por `window_surfaces` (`window_ipc.rs:80-100`), não por ordem z.
+  `frame_window_id.py` e `frame_follows_resize.py` tentavam converter o título em `int` e falhavam; corrigi só o
+  parser para `[:6]`. `frame_follows_resize.py` também media z-order por `list` — trocado pelo log
+  `ordem de render (frente->tras)` de `winit.rs:272-276`. Nenhuma asserção foi enfraquecida; 4 vizinhos OK.
+- 02e (amostra ruim de infraestrutura, registrada e não descartada): `/tmp/glue-comp-58443.log` teve 28
+  `FRAME_BUFFER_COMMIT`, todos `buffer=None`; o harness agora espera o primeiro `FRAME_BUFFER_COMMIT buffer=Some`
+  antes de arrastar. Linhas corrompidas por interleaving de stdout (`buffer=818798xx530530`,
+  `rescaled=xtrue530`) são impressas como `malformadas=N` e nunca usadas como amostra válida.
+- 02e (gate de partida): `bash scripts/check.sh` falhou no clippy com `unused variable: window_id` em `winit.rs:195`
+  porque a variável só era lida sob `cfg(feature="bench")`. Corrigido renomeando para `_window_id`, sem `allow`
+  nem desligar checagem; gate e clippy `--features bench` verdes depois.
 ## 7. Não medido / não validado (não trate como fato)
+- 02e: JUIZ VISUAL PENDENTE. Pré-filtro espacial passou (3×), mas "borda colada, sem correr atrás" só é fechado
+  pelo humano ao arrastar borda direita e canto inferior-direito, lento e rápido, em 2 `foot`. Sem o "ok", a
+  tarefa NÃO está concluída.
+- 02e: nenhuma conclusão de desempenho — medições feitas em VM sem 3D; GPU real não foi medida.
 - 04b: nada pendente — veredito visual POSITIVO do humano e causa do travamento registrados em §3. Instância da
   validação fechada pelo próprio humano; nenhum PID meu ficou órfão.
 - 03: latência do IPC, taxa de perda e reconexão NÃO medidos (S4 do plano mestre, fora do cartão).
@@ -219,15 +254,16 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- O que eu estava fazendo: 04b fechada e REEVALIDADA a pedido do humano ("ok tudo isso está funcionando", com 4
-  `foot` e cliques seguidos nos botões); a instância foi fechada pelo humano.
-- O que funcionou: `python3 tests/integration/react_panel.py` → `OK: painel React listou 2 e 3 janelas; clique no
-  botão da janela de trás elevou só ela; bridge continuou respondendo`; log `/tmp/opencode/aero-04b-fix.log` com
-  4 `foot` e 4 botões; `bash scripts/check.sh` green (EXIT=0, bun 9/9).
-- Comando exato para reproduzir: `python3 tests/integration/react_panel.py` (sobe/encerra os próprios PIDs).
-- Próximo passo imediato (uma ação): perguntar ao humano qual cartão entra na próxima sessão — 05 (compatibilidade
-  Wayland, 7 mensagens do `foot`) ou 02d (diagnóstico do resize). NÃO executar nenhum dos dois sem ok.
-- NÃO executar 02d (resize) nem tentar terceira abordagem sem autorização explícita.
-- Descobertas laterais em §6: IPC sem eventos (patches vêm do `list`), `send_close` assíncrono (teste com polling),
-  arredondamento do foot, timer 1 ms sem ganho, `frame_resize_edges.py` intermitente, flake do S1.
+- O que eu estava fazendo: 02e com código, teste, ADR e gate prontos; instância de validação visual aberta com
+  2 `foot`, aguardando o "ok" do humano (critério 4). Não encerrar o processo — quem fecha é o humano.
+- O que funcionou: `python3 tests/integration/frame_resize_glue.py` → `VEREDITO: OK` em 3 execuções seguidas;
+  4 vizinhos OK; `frame_resize_sync.py` segue FALHO; `bash scripts/check.sh` verde; clippy `--features bench` EXIT=0.
+- Comando exato para reproduzir (instância de validação): `cargo build --workspace --examples` e
+  `LD_PRELOAD=libgtk4-layer-shell.so.0 target/debug/aeroshell-compositor --backend winit --socket wayland-aero-02e \
+  --shell target/debug/examples/frame_webview --shell-env LD_PRELOAD=libgtk4-layer-shell.so.0 --command 'foot & foot'`.
+- Próximo passo imediato (uma ação): receber o "ok" visual do humano, registrar em §3/§7 e fechar 02e com commit.
+  Depois, SOMENTE com nova autorização, abrir cartão 02f.
+- NÃO executar 02d, 02f, 02g, 02h, 02i nem 05 sem autorização explícita.
+- Descobertas laterais em §6: `list` mudou na tarefa 03 (parsers dos vizinhos corrigidos), amostra com
+  `buffer=None`, `window_id` sob `cfg(bench)`, IPC sem eventos, arredondamento do foot, timer 1 ms sem ganho.
  

@@ -160,7 +160,8 @@ else:
     print(log()[-2000:], file=sys.stderr)
     sys.exit(1)
 
-entries = {int(e.split()[1]): tuple(int(v) for v in e.split()[1:]) for e in entries}
+# `list` devolve "W id x y w h <titulo-json>" (window_ipc.rs:3): ignorar o título.
+entries = {int(e.split()[1]): tuple(int(v) for v in e.split()[1:6]) for e in entries}
 print(f"janelas no space: {sorted(entries)}")
 
 if 0 not in entries or 1 not in entries:

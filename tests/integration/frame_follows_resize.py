@@ -4,7 +4,8 @@
 Medição objetiva (não depende de olhar a tela):
   1. duas janelas mapeiam e o frame_host associa um frame por window_id;
   2. clique no conteúdo EXCLUSIVO da janela A (faixa x=60..100, fora de B) eleva A
-     no Space (`raise_element`): A passa a ser o ÚLTIMO elemento do `list`;
+     no Space (`raise_element`): A passa a ser a PRIMEIRA na ordem z (log
+      `ordem de render (frente->tras)`; `list` é ordenada por window_id);
   3. resize pela borda ESQUERDA do frame de A (x=57, fora de B) muda a geometria
      de A e NÃO muda a de B.
 
@@ -103,7 +104,9 @@ def ipc(command):
 
 
 def rows():
-    return [tuple(int(v) for v in line.split()[1:]) for line in ipc("list")]
+    # `list` devolve "W id x y w h <titulo-json>" (window_ipc.rs:3). O título é
+    # string JSON: usar só os 5 campos numéricos, sem enfraquecer a geometria.
+    return [tuple(int(v) for v in line.split()[1:6]) for line in ipc("list")]
 
 
 def by_y(y):
@@ -158,6 +161,29 @@ def focus_surfaces(since=None):
     ]
 
 
+def top_y():
+    """Janela da FRENTE segundo a ordem z real do compositor.
+
+    `list` ordena por window_id desde a tarefa 03 (`window_ipc.rs:86`), não por
+    z-order. A ordem frente->tras é logada em `winit.rs:274` só quando muda;
+    a última ocorrência é, portanto, o estado atual.
+    """
+    # Greedy: o `]` de `wl_surface@3[1]` não pode encerrar a captura.
+    m = hits(r"ordem de render \(frente->tras\) order=\[(.*)\]")
+    if not m:
+        return None
+    order = m[-1].group(1)
+    ia = order.find(surf_a) if surf_a else -1
+    ib = order.find(surf_b) if surf_b else -1
+    if ia < 0 and ib < 0:
+        return None
+    if ia < 0:
+        return Y_B
+    if ib < 0:
+        return Y_A
+    return Y_A if ia < ib else Y_B
+
+
 # 1) duas janelas + um frame por window_id
 for _ in range(int(60 * 10)):
     if len(rows()) >= 2:
@@ -201,12 +227,12 @@ send("motion 200 65")
 send("button press")
 send("button release")
 time.sleep(0.5)
-after_bar = rows()
+top_bar = top_y()
 focus_bar = focus_surfaces(mark_bar)
-print(f"ordem do space depois de clicar na BARRA de A: {after_bar}")
+print(f"frente depois de clicar na BARRA de A: y={top_bar} (janelas={rows()})")
 print(f"foco após clique na barra: {focus_bar} (A={surf_a}, B={surf_b})")
 bar_ok = bool(
-    after_bar and after_bar[-1][2] == Y_A
+    top_bar == Y_A
     and surf_a in focus_bar and surf_b not in focus_bar
 )
 
@@ -216,11 +242,11 @@ send("motion 70 100")
 send("button press")
 send("button release")
 time.sleep(0.5)
-after_click = rows()
+top_click = top_y()
 focus1 = focus_surfaces(mark_click)
-print(f"ordem do space depois de clicar em A: {after_click}")
+print(f"frente depois de clicar em A: y={top_click} (janelas={rows()})")
 print(f"foco após 1º clique em A: {focus1} (A={surf_a}, B={surf_b})")
-if not after_click or after_click[-1][2] != Y_A:
+if top_click != Y_A:
     print("FALHA: clique no conteúdo de A não elevou A ao topo do space", file=sys.stderr)
     sys.exit(1)
 
@@ -241,14 +267,14 @@ send("motion 780 560")
 send("button press")
 send("button release")
 time.sleep(0.5)
-top_before = rows()[-1][2]
+top_before = top_y()
 bar_over_surface = surface_at(200, 100)
 mark_over = len(log())
 send("motion 200 100")
 send("button press")
 send("button release")
 time.sleep(0.5)
-top_after = rows()[-1][2]
+top_after = top_y()
 focus_over = focus_surfaces(mark_over)
 print(f"barra de B sobre conteúdo de A: superfície em (200,100)={bar_over_surface}")
 print(f"frente antes y={top_before}, depois y={top_after}; foco={focus_over} (A={surf_a}, B={surf_b})")
