@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-19 · commit: `feb21a0` (na entrada desta sessão; ver `git log --oneline -3`) · modo: SPIKE
+Última atualização: 2026-11-19 · commit: `8f3e985` (na entrada desta sessão; ver `git log --oneline -3`) · modo: SPIKE
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -27,13 +27,16 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
 - [x] `docs/progress.md` despromovido a histórico — `AGENTS.md:3,154,262,272`, `plan.md`, `README.md`, `justfile`
       e ponteiros em `docs/plano-mestre.md` (plano ATIVO, preservado); prova: `grep -rn "progress" AGENTS.md plan.md README.md justfile`
 - [x] `AGENTS_SESSAO_ADENDO.md` removido a pedido do usuário (protocolo de sessão já vive no próprio `AGENTS.md`).
+- [x] Tarefa 00 — gate confiável: 3× `bash scripts/check.sh` verdes seguidas (bun 4,39/4,41/4,42 s). Falha induzida
+      no S1 (`XDG_RUNTIME_DIR` inexistente) passou a mostrar `Error: PermissionDenied` + log do compositor;
+      `finally` e trap TERM/INT encerram só o PID iniciado (provado: filho 13317 morreu ao matar o pai 13302);
+      `grep -rn "pkill -x" tests/` vazio. Causa do flake antigo NÃO identificada (não reproduziu).
 ## 4. Em andamento
 - [ ] **QUEBRADO** — frame por janela com `window_id` próprio. Código na branch `wip/window-id` (`f448dab`):
       só 1 janela decorada, mover às vezes move a outra, resize não acompanha. O teste `frame_window_id.py` existe
       nessa branch e NÃO foi rodado com sucesso. `master` (`bf44f22` + docs) é o estado bom: 1 janela decorada,
       resize acompanha com atraso/fundo branco no gap. Cartão: `docs/tasks/02b-window-id.md`.
 ## 5. Próximas tarefas (ordem; cada uma tem um cartão em docs/tasks/)
-0. `00-gate-confiavel.md` — `check.sh` verde 3× seguidas; S1 mata o PID que iniciou e imprime stderr.
 1. `02b-window-id.md` — 2 janelas decoradas, frame segue o resize; teste novo escrito primeiro.
 2. `03-runtime-bun-sdk.md` — `aero.windows.list/focus/close`, snapshot + patches; tipos TS gerados de `aeroshell-ipc`.
 3. Passo 4 — Painel React (`useWindows()`), clique foca a janela certa; testar com 2 e 3 janelas (cartão a criar).
@@ -52,8 +55,9 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
 - `AGENTS.md` tem dois protocolos sobrepostos: novo `§0.1–0.9` (linhas 7–106) e antigo "Início/Foco/Fim" (linhas ~108–131).
   Conflito: linha 16 manda corrigir o gate se falhar; antiga linha ~94 manda parar. Há também um título órfão no fim.
   As referências a `progress.md` como fonte única JÁ foram corrigidas (tarefa 05); estes itens seguem pendentes.
-- Flake do S1: `bun test` falhou uma vez com exit 1 em ~16 s sob carga; isolado passou em 7,67 s. Registrado, NÃO
-  descartado. Correção na tarefa 00. Reexecutar até passar é proibido pelo `AGENTS.md §0.5`.
+- Flake do S1: falhou 1× no passado (exit 1, ~16 s sob carga; isolado 7,67 s). Na tarefa 00 NÃO reproduziu:
+  3 gates seguidos verdes, nenhuma amostra descartada (tempos em §3). Diagnóstico melhorado (stderr + PID),
+  causa ainda DESCONHECIDA — não declarar "corrigido". Reexecutar até passar continua proibido (§0.5).
 - Erro meu corrigido nesta sessão: eu havia rebaixado `docs/plano-mestre.md` a histórico. O usuário corrigiu: é o
   plano ATIVO e um dos documentos mais importantes (visão, fases, onde queremos chegar). Banner removido, texto
   original restaurado; só os ponteiros de atualização de `progress.md` viraram `STATE.md`. Não repetir.
@@ -68,9 +72,9 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- O que eu estava fazendo: tarefa 05 — `docs/progress.md` rebaixado a arquivo histórico em todos os documentos ativos.
-- O que funcionou: ponteiros em `AGENTS.md`, `plan.md`, `README.md`, `justfile` e `plano-mestre.md` apontam para `STATE.md`; o plano mestre permanece ativo.
-- Comando exato para reproduzir o estado atual: `grep -rn "progress\\|fonte única" AGENTS.md plan.md README.md justfile docs/STATE.md docs/plano-mestre.md | head -30 && bash scripts/check.sh`
-- Próximo passo imediato (uma ação): abrir `docs/tasks/00-gate-confiavel.md` — S1 imprime stderr, mata o PID que iniciou, prova com falha induzida e 3 gates verdes seguidos.
-- Descobertas laterais registradas na seção 6 (não corrigidas): protocolos duplicados no `AGENTS.md`, título órfão, flake do S1.
+- O que eu estava fazendo: tarefa 00 — gate confiável; 3 gates verdes, diagnóstico do S1 e PIDs próprios.
+- O que funcionou: falha induzida no S1 mostra stderr real; trap TERM/INT mata o filho pelo PID; nenhum `pkill -x` em `tests/`.
+- Comando exato para reproduzir o estado atual: `git status --short && bash scripts/check.sh && (grep -rn "pkill -x" tests/ || echo NENHUM)`
+- Próximo passo imediato (uma ação): abrir `docs/tasks/02b-window-id.md` — escrever `frame_follows_resize.py` PRIMEIRO e ver falhando na `wip/window-id`.
+- Descobertas laterais registradas na seção 6 (não corrigidas): protocolos duplicados no `AGENTS.md`, título órfão, causa do flake do S1 desconhecida.
  

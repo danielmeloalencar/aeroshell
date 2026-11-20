@@ -12,6 +12,7 @@ Que cada press registre detecção em TODAS as 8 posições também prova que o 
 anterior foi encerrado na release: se a release não encerrasse o grab, os eventos
 seguintes iriam ao grab ativo e só o primeiro press por rodada registraria.
 """
+import atexit
 import os
 import re
 import socket
@@ -27,9 +28,8 @@ SOCK = f"wayland-aero-edges-{os.getpid()}"
 LOG = f"/tmp/edges-comp-{os.getpid()}.log"
 INPUT_SOCK = f"/tmp/edges-input-{os.getpid()}.sock"
 
-# Instância anterior do frame_webview (mesmo application_id GTK) faria a nova sair
-# na hora: encerra as antigas antes de subir.
-subprocess.run(["pkill", "-x", "frame_webview"])
+# Nunca matar por nome: isto pode encerrar a aplicação do usuário. Cada execução
+# tem socket e PID próprios; o cleanup abaixo encerra só o compositor iniciado aqui.
 for orphan in (f"/run/user/1000/{SOCK}", INPUT_SOCK):
     if os.path.exists(orphan):
         os.unlink(orphan)
@@ -48,6 +48,17 @@ comp = subprocess.Popen(
     env=env,
     stdout=open(LOG, "w"), stderr=subprocess.STDOUT,
 )
+
+def cleanup():
+    """Encerra apenas o PID que este harness iniciou, mesmo em sys.exit antecipado."""
+    if comp.poll() is None:
+        comp.terminate()
+        try:
+            comp.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            comp.kill()
+
+atexit.register(cleanup)
 
 def log():
     return re.sub(r"\x1b\[[0-9;]*m", "", open(LOG, errors="ignore").read())
@@ -148,8 +159,7 @@ grew = int(after[0]) > int(before[0]) and int(after[1]) > int(before[1])
 print("resize aplicado:", "OK" if grew else "FALHA")
 
 s.close()
-comp.terminate()
-comp.wait(timeout=5)
+cleanup()
 
 verdict = ok and grew
 print(f"\nVEREDITO: {'OK' if verdict else 'FALHA'}")

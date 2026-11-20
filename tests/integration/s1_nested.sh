@@ -11,7 +11,12 @@ bin="target/debug/aeroshell-compositor"
 
 "$bin" --backend headless --socket "$socket" >/tmp/aeroshell-s1.log 2>&1 &
 pid=$!
-trap 'kill "$pid" 2>/dev/null || true' EXIT
+# EXIT cobre a saída normal; TERM/INT cobre o kill vindo do teste que iniciou
+# este script. Sem eles, o finally do teste mataria o bash e deixaria o
+# compositor filho órfão (critério 2 da tarefa 00).
+cleanup() { kill "$pid" 2>/dev/null || true; }
+trap cleanup EXIT
+trap 'cleanup; exit 143' TERM INT
 
 for _ in $(seq 1 50); do
   [ -S "${XDG_RUNTIME_DIR:-/tmp}/$socket" ] && break
@@ -42,7 +47,9 @@ if command -v zenity >/dev/null 2>&1; then
   RUST_LOG=info "$bin" --backend winit --socket "$nested_socket" \
     --command "zenity --info --text=AeroShell-S1" >"$nested_log" 2>&1 &
   pid=$!
-  trap 'kill "$pid" 2>/dev/null || true' EXIT
+  cleanup() { kill "$pid" 2>/dev/null || true; }
+  trap cleanup EXIT
+  trap 'cleanup; exit 143' TERM INT
   sleep 4
   kill "$pid" 2>/dev/null || true
   wait "$pid" 2>/dev/null || true

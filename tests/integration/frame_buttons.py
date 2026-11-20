@@ -13,6 +13,7 @@ são medidas e registradas separadamente:
       prova isso, porque ela é emitida pelo handler de mensagem da WebView, não pelo
       handler de ponteiro do frame_host (que imprime `FRAMEWEB: button local=`).
 """
+import atexit
 import os
 import re
 import socket
@@ -33,7 +34,8 @@ INSETS = (6, 30, 6, 6)
 CONTENT_ORIGIN = (60, 80)
 FRAME_ORIGIN = (CONTENT_ORIGIN[0] - INSETS[0], CONTENT_ORIGIN[1] - INSETS[1])
 
-subprocess.run(["pkill", "-x", "frame_webview"])
+# Nunca matar por nome: isto pode encerrar a aplicação do usuário. Cada execução
+# tem socket e PID próprios; o cleanup abaixo encerra só o compositor iniciado aqui.
 for orphan in (f"/run/user/1000/{SOCK}", INPUT_SOCK, IPC_SOCK):
     if os.path.exists(orphan):
         os.unlink(orphan)
@@ -50,6 +52,17 @@ comp = subprocess.Popen(
      "--shell-env", "LD_PRELOAD=libgtk4-layer-shell.so.0"],
     env=env, stdout=open(LOG, "w"), stderr=subprocess.STDOUT,
 )
+
+def cleanup():
+    """Encerra apenas o PID que este harness iniciou, mesmo em sys.exit antecipado."""
+    if comp.poll() is None:
+        comp.terminate()
+        try:
+            comp.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            comp.kill()
+
+atexit.register(cleanup)
 
 def log():
     return re.sub(r"\x1b\[[0-9;]*m", "", open(LOG, errors="ignore").read())
@@ -152,8 +165,7 @@ ipc.close()
 print(f"list via IPC depois do close: {lines}")
 
 sock.close()
-comp.terminate()
-comp.wait(timeout=5)
+cleanup()
 
 verdict = bool(
     on_frame and cmd == "maximize" and maxed[0] > start[0] and maxed[1] > start[1]
