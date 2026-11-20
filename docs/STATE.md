@@ -209,8 +209,11 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. `02l` — decisão técnica pronta (§3). Próximo e único passo pendente: validação visual com 2 `foot`,
-   aplicação deixada aberta e "ok" explícito do humano (§7). NÃO iniciar outra tarefa antes disso.
+0. `02m` — cartão NOVO a abrir para o flash do buffer 200×200 (§6/§7). Decisão pendente do humano:
+   (a) abrir cartão novo [recomendado], (b) autorizar correção dentro da 02l, (c) aceitar como dívida.
+   Antes de qualquer edição, definir a correção: impedir que o frame seja composto com o buffer mínimo
+   200×200 (esperar o 1º buffer real) ou fazer o shell criar a WebView já no tamanho do configure.
+   `02l` segue NÃO CONCLUÍDA no visual (juiz negou em parte); NÃO executar 02m sem aprovação.
 1. `02j` — CONCLUÍDA; os 3 modos nomeados (`FRAME_NEVER_ACKED`, `FRAME_NEVER_DREW_AT_SIZE`,
    `FRAME_STRETCH_ACTIVE`) estão no log bench. Próximo passo natural (NÃO executado): correlacionar esses modos
    com um novo arrasto REAL e só então decidir a causa da queixa visual de 02e/02f.
@@ -413,7 +416,25 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   citada pelo humano. Registrado aqui como contexto; **ADR 0006 (aditivo/proposto) NÃO foi editado** — incluir
   prior art em ADR exige aprovação explícita (AGENTS.md §0.8 / §6).
 ## 7. Não medido / não validado (não trate como fato)
-- 02l (JUIZ VISUAL — RELATO FAVORÁVEL, confirmação formal pendente): humano (2026-11-20):
+- 02l (JUIZ VISUAL NEGATIVO PARCIAL — 2026-11-20, teste feito na instância 100840/101188): humano:
+  **"teste visual feito. Está quase perfeito o ponto do achatamento resolveu. Mas ao clicar nas bordas (na
+  barra de titulo NAO), vejo que pisca, a barra de titulo inteira encolhe horizontalmente incluindo seu
+  conteudo, achatando ele e depois volta ao normal, a decoracao inteira parece encolher para uma janela
+  menor. TUdo isso muito rapido, me milesimos de segundos."** Dado: o achatamento DURANTE o arrasto foi
+  aprovado; resta um flash de milissegundos no `button press` das bordas (não no move pela barra).
+  **REPRODUZIDO com medição objetiva** em `/tmp/opencode/aero-02l-visual.log` (log do teste do humano):
+  7 frames consecutivos de `window_id=1` com `buf=200x200 target=708x530 rescaled=true
+  slice_scale_x=3.7021 slice_scale_y=3.0122` (t=1795160630897993417 … 1795160630949615576, ~5,2 ms),
+  imediatamente antes de `buf=708x530 rescaled=false`. É o buffer mínimo inicial do WebKit (200×200)
+  sendo escalado 3,7× para a moldura inteira no instante em que a janela é associada/clicada — causa
+  DIFERENTE do achatamento corrigido pela 02l (que era escala no arrasto). Sinal de apoio:
+  `FRAME_BUFFER_COMMIT buffer=None expected=Some((630,504)) ok=false`. Hipótese anterior (geometria alvo
+  mudar antes do repaint grande) foi **REFUTADA**: diagnóstico com press sem motion
+  (`/tmp/opencode/02l_flash_probe1.log`) mostrou `target=708x530` estável, transição de buffer em +79,8 ms
+  com `SLICE_GEOM` correto (126/480/102) e nenhum frame anômalo; o defeito só apareceu com a 2ª janela.
+  Critério 5 do cartão 02l **NÃO passou**; tarefa NÃO concluída. NÃO corrigir sem decisão: é causa nova,
+  fora do cartão aprovado (AGENTS.md §0.4/§0.8). Instância 2 encerrou graciosamente após o teste.
+- 02l (JUIZ VISUAL — RELATO FAVORÁVEL ANTERIOR, agora superado): humano (2026-11-20):
   **"vi na execução dos seus testes que o problema foi resolvido."** Veredito positivo registrado como dado.
   Como o relato veio da execução dos harnesses (que abrem janela winit + `foot`), e não de uma sessão manual
   formal com 2 `foot`, abri instância do RUNBOOK (compositor 100840, 2 `foot`: 100924/100972) e pedi arrasto
@@ -488,8 +509,10 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- O que eu estava fazendo: 02l — código/teste/gate/clippy prontos (§3) e juiz relatou "problema resolvido" ao
-  ver os testes. Falta SÓ a confirmação visual formal (§7): vou abrir a instância do RUNBOOK com 2 `foot`.
+- O que eu estava fazendo: 02l técnica pronta (§3), mas o juiz visual NEGOU EM PARTE: achatamento do arrasto
+  resolvido; resta flash de ~5 ms no clique nas bordas (2ª janela, buffer 200×200 escalado 3,7× — §6/§7).
+  Reproduzi com medição crua e PAREI antes de corrigir: causa nova, fora do cartão 02l. Instância fechada
+  pelo humano; não reabrir sem decisão. Gate/clippy seguem verdes (nenhuma mudança de código desde o gate).
 - Gate final (após a última mudança de código): `bash scripts/check.sh` → `CHECK_EXIT=0`,
   `OK: scripts/check.sh passou`, bun 9 pass / 0 fail (`/tmp/opencode/02l_check_final3.log`);
   `cargo clippy --workspace --all-targets --features bench -- -D warnings` → EXIT=0 (`02l_clippy_final3.log`);
@@ -501,11 +524,13 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
   `wayland-aero-02l`, log `/tmp/opencode/aero-02l-visual.log`, 2 frames associados. Encerrou graciosamente
   (`FRAME_SUMMARY samples=2`) sem ação do agente; provavelmente o humano fechou ao testar. NÃO tentar encerrar
   PIDs antigos.
-- Instância visual 2 (REABERTA para o "ok" formal): compositor 101188, shell 101196, `foot` 101271/101295,
-  socket `wayland-aero-02l-ok`, log `/tmp/opencode/aero-02l-ok.log`, 2 frames associados (`window_id=0` e `1`).
-  Deixada ABERTA; quem fecha é o humano. Se encerrar de novo, NÃO reabrir uma terceira — registrar e pedir decisão.
-- Próximo passo imediato (NÃO executar): humano olhar a janela aberta, arrastar bordas e barra (lento e rápido),
-  confirmar que texto/botões não achatam e bordas não piscam, e dar o "ok" explícito. Só então fechar a 02l.
+- Instância visual 2 (para o "ok" formal): compositor 101188, shell 101196, `foot` 101271/101295, socket
+  `wayland-aero-02l-ok`, log `/tmp/opencode/aero-02l-ok.log`, 2 frames associados. O humano fez o teste e
+  relatou o flash; a instância encerrou graciosamente depois (sem ação do agente). NÃO reabrir uma terceira
+  sem decisão — registrar e pedir.
+- Próximo passo imediato (NÃO executar): humano decidir sobre o flash (cartão novo 02m [recomendado], corrigir
+  na 02l ou aceitar dívida). Depois: teste primeiro visto falhando para o buffer 200×200, correção mínima,
+  gate e novo juiz visual. 02l NÃO é concluída sem o "ok" do juiz.
 - NÃO mudar `target = content + extras`, move, conteúdo, ADR 0006 ou o debounce fora do grab; NÃO editar
   protocolo sem aprovação; NÃO encerrar PIDs de instância; sem push.
 - Contexto preservado em §6: cprussin é contribuidor (criador: Victor Berger/elinorbgr); prior art é contexto,
