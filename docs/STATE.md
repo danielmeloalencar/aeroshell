@@ -26,6 +26,7 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
       `§0.7` e checklist `§9`; prova: `git diff -- AGENTS.md`
 - [x] `docs/progress.md` despromovido a histórico — `AGENTS.md:3,154,262,272`, `plan.md`, `README.md`, `justfile`
       e aviso no topo de `docs/plano-mestre.md`; prova: `grep -rn "progress" AGENTS.md plan.md README.md justfile`
+- [x] `AGENTS_SESSAO_ADENDO.md` removido a pedido do usuário (protocolo de sessão já vive no próprio `AGENTS.md`).
 ## 4. Em andamento
 - [ ] **QUEBRADO** — frame por janela com `window_id` próprio. Código na branch `wip/window-id` (`f448dab`):
       só 1 janela decorada, mover às vezes move a outra, resize não acompanha. O teste `frame_window_id.py` existe
