@@ -59,7 +59,9 @@ Ao final: atualizar `docs/STATE.md` (§3, §4, §5, §9) e comitar localmente (s
 - Critério 1: NÃO PASSA. `python3 tests/integration/frame_resize_sync.py` → `VEREDITO: FALHA`, com
   `lag p95=127,19 ms` (≤ 300 ms, OK) mas `13/14` commits de conteúdo com a decoração pendente no próximo motion
   (exigido: 0). Teste escrito antes da correção e visto falhando: baseline `p95=177,22 ms / 13-14 pendentes`.
-- Critério 2 (visual): NÃO EXECUTADO. Sem o critério 1 verde, não abri a instância para pedir o "ok" do humano.
+- Critério 2 (visual): EXECUTADO A PEDIDO DO HUMANO, RESULTADO NEGATIVO. Ele arrastou a borda em ritmo lento e rápido
+  na instância com 2 `foot` e disse: **"ainda está do mesmo jeito"**. Instância fechada pelo próprio humano.
+  O sintoma persiste apesar do ganho medido de 28% no lag; continuação no cartão `02d-frame-resize-diagnostico.md`.
 - Critério 3: PASSA. `bash scripts/check.sh` → `OK: scripts/check.sh passou` (EXIT=0). Clippy extra com
   `--features bench` também verde. Vizinhos: `frame_window_id`, `frame_buttons`, `frame_resize_edges`,
   `frame_follows_resize` → 4× `VEREDITO: OK`.

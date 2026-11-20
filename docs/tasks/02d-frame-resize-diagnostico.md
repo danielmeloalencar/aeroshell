@@ -21,6 +21,9 @@ no arrasto real — sem mudar a arquitetura nesta tarefa.
 - Com a decoração em WebView, o commit do frame leva ~60–100 ms após o configure. O Plano B (9-slice no
   compositor / buffer sobredimensionado + src-rect) tiraria o WebKit do caminho crítico, mas exige ADR NOVO e
   mudança de arquitetura — fora de escopo aqui (ADR 0001, `AGENTS.md §5`).
+- `docs/STATE.md` §3 registra o veredito visual do humano (2026-11-20), com a correção parcial já aplicada: ele
+  arrastou a borda em ritmo lento e rápido e disse **"ainda está do mesmo jeito"**. Ou seja, o ganho medido de 28%
+  no lag não foi percebido na tela; o sintoma persiste. Ele pediu manter para outra tarefa e seguir em frente.
 - `docs/STATE.md` §4 e §6 registram a decisão do humano (2026-11-20): "Manter parcial, cartão novo".
 
 ## Critério de aceite (comandos exatos + resultado esperado)

@@ -62,6 +62,10 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
       (`grab.rs:245`), em vez de só no commit do cliente. Prova com a MESMA métrica, reprocessando os logs crus:
       baseline `lag p95=177,22 ms / 13-14 pendentes`; após a correção `127,19 ms / 13-14` (−28% no lag, −1 commit).
       Critério 1 do cartão NÃO passa (falta `0` pendentes); gate `bash scripts/check.sh` verde.
+- [~] 02c (VEREDITO VISUAL DO HUMANO, 2026-11-20): com a correção parcial já aplicada, arrastou a borda em ritmos
+      lento e rápido e disse: **"ainda está do mesmo jeito"**. Ou seja, o ganho de 28% no lag não foi percebido na
+      tela; o sintoma "decoração correndo atrás" PERSISTE. Humano pediu manter para outra tarefa e seguir em frente —
+      continuação no cartão `02d-frame-resize-diagnostico.md`. Instância fechada pelo próprio humano.
 ## 4. Em andamento
 - 02c BLOQUEADA: duas abordagens tentadas e insuficientes no critério de pendência — (1) configure no motion e
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
@@ -132,9 +136,9 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
 - Latência de resize com WebKit real; latência de ponteiro; qualquer desempenho em GPU real (tudo foi em VM sem 3D).
 - Número de processos/PSS com `related-view` foi medido só em VM; ADR 0001 está "aceito provisoriamente".
 - Estabilidade do `ext-background-effect` (blur): não implementado; Smithay 0.7 não tem handler.
-- 02c: validação visual EM CURSO (2026-11-20): a pedido do humano, nested aberto com 2 `foot` (PID `34757`,
-  socket `wayland-aero-vis5-34753`, log `/tmp/opencode/aero-vis5.log`) para ele julgar o atraso no arrasto a olho nu.
-  Aguardando o relato; NÃO escrever "validado" sem o "ok" do humano. Quem fecha a instância é o humano.
+- 02c: validação visual REALIZADA COM RESULTADO NEGATIVO (2026-11-20): humano arrastou a borda (lento e rápido) na
+  instância com 2 `foot` e disse "ainda está do mesmo jeito". NÃO é "validado"; item segue em aberto em 02d.
+  Instância fechada pelo próprio humano; log `/tmp/opencode/aero-vis5.log`.
 - 02c: desempenho em GPU real (VM sem 3D); 3 execuções seguidas com a LOW final (a métrica foi reprocessada de 3
   execuções históricas, uma por variante — não são 3 repetições da mesma variante).
 - Nenhuma validação visual pendente de 02b: validada pelo humano em 2026-11-20 (registro em §3). Demais itens visuais
@@ -153,8 +157,9 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
   instrumentação bench + `frame_resize_sync.py` medem o sintoma; 4 testes vizinhos OK; gate verde.
 - Comando exato: `python3 tests/integration/frame_resize_sync.py` → `VEREDITO: FALHA` (`13/14` pendentes, p95 127 ms).
 - Decisão do humano (2026-11-20): "Manter parcial, cartão novo" → cartão rascunho `02d-frame-resize-diagnostico.md`.
-- Próximo passo imediato (uma ação): aguardar o relato visual do humano na instância aberta (PID `34757`) e registrar
-  o veredito; NÃO executar 02d nem tentar terceira abordagem sem autorização.
+- Veredito visual do humano: "ainda está do mesmo jeito" → 02c segue parcial/aberta; continuação em 02d (rascunho).
+- Próximo passo imediato (uma ação): dar o "ok" para iniciar `03-runtime-bun-sdk.md`; NÃO executar 02d nem tentar
+  terceira abordagem de resize sem autorização.
 - Descobertas laterais em §6: arredondamento do foot (métrica corrigida), timer 1 ms sem ganho (revertido),
   `frame_resize_edges.py` intermitente, flake do S1, reatribuição de `window_id`.
  
