@@ -209,10 +209,10 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. `02m` — cartão NOVO a abrir para o flash do buffer 200×200 (§6/§7). Decisão pendente do humano:
-   (a) abrir cartão novo [recomendado], (b) autorizar correção dentro da 02l, (c) aceitar como dívida.
-   Antes de qualquer edição, definir a correção: impedir que o frame seja composto com o buffer mínimo
-   200×200 (esperar o 1º buffer real) ou fazer o shell criar a WebView já no tamanho do configure.
+0. `02m` — DECISÃO DO HUMANO (2026-11-20): abrir cartão novo para o flash do buffer 200×200, mantendo a
+   02l intacta. Rascunho criado em `docs/tasks/02m-flash-buffer-inicial.md`, **aguarda confirmação para
+   executar** (AGENTS.md §0.2). A decisão 0 do rascunho (corrigir no shell vs. no compositor) é bloqueante;
+   a opção recomendada exige spike de ≤20 min na API GTK4/WebKitGTK fixada, sem inventar chamada.
    `02l` segue NÃO CONCLUÍDA no visual (juiz negou em parte); NÃO executar 02m sem aprovação.
 1. `02j` — CONCLUÍDA; os 3 modos nomeados (`FRAME_NEVER_ACKED`, `FRAME_NEVER_DREW_AT_SIZE`,
    `FRAME_STRETCH_ACTIVE`) estão no log bench. Próximo passo natural (NÃO executado): correlacionar esses modos
@@ -528,9 +528,11 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
   `wayland-aero-02l-ok`, log `/tmp/opencode/aero-02l-ok.log`, 2 frames associados. O humano fez o teste e
   relatou o flash; a instância encerrou graciosamente depois (sem ação do agente). NÃO reabrir uma terceira
   sem decisão — registrar e pedir.
-- Próximo passo imediato (NÃO executar): humano decidir sobre o flash (cartão novo 02m [recomendado], corrigir
-  na 02l ou aceitar dívida). Depois: teste primeiro visto falhando para o buffer 200×200, correção mínima,
-  gate e novo juiz visual. 02l NÃO é concluída sem o "ok" do juiz.
+- DECISÃO DO HUMANO (2026-11-20): abrir cartão novo 02m. Rascunho
+  `docs/tasks/02m-flash-buffer-inicial.md` escrito e comitado; NÃO executar sem confirmação (AGENTS.md §0.2).
+- Próximo passo imediato (NÃO executar): humano confirmar o rascunho 02m e responder a decisão 0 (corrigir no
+  shell, com spike de API, ou no compositor). Só depois: teste primeiro visto falhando com 2 janelas, correção
+  mínima, gate e novo juiz visual. 02l NÃO é concluída sem o "ok" do juiz.
 - NÃO mudar `target = content + extras`, move, conteúdo, ADR 0006 ou o debounce fora do grab; NÃO editar
   protocolo sem aprovação; NÃO encerrar PIDs de instância; sem push.
 - Contexto preservado em §6: cprussin é contribuidor (criador: Victor Berger/elinorbgr); prior art é contexto,
