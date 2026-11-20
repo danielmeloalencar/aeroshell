@@ -230,11 +230,45 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   desta correção (zero configures no press/drag) PASSOU no juiz. Porém o humano relatou um sintoma NOVO no
   release, registrado em §7/§9; por isso 02m/02l ainda NÃO fecham. Gate/clippy verdes após o commit final
   (`02m_v2_check_aftercommit.log`, `02m_v2_clippy_aftercommit.log`), commit `4208226`.
+- [x] 02n AUTORIZADA (2026-11-20) — 4ª correção, NÃO é nova família: completa a 3ª (press/arrasto já aprovados
+  no juiz) atacando a mesma causa-raiz (apresentar buffer mid-resize). Humano reenviou spec (mensagem anterior
+  com Hipótese A/B foi descartada). Cartão `docs/tasks/02n-swap-atomico-release.md`. Evidência:
+  `/tmp/gh-comp-110069.log` — após `source=final`, buffer 708x530 (9-slice correto) por ~80 ms, swap para
+  768x582 com flicker (layout/slices inconsistentes por 1+ frame). Correção: continuar 9-slice no release,
+  aposentar só quando `buffer_size==total_final` E a referência/versão das slices casar com o buffer, swap
+  atômico, adiar `source=final` para idle (~150-250 ms). Sem protocolo/shell/deps/ADR.
+  LEITURA DE CÓDIGO (Passo 0, antes de editar): `resize_grab_active` é lido SÓ no commit-hook
+  (`compositor.rs:215`), não controla o 9-slice; o 9-slice é decidido por `rescaled = buffer != target`
+  (`winit.rs:248-251,359-452`). `titlebar_slices` é declarada UMA vez no associate
+  (`frame_webview.rs:368` → `aero_frame.rs:434-444`); NÃO existe versão de slices no código (confirmado por
+  grep: só `acked`/serial do configure em `aero_frame.rs:505-528`). A "referência/versão" da spec será
+  implementada como estado interno do compositor (geração de congelamento), sem tocar no protocolo.
+- [x] 02n IMPLEMENTADA E PROVADA (mecânica), juiz visual PENDENTE (§7). Correção só no compositor, 5 arquivos:
+  `state.rs` (`ReleaseSwap`, constantes 200/50/400 ms, `slice_generation`, `tick_release_swap`),
+  `grab.rs` (`unset` cria o release pendente em vez de enviar `source=final`; novo grab cancela),
+  `winit.rs` (render força 9-slice até `buffer==target` + geração casa + idle enviou final + 50 ms de
+  assentamento; aposenta num único render), `aero_frame.rs` (incrementa geração em `SetTitlebarSlices`,
+  limpa estado no `Destroy`), `main.rs` (chama `tick_release_swap` no idle).
+  PROVA: baseline cru `/tmp/opencode/02n_release_baseline2.log` →
+  `frames_buffer_inconsistente=1 swaps_atomicos=0 VEREDITO: FALHA` (buf 708x530 rescaled=true →
+  768x582 rescaled=false no mesmo frame, ~60-80 ms após o final). Depois: 3× seguidas OK em
+  `/tmp/opencode/02n_release_clean{1,2,3}.log` → `frames_buffer_inconsistente=0 swaps_atomicos=1`.
+  Evidência do ciclo em `/tmp/rsw-comp-*.log` da execução 1:
+  `RELEASE_SWAP_BEGIN` → `RELEASE_SWAP_FINAL delay_ms=205.0` → `RELEASE_SWAP_MATCH buf=768x582 gen=1` →
+  `RELEASE_SWAP_ATOMIC waited_ms=57.1`. Teste: `python3 tests/integration/frame_release_swap_hygiene.py`.
+  Vizinhos: `frame_grab_configure_hygiene`, `frame_buttons`, `frame_window_id`, `frame_resize_glue`,
+  `frame_initial_buffer`, `frame_follows_resize` OK; `frame_configure_hygiene` exigiu atualização da janela
+  de classificação do `source=final` (era +100 ms, era da 02m; agora +400 ms, ver §6) → OK com
+  `finals=1 ultimo_cliente=(834,494)`; `frame_resize_sync` FALHA esperada (métrica antiga de p95).
+  Gate: `bash scripts/check.sh` → CHECK=0, bun 9 pass/0 fail (`/tmp/opencode/02n_check_final3.log`);
+  `cargo clippy --workspace --all-targets --features bench -- -D warnings` → EXIT=0
+  (`/tmp/opencode/02n_clippy_final.log`).
 ## 4. Em andamento
+- 02n: técnica/gate/clippy prontos e provados 3× (§3). Falta SOMENTE o juiz visual do release (arrastar E soltar,
+  2 `foot`, aplicação deixada aberta). Nenhuma instância aberta neste momento. NÃO encerrar PIDs iniciados para o juiz.
+  Se o humano ainda vir flicker, NÃO abrir 5ª correção sem nova decisão (cartão 02n).
 - 02m (3ª abordagem): juiz CONFIRMOU que clique/arrasto está resolvido (§3). Sintoma NOVO no release com arrasto
-  (flicker) registrado em §7 — causa é o `source=final` no unset, que a PRÓPRIA especificação do humano mandou
-  manter. NÃO alterar `source=final` sem decisão. Regra das duas tentativas: 3 abordagens já usadas (2 shell
-  falharam no juiz; esta técnica passou no press/drag). PARAR e pedir decisão antes de qualquer 4ª mudança.
+  (flicker) é o alvo da 02n (autorizada). Press/arrasto NÃO foi alterado pela 02n.
 - 02l EM EXECUÇÃO: código/teste/gate/clippy prontos (§3); falta a validação visual com juiz humano (§7).
   Humano (2026-11-20): **"vi na execução dos seus testes que o problema foi resolvido."** Registrado como dado
   favorável, mas veio da execução dos harnesses, não de uma sessão visual formal com 2 `foot`; por §0.9 ainda
@@ -255,9 +289,12 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. `02m` — técnica pronta (§3), falta juiz visual (§7): abrir instância do RUNBOOK com 2 `foot`, deixar aberta;
-   humano clica/arrasta bordas da 1ª e 2ª janela (press sem transiente, arrasto lento/rápido) e dá o "ok".
-   Só então fechar 02m e 02l. Não reabrir sem decisão se o humano fechar.
+0. `02n` — técnica pronta (§3), falta juiz visual (§7): abrir instância do RUNBOOK com 2 `foot`, deixar aberta;
+   humano clica, segura, ARRASTA e SOLTA bordas da 1ª e 2ª janela e dá o "ok" explícito. Verificar que não
+   há flicker no soltar e que press/arrasto (02m, já aprovado) não regrediu. Só então fechar 02n/02m/02l.
+   Se ainda houver flicker no soltar: PARAR e pedir decisão (NÃO abrir 5ª correção).
+   Comando exato para abrir: ver RUNBOOK + `frame_release_swap_hygiene.py` (socket/input sintético é só teste;
+   o juiz usa a execução manual com 2 `foot`).
 1. `02j` — CONCLUÍDA; os 3 modos nomeados (`FRAME_NEVER_ACKED`, `FRAME_NEVER_DREW_AT_SIZE`,
    `FRAME_STRETCH_ACTIVE`) estão no log bench. Próximo passo natural (NÃO executado): correlacionar esses modos
    com um novo arrasto REAL e só então decidir a causa da queixa visual de 02e/02f.
@@ -268,6 +305,14 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
 6. `05-compatibilidade-protocolos.md` — RASCUNHO; 7 mensagens do `foot` registradas em §6. NÃO executar sem ok.
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- 02n (MUDANÇA DE TESTE VIZINHO, transparente): `frame_configure_hygiene.py` classificava `source=final` só até
+  +100 ms do release — janela do comportamento 02m. A 02n adia o final para o idle (medido 205-209 ms), então o
+  teste reportou `final configs=0` com 1 final real no log cru. Ajustei SÓ a janela de classificação para
+  `FINAL_DELAY_MAX_MS = 400`, mantendo a exigência de exatamente 1 final com o tamanho real; não foi verificação
+  desligada nem medição descartada. Reexecutado OK (`finals=1 ultimo_cliente=(834,494)`).
+- 02n (RESSALVA DA SPEC, a confirmar no juiz): "os dois estados são visualmente idênticos em tema uniforme" é
+  HIPÓTESE do humano. Com gradiente/sombra/blur, o 9-slice do buffer 708 e o nativo 768 podem diferir. O teste
+  automatizado mede só geometria/sequência de estados; a sentença final é o olho do humano.
 - 02l (DESCOBERTA DURANTE A TAREFA, necessária ao critério visual): a 02k deixava as fatias direita/inferior
   nas coordenadas do buffer congelado (1292×836) enquanto o alvo era 708×530 — `SLICE_GEOM` mostrava
   canto em x=1340/y=880. Corrigido na 02l com deslocamento por borda (`delta_rx`, `delta_by`, `delta_rb`);
@@ -460,6 +505,11 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   citada pelo humano. Registrado aqui como contexto; **ADR 0006 (aditivo/proposto) NÃO foi editado** — incluir
   prior art em ADR exige aprovação explícita (AGENTS.md §0.8 / §6).
 ## 7. Não medido / não validado (não trate como fato)
+- 02n (JUIZ VISUAL PENDENTE): 0 frames inconsistentes e swap atômico são MEDIDOS (§3), mas "sem flicker ao soltar"
+  NÃO foi visto pelo humano nesta versão. Nenhuma instância aberta; não encerrar PIDs do juiz. Não escrever
+  "validado visualmente" sem o "ok" explícito (AGENTS.md §0.9).
+- 02n (NÃO MEDIDO): desempenho em GPU real — VM sem 3D; só funcionamento/geometria foram medidos. Diferença de
+  pixels entre 9-slice(708) e nativo(768) com tema não-uniforme também não foi medida (hipótese em §6).
 - 02l (JUIZ VISUAL NEGATIVO PARCIAL — 2026-11-20, teste feito na instância 100840/101188): humano:
   **"teste visual feito. Está quase perfeito o ponto do achatamento resolveu. Mas ao clicar nas bordas (na
   barra de titulo NAO), vejo que pisca, a barra de titulo inteira encolhe horizontalmente incluindo seu
@@ -586,25 +636,21 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- O que eu estava fazendo: 02m — humano autorizou 3ª abordagem no COMPOSITOR (reescreveu o cartão em 2026-11-20):
-  remover `send_frame_configure(window_id, big, "grab-start")` de `start_geometry_grab` (`grab.rs`), ZERO
-  configures da decoração entre press e release, manter só `source=final` no `unset`, commit-hook calado.
-  Correção mínima aplicada em `grab.rs`; teste novo visto FALHANDO e depois 3× OK; vizinhos, gate e clippy verdes
-  (detalhes em §3). 02m e 02l NÃO CONCLUÍDAS: falta o juiz visual DESTA versão. Nenhuma instância aberta agora.
-- Gate final (após a última mudança de código): `bash scripts/check.sh` → `CHECK_EXIT=0`, bun 9 pass / 0 fail
-  (`/tmp/opencode/02m_v2_check_final.log`); `cargo clippy --workspace --all-targets --features bench -- -D warnings`
-  → EXIT=0 (`/tmp/opencode/02m_v2_clippy_final.log`). Rodar de novo ao fechar esta sessão após o commit final.
-- Reproduzir: `python3 tests/integration/frame_grab_configure_hygiene.py` → `configures_no_grab=0
-  source_final_apos_release=1 VEREDITO: OK`. Baseline cru FALHOU em `/tmp/opencode/02m_grab_baseline1.log`
-  (`source=grab-start w=1280 h=800` em +26,93 ms); 3× limpas em `/tmp/opencode/02m_grab_clean{1,2,3}.log`.
-- JUIZ VISUAL (2026-11-20, instância v3 — encerrada pelo humano): **press/arrasto 100% resolvido; flicker NOVO
-  no release com arrasto** (relato cru + medição em §7). Causa = `source=final` no `unset`, que o cartão mandou
-  manter. NÃO há instância aberta. NÃO mexer em `source=final` sem decisão; 3 abordagens usadas, regra das duas
-  tentativas atingida — PARAR.
-- Próximo passo imediato (NÃO executar): humano decidir sobre o flicker no release — (a) autorizar 4ª abordagem
-  para atacar o `source=final`/repaint do WebKit no unset [exige reabrir cartão], (b) aceitar como dívida e fechar
-  02m/02l como parciais no visual, (c) outro rumo. Só com decisão e novo "ok" do juiz fecham 02m/02l.
-- NÃO mudar `target = content + extras`, move, conteúdo, 9-slice da 02k/02l, ADR 0006, protocolo ou shell sem
-  aprovação; NÃO encerrar PIDs de instância; sem push. Hipótese `target=12x36` segue em §7 como descoberta
-  histórica; a correção atual ataca a causa apontada pelo humano (configure de freeze no press), não aquela.
+- O que eu estava fazendo: 02n (4ª correção autorizada, completa a 02m). Compositor mantém o 9-slice do buffer
+  congelado no release, adia `source=final` para o idle (200 ms), exige `buffer==target` + geração de slices casa
+  + assentamento (50 ms) e aposenta o congelado num único render; timeout 400 ms e cancelamento em novo grab /
+  janela destruída. Teste novo FALHOU no baseline e passou 3×; gate/clippy verdes (§3). Falta SÓ o juiz visual.
+- Gate final (após a última mudança de código): `bash scripts/check.sh` → CHECK=0, bun 9 pass/0 fail
+  (`/tmp/opencode/02n_check_final3.log`); `cargo clippy --workspace --all-targets --features bench -- -D warnings`
+  → EXIT=0 (`/tmp/opencode/02n_clippy_final.log`). Reexecutar ao fechar a sessão se houver nova edição.
+- Reproduzir: `python3 tests/integration/frame_release_swap_hygiene.py` → `frames_buffer_inconsistente=0
+  swaps_atomicos=1 VEREDITO: OK`. Baseline cru FALHOU em `/tmp/opencode/02n_release_baseline2.log`;
+  3× limpas em `/tmp/opencode/02n_release_clean{1,2,3}.log`.
+- JUIZ VISUAL (PENDENTE): humano aprovou press/arrasto da 02m; resta arrastar E SOLTAR bordas das 2 janelas sem
+  flicker. Abrir instância manual do RUNBOOK com 2 `foot`, DEIXAR ABERTA, dizer o que olhar, pedir "ok" explícito.
+  Quem fecha é o humano. Nenhuma instância aberta agora. Sem "ok", 02n/02m/02l NÃO fecham (§7).
+- Se o humano ainda vir flicker no soltar: NÃO abrir 5ª correção; parar e pedir decisão (cartão 02n).
+- NÃO mudar `target = content + extras`, move, conteúdo, 9-slice da 02k/02l, press/arrasto da 02m, ADR 0006,
+  protocolo, shell ou dependências sem aprovação; NÃO encerrar PIDs de instância; sem push. VM sem 3D: sem
+  medição de desempenho/GPU real (§7). Ressalva "visualmente idêntico em tema uniforme" é hipótese (§6).
 - Contexto em §6: cprussin é contribuidor (criador: Victor Berger/elinorbgr); prior art é contexto, não receita.

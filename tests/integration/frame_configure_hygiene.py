@@ -35,6 +35,12 @@ STEPS = 14
 STEP_PX = 10
 MOTION_DELAY = 0.05
 SETTLE_MS = 500
+# 02n: `source=final` passou a ser enviado no IDLE, 150-250 ms após o release
+# (medido: 205-209 ms), para não apresentar o buffer recém-chegado mid-resize.
+# A janela antiga de +100 ms refletia o comportamento 02m e classificava o final
+# adiado como "ausente". A exigência continua sendo EXATAMENTE 1 final com o
+# tamanho real do cliente; só a janela temporal é atualizada para a 02n.
+FINAL_DELAY_MAX_MS = 400
 # Relato do humano: a decoração aparece 1-2 s depois que a janela abre.
 # Esperar evita iniciar o arrasto antes de o frame WebView estar pronto.
 DECORATION_APPEAR_DELAY_S = 2.0
@@ -222,7 +228,7 @@ if malformed:
     print("exemplos FRAME_CONFIGURE malformados: " + repr(malformed[:3]))
 
 during_motions = [t for t in motions if t_press <= t <= t_release]
-# `source=final` é enviado pelo unset do grab, ou seja, DEPOIS do release.
+# `source=final` é enviado no idle (02n), DEPOIS do release.
 # O relógio do harness pode registrá-lo antes de t_release (corrida de
 # escalonamento: sendall()->time.time_ns()); classificar pelo rótulo semântico
 # evita contar o configure final como "durante o arrasto" (amostra crua:
@@ -234,7 +240,8 @@ during_configs = [
 during_client = [c for c in client_configs if t_press <= c[0] <= t_release]
 finals = [
     c for c in frame_configs
-    if t_release - 20_000_000 <= c[0] <= t_release + 100_000_000 and c[4] == "final"
+    if t_release - 20_000_000 <= c[0] <= t_release + FINAL_DELAY_MAX_MS * 1_000_000
+    and c[4] == "final"
 ]
 last_commit = [c for c in client_commits if c[0] <= t_release]
 last_size = last_commit[-1][1] if last_commit else None

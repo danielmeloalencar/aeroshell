@@ -1,6 +1,11 @@
 //! Estado global do compositor. Não conhece o backend concreto.
 
-use std::{collections::HashMap, ffi::OsString, sync::Arc, time::Instant};
+use std::{
+    collections::HashMap,
+    ffi::OsString,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use smithay::{
     desktop::{PopupManager, Space, Window, WindowSurfaceType},
@@ -29,6 +34,38 @@ use smithay::{
 };
 
 use crate::{cli::Options, CalloopData};
+
+/// 02n: atraso do `source=final` após o release (fora do momento visual).
+pub const RELEASE_IDLE_DELAY: Duration = Duration::from_millis(200);
+/// 02n: o 9-slice do buffer final é mantido por este intervalo antes de o
+/// congelado ser aposentado. Dá tempo ao WebKit assentar o layout e garante
+/// que o swap para nativo ocorra num render separado e atômico.
+pub const RELEASE_SWAP_SETTLE: Duration = Duration::from_millis(50);
+/// 02n: timeout de segurança; aposenta o congelado mesmo sem sinal do cliente.
+/// Coerência: 200 ms (idle) + ~80 ms (commit do WebKit, medido) + 50 ms (settle)
+/// = 330 ms < 400 ms.
+pub const RELEASE_SWAP_TIMEOUT: Duration = Duration::from_millis(400);
+
+/// 02n: estado do swap atômico após o release de um resize com arrasto.
+///
+/// Enquanto `Some`, o render FORÇA o caminho 9-slice (buffer congelado) mesmo
+/// quando `buffer_size == total_final` — o código antigo trocava para
+/// `Surface(el)` nesse instante e apresentava o buffer recém-chegado com layout
+/// mid-resize por 1+ frame (flicker medido em /tmp/gh-comp-110069.log).
+#[derive(Debug, Clone, Copy)]
+pub struct ReleaseSwap {
+    pub window_id: u32,
+    /// Geração das `titlebar_slices` no instante do congelamento.
+    pub frozen_slice_gen: u64,
+    /// Conteúdo final capturado no release; enviado no idle com `source=final`.
+    pub final_content: (i32, i32),
+    pub released_at: Instant,
+    pub deadline: Instant,
+    /// `source=final` já enviado (fora do momento visual).
+    pub final_sent: bool,
+    /// Instante em que buffer==alvo E a geração das slices casou (1ª vez).
+    pub matched_at: Option<Instant>,
+}
 
 /// Geometria declarada pelo cliente para um frame (ADR 0004): insets movem o
 /// conteúdo; shadow_extents são apenas visuais e não movem o conteúdo.
@@ -129,6 +166,13 @@ pub struct AeroState {
     /// enquanto o grab decide o tamanho: reenviar o tamanho atrasado do cliente
     /// "puxa" a moldura para trás e gera um storm de configures (02f).
     pub resize_grab_active: Option<u32>,
+    /// 02n: swap atômico pendente após o release de um resize com arrasto.
+    /// `resize_grab_active` continua `Some` até o idle enviar `source=final`
+    /// para que o commit-hook também fique calado nesse intervalo.
+    pub release_swap: Option<ReleaseSwap>,
+    /// 02n: geração das `titlebar_slices`; incrementada em `SetTitlebarSlices`.
+    /// O congelado só é aposentado quando a geração casar com a do buffer.
+    pub slice_generation: u64,
 
     /// Última ação de geometry para medir latência até o frame atualizado.
     pub last_geometry_action: Option<(String, std::time::Instant)>,
@@ -246,6 +290,8 @@ impl AeroState {
             ),
             last_button_serial: None,
             resize_grab_active: None,
+            release_swap: None,
+            slice_generation: 0,
             shell_manager: None,
             window_surfaces: HashMap::new(),
             frame_geometries: HashMap::new(),
@@ -375,6 +421,48 @@ impl AeroState {
             "FRAME_SUMMARY samples={} mean_ms={mean:.3} p95_ms={p95:.3}",
             values.len()
         );
+    }
+
+    /// 02n: chamado no idle do event loop. Envia o `source=final` adiado e
+    /// aplica o timeout de segurança. A aposentadoria do congelado depende do
+    /// tamanho do buffer e acontece no render (`winit.rs`), que registra
+    /// `matched_at`; aqui só se garante que o estado não fique preso.
+    pub fn tick_release_swap(&mut self) {
+        let Some(rs) = self.release_swap else {
+            return;
+        };
+        let now = Instant::now();
+
+        if !rs.final_sent && now.duration_since(rs.released_at) >= RELEASE_IDLE_DELAY {
+            if let Some(pending) = self.release_swap.as_mut() {
+                pending.final_sent = true;
+            }
+            self.resize_grab_active = None;
+            self.send_frame_configure(rs.window_id, rs.final_content, "final");
+            #[cfg(feature = "bench")]
+            eprintln!(
+                "RELEASE_SWAP_FINAL t={} window_id={} delay_ms={:.1}",
+                crate::frame_diagnostics::now_ns(),
+                rs.window_id,
+                now.duration_since(rs.released_at).as_secs_f64() * 1000.0,
+            );
+        }
+
+        if now >= rs.deadline {
+            if !rs.final_sent {
+                // Segurança: nunca deixar o shell sem o configure final.
+                self.send_frame_configure(rs.window_id, rs.final_content, "final");
+            }
+            #[cfg(feature = "bench")]
+            eprintln!(
+                "RELEASE_SWAP_TIMEOUT t={} window_id={} final_sent={}",
+                crate::frame_diagnostics::now_ns(),
+                rs.window_id,
+                rs.final_sent,
+            );
+            self.release_swap = None;
+            self.resize_grab_active = None;
+        }
     }
 
     /// Chamado no idle do event loop: registra uma vez cada `ack_configure`

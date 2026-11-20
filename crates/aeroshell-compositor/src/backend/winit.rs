@@ -246,9 +246,71 @@ pub fn init_winit(
                                                     geo.size.h + fgeo.extra_h(),
                                                 );
                                                 let buffer = el.buffer_size();
-                                                let rescaled = buffer.w > 0
+                                                let mut rescaled = buffer.w > 0
                                                     && buffer.h > 0
                                                     && (buffer.w != target.w || buffer.h != target.h);
+                                                // 02n: swap atômico no release. O código acima
+                                                // abandonava o 9-slice no MESMO render em que
+                                                // o buffer final chegava (rescaled=true->false
+                                                // com buf 708x530 -> 768x582), apresentando o
+                                                // buffer recém-chegado ainda mid-resize.
+                                                // Enquanto houver release pendente, o congelado
+                                                // continua sendo composto via 9-slice. Só é
+                                                // aposentado quando o buffer casa com o alvo E
+                                                // a geração das slices casa com o congelado E o
+                                                // idle já enviou `source=final` E decorreu o
+                                                // curto assentamento. A troca acontece num
+                                                // único render (atômica).
+                                                if buffer.w > 0 && buffer.h > 0 {
+                                                    if let Some(mut rs) = state.release_swap {
+                                                        if rs.window_id == *_window_id {
+                                                            let final_buf = buffer.w == target.w
+                                                                && buffer.h == target.h;
+                                                            let gen_ok = rs.frozen_slice_gen
+                                                                == state.slice_generation;
+                                                            let mut keep_frozen = true;
+                                                            if final_buf && gen_ok && rs.final_sent {
+                                                                let now = std::time::Instant::now();
+                                                                let matched = match rs.matched_at {
+                                                                    Some(t) => t,
+                                                                    None => {
+                                                                        rs.matched_at = Some(now);
+                                                                        #[cfg(feature = "bench")]
+                                                                        eprintln!(
+                                                                            "RELEASE_SWAP_MATCH t={} window_id={} buf={}x{} gen={}",
+                                                                            crate::frame_diagnostics::now_ns(),
+                                                                            *_window_id, buffer.w, buffer.h,
+                                                                            state.slice_generation,
+                                                                        );
+                                                                        now
+                                                                    }
+                                                                };
+                                                                let waited = now.duration_since(matched);
+                                                                if waited
+                                                                    >= crate::state::RELEASE_SWAP_SETTLE
+                                                                {
+                                                                    #[cfg(feature = "bench")]
+                                                                    eprintln!(
+                                                                        "RELEASE_SWAP_ATOMIC t={} window_id={} buf={}x{} waited_ms={:.1}",
+                                                                        crate::frame_diagnostics::now_ns(),
+                                                                        *_window_id, buffer.w, buffer.h,
+                                                                        waited.as_secs_f64() * 1000.0,
+                                                                    );
+                                                                    // Aposenta o congelado neste
+                                                                    // único render: `rescaled`
+                                                                    // permanece false e o nativo
+                                                                    // entra já com o buffer final.
+                                                                    state.release_swap = None;
+                                                                    keep_frozen = false;
+                                                                }
+                                                            }
+                                                            if keep_frozen {
+                                                                rescaled = true;
+                                                                state.release_swap = Some(rs);
+                                                            }
+                                                        }
+                                                    }
+                                                }
                                                 // 02k: linhas de corte = insets do frame (state.rs:36-56).
                                                 // `shadow` é 0 nesta fase; se passar a existir,
                                                 // entra nas fatias externas.

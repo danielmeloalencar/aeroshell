@@ -439,6 +439,10 @@ impl Dispatch<AeroFrameV1, u32> for AeroState {
                 {
                     let geo = state.frame_geometries.entry(surface.clone()).or_default();
                     geo.titlebar_slices = (left.max(0), right.max(0));
+                    // 02n: nova declaração de slices invalida o congelado: o
+                    // buffer atual passa a ter uma "versão" diferente daquela
+                    // capturada no release, e o swap espera o buffer novo.
+                    state.slice_generation = state.slice_generation.wrapping_add(1);
                 }
                 tracing::info!(window_id = *window_id, left, right, "fatias da titlebar");
             }
@@ -534,7 +538,16 @@ impl Dispatch<AeroFrameV1, u32> for AeroState {
                     .iter()
                     .position(|(_, frame, _, _)| frame == resource)
                 {
-                    let (surface, _, _, _) = state.associated_frames.remove(pos);
+                    let (surface, _, window_id, _) = state.associated_frames.remove(pos);
+                    // 02n: janela destruída com swap pendente — cancelar o
+                    // estado sem pânico e liberar o commit-hook.
+                    if state
+                        .release_swap
+                        .is_some_and(|rs| rs.window_id == window_id)
+                    {
+                        state.release_swap = None;
+                        state.resize_grab_active = None;
+                    }
                     state.frame_geometries.remove(&surface);
                     state.frame_configured_content.remove(&surface);
                     state

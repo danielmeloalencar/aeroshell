@@ -166,6 +166,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     event_loop.run(None, &mut data, |data| {
+        // 02n: o idle envia o `source=final` adiado e aplica o timeout do swap.
+        data.state.tick_release_swap();
         #[cfg(feature = "bench")]
         data.state.check_frame_timeouts();
         let _ = data;
