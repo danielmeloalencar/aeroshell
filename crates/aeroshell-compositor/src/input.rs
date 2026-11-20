@@ -82,11 +82,22 @@ impl AeroState {
         if pointer.is_grabbed() {
             return;
         }
-        if let Some((window, _)) = self
+        let window = self
             .space
             .element_under(pointer.current_location())
-            .map(|(w, l)| (w.clone(), l))
-        {
+            .map(|(w, _)| w.clone())
+            .or_else(|| {
+                // Clique na DECORAÇÃO: a titlebar é uma layer surface e não está
+                // no Space, então `element_under` não a vê. Descobre a janela
+                // dona pelo window_id associado à superfície do frame sob o ponto.
+                let (surface, _) = self.surface_under(pointer.current_location())?;
+                let (_, _, window_id, _) = self
+                    .associated_frames
+                    .iter()
+                    .find(|(frame_surface, _, _, _)| frame_surface == &surface)?;
+                self.window_for_id(*window_id).cloned()
+            });
+        if let Some(window) = window {
             self.space.raise_element(&window, true);
             if let Some(toplevel) = window.toplevel() {
                 keyboard.set_focus(self, Some(toplevel.wl_surface().clone()), serial);

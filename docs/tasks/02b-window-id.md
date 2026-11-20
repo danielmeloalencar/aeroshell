@@ -58,3 +58,8 @@ Ao final: atualizar STATE.md (§3, §4, §5, §9) e comitar localmente (sem push
 - Critério 4 (visual): PENDENTE — requer o "ok" do humano com a aplicação aberta.
 - Causa raiz corrigida: `nth(window_id)` (ordem z) trocado por `window_for_id()` (mapa estável) em `grab.rs`,
   `window_ipc.rs`, `aero_frame.rs` e `xdg_shell.rs`; `frame_webview.rs` cria uma WebView por window_id.
+- Detalhe extra (relato do humano após "ok" parcial): clique na BARRA da janela de trás não a elevava. Corrigido em
+  `input.rs`: fallback por `surface_under` + `associated_frames` quando `element_under` (que ignora layers) falha.
+  ANTES `barra eleva A=False`; DEPOIS `True`, foco em A. Critério 4 (visual) segue pendente para este detalhe.
+- Amostra falha registrada (não descartada): `frame_resize_edges.py` falhou 1× em 3 no `BottomRight` porque os pontos
+  são calculados uma vez e um probe aplicou `content_w=1002`; causa em `STATE.md §6`, teste a corrigir depois.

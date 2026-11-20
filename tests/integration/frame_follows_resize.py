@@ -184,6 +184,23 @@ if not surf_a or not surf_b or surf_a == surf_b:
     print(f"FALHA: não consegui separar as superfícies (A={surf_a}, B={surf_b})", file=sys.stderr)
     sys.exit(1)
 
+# 1b) clique na BARRA do frame de A (a janela de trás) também deve elevá-la.
+#     A janela A nasce em y=80 e o frame tem titlebar de 30 px => barra em y=50..80.
+#     B começa em y=120 (frame em y=90), então (200,65) só pode ser a barra de A.
+mark_bar = len(log())
+send("motion 200 65")
+send("button press")
+send("button release")
+time.sleep(0.5)
+after_bar = rows()
+focus_bar = focus_surfaces(mark_bar)
+print(f"ordem do space depois de clicar na BARRA de A: {after_bar}")
+print(f"foco após clique na barra: {focus_bar} (A={surf_a}, B={surf_b})")
+bar_ok = bool(
+    after_bar and after_bar[-1][2] == Y_A
+    and surf_a in focus_bar and surf_b not in focus_bar
+)
+
 # 2) clique no conteúdo EXCLUSIVO de A => raise_element(A) + foco em A
 mark_click = len(log())
 send("motion 70 100")
@@ -237,11 +254,12 @@ cleanup()
 
 a_moved = bool(a1 and a0 and (a1[3], a1[4]) != (a0[3], a0[4]))
 b_intact = bool(b1 and b0 and (b1[3], b1[4]) == (b0[3], b0[4]))
-focus_ok = bool(
-    surf_a in focus1 and surf_b not in focus1 and surf_b not in focus2
-)
-verdict = bool(detected and grabbed and a_moved and b_intact and focus_ok)
-print(f"\nA mudou={a_moved}  B intacta={b_intact}  foco só em A={focus_ok}")
+# A barra já focou A; um clique seguinte na mesma janela não emite novo
+# `focus=true`. O critério é: A recebeu foco em algum clique e B nunca recebeu.
+all_focus = focus_bar + focus1 + focus2
+focus_ok = bool(surf_a in all_focus and surf_b not in all_focus)
+verdict = bool(detected and grabbed and a_moved and b_intact and focus_ok and bar_ok)
+print(f"\nA mudou={a_moved}  B intacta={b_intact}  foco só em A={focus_ok}  barra eleva A={bar_ok}")
 print(f"VEREDITO: {'OK' if verdict else 'FALHA'}")
-print("(esperado: resize do frame de A muda A, B idêntica, foco nunca em B)")
+print("(esperado: clique na barra de A eleva/foca A; resize muda A, B idêntica, foco nunca em B)")
 sys.exit(0 if verdict else 1)

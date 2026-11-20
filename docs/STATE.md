@@ -37,12 +37,15 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
       reordenada por `raise_element` no clique). Mapa estável `window_surfaces` + `window_for_id()` em `state.rs`.
       Prova: `tests/integration/frame_follows_resize.py` ANTES: A inalterada / B mudou (`100→60`, `696→732`);
       DEPOIS: A mudou (`60→20`, `696→732`) / B idêntica — mesmo comando, 1 execução cada.
-- [x] 02b (não regressão): `frame_buttons.py`, `frame_resize_edges.py`, `frame_follows_resize.py` → 3× OK.
+- [x] 02b (não regressão): `frame_buttons.py`, `frame_resize_edges.py`, `frame_follows_resize.py` → OK.
       `bash scripts/check.sh` → `OK: scripts/check.sh passou` (EXIT=0).
+- [x] 02b (clique na decoração, relato do humano): `focus_on_press` agora cai no frame via `surface_under` +
+      `associated_frames` quando `element_under` não vê janela (titlebar é layer surface). Prova:
+      `frame_follows_resize.py` ANTES: `ordem ... BARRA` inalterada, `foco=[]`, `barra eleva A=False`;
+      DEPOIS: ordem inverte, `foco=['wl_surface@3[1]']` (A), `barra eleva A=True`.
 ## 4. Em andamento
-- [ ] 02b — código pronto e gate verde; falta SOMENTE a confirmação visual do humano com 2 `foot` (critério 4 do
-      cartão). Aplicação deve ser deixada aberta; quem fecha é o humano (`AGENTS.md §0.9`). Cartão:
-      `docs/tasks/02b-window-id.md`.
+- [ ] 02b — código pronto e gate verde; falta SOMENTE a confirmação visual do humano para o clique na BARRA da janela
+      de trás (critério 4 do cartão). Aplicação deve ser deixada aberta; quem fecha é o humano (`AGENTS.md §0.9`).
 ## 5. Próximas tarefas (ordem; cada uma tem um cartão em docs/tasks/)
 1. `02b-window-id.md` — validação visual final (2 janelas no nested, mover/resize/✕/foco), depois fechar tarefa.
 2. `03-runtime-bun-sdk.md` — `aero.windows.list/focus/close`, snapshot + patches; tipos TS gerados de `aeroshell-ipc`.
@@ -71,6 +74,13 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
 - 02b (relato do humano, 2026-11-19/20, 2 foot): 2 janelas deslocadas, só UMA decorada; arrastar/resize move a outra;
   ✕ e maximizar não faziam nada; clicar na janela focada focalava a outra. DUAS causas, ambas corrigidas nesta sessão:
   (1) o map não anunciava `frame_requested` para a 2ª janela; (2) `nth(window_id)` usava ordem z. Confirmado por log.
+- 02b (relato do humano, 2026-11-20, após "ok" parcial): clicar na BARRA/DECORAÇÃO da janela de trás não a elevava
+  (só com arrasto). Confirmado e CORRIGIDO: `element_under` ignora layer surfaces; fallback por `surface_under` +
+  `associated_frames` em `input.rs`. Aguardando confirmação visual deste último detalhe.
+- `frame_resize_edges.py` é intermitente: 1 de 3 execuções nesta sessão falhou no `BottomRight` (`hit_no_frame=False`).
+  Causa identificada no log cru `/tmp/edges-comp-25191.log`: o probe `Right` aplicou `content_w=1002`, mas o teste
+  calcula `EDGE_POINTS` UMA vez com `696`; o ponto (759,577) passa a cair dentro do conteúdo. Não é regressão de
+  `focus_on_press`. Amostra falha registrada, não descartada; corrigir o teste (recalcular pontos) é tarefa futura.
 - 02b (dívida menor): `window_id` ainda é `space.elements().count()` no map; se uma janela fecha e outra abre, o id
   pode ser reatribuído. O mapa `window_surfaces` é limpo no hook de destruição, mas ids monotonicamente estáveis
   (não reutilizados) ficam para uma tarefa futura se o cenário aparecer.
@@ -80,19 +90,19 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
 - Estabilidade do `ext-background-effect` (blur): não implementado; Smithay 0.7 não tem handler.
 - Nenhuma validação visual com juiz humano foi feita nestas duas últimas sessões (só documentação). Item visual só entra
   na seção 3 com o "ok" do humano registrado, conforme `AGENTS.md §0.9`.
-- 02b: confirmação visual das 2 janelas PENDENTE — o agente deve deixar o nested aberto e o humano dar o "ok".
-- 02b (honestidade metodológica): a parte de **foco** do `frame_follows_resize.py` foi adicionada DEPOIS da correção
-  do `nth`; logo ela não foi vista falhando antes. A parte de resize foi vista falhando antes (A inalterada, B mudou).
-  O foco foi medido depois: 1º clique → `wl_surface@3[1]` (A); 2º clique em A → nenhum `focus=true` para B.
+- 02b: confirmação visual PENDENTE para o clique na barra da janela de trás — deixar o nested aberto e o humano dar o "ok".
+- 02b (honestidade metodológica): a medição de **resize** e a de **clique na barra** foram vistas FALHANDO antes das
+  respectivas correções. A medição de **foco** foi adicionada depois do `nth` e não foi vista falhando antes; medida
+  depois: foco em A, nunca em B (no clique na barra e nos dois cliques no conteúdo).
 ## 8. Ambiente
 Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), gtk4-layer-shell, Rust via rustup, Bun.
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- O que eu estava fazendo: tarefa 02b — code completa, gate verde, 4 testes de integração OK.
-- O que funcionou: `frame_requested` para 2 janelas, WebView por window_id, resolução estável (`window_for_id`).
-  ANTES/DEPOIS do resize provados com o mesmo comando; foco por clique medido (nunca em B).
-- Comando exato: `python3 tests/integration/frame_follows_resize.py && python3 tests/integration/frame_window_id.py && bash scripts/check.sh`
-- Próximo passo imediato (uma ação): abrir o nested com 2 `foot`, deixar aberto, pedir o "ok" visual ao humano (critério 4).
-- Descobertas laterais em §6: protocolos duplicados no `AGENTS.md`, flake do S1 sem causa, reatribuição de `window_id`.
+- O que eu estava fazendo: tarefa 02b — correção final do clique na barra; gate verde.
+- O que funcionou: `focus_on_press` com fallback do frame (`surface_under` → `associated_frames` → `window_for_id`).
+  ANTES `barra eleva A=False`; DEPOIS `True` e foco em A, nunca em B.
+- Comando exato: `python3 tests/integration/frame_follows_resize.py && bash scripts/check.sh`
+- Próximo passo imediato (uma ação): abrir o nested com 2 `foot`, deixar aberto, pedir o "ok" visual do clique na barra.
+- Descobertas laterais em §6: teste `frame_resize_edges.py` intermitente (causa identificada), flake do S1 sem causa.
  
