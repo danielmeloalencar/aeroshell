@@ -212,10 +212,25 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   `frame_follows_resize`, `frame_window_id`, `frame_resize_glue`; `frame_resize_sync.py` FALHA esperada.
   Gate `02m_check_final.log` EXIT=0 (`OK: scripts/check.sh passou`, bun 9 pass/0 fail); clippy bench
   `02m_clippy_final.log` EXIT=0. Critério VISUAL: ver §7. Nenhuma mudança em 02l/protocolo/ADR.
+- [x] 02m (TERCEIRA ABORDAGEM — COMPOSITOR, AUTORIZADA PELO HUMANO EM 2026-11-20): humano reescreveu o
+  cartão com especificação técnica: remover o `send_frame_configure(window_id, big, "grab-start")` de
+  `start_geometry_grab` (`grab.rs:460-470`); nenhum configure da decoração durante o grab; manter só
+  `source=final` no `unset` (`grab.rs:403-420`); buffer congelado no último tamanho assentado; 9-slice já
+  compõe com `buffer < target` (`winit.rs:244-289`, confirmado no código). Sem protocolo/shell/deps.
+  Teste PRIMEIRO novo `tests/integration/frame_grab_configure_hygiene.py` correlaciona `FRAME_CONFIGURE` com
+  press/release: baseline cru `02m_grab_baseline1.log` → EXIT=1, `source=grab-start w=1280x800` em +26,93 ms,
+  `source=final` em +508,49 ms. Depois: 3× limpas seguidas `02m_grab_clean{1,2,3}.log` → todas
+  `configures_no_grab=0 source_final_apos_release=1 VEREDITO: OK`. Vizinhos: `frame_configure_hygiene.py`
+  exigia 1 `grab-start` (critério antigo invertido) — asserção atualizada só para ZERO, com justificativa no
+  código do teste; `frame_buttons`, `frame_window_id`, `frame_resize_glue`, `frame_initial_buffer` OK;
+  `frame_follows_resize.py` teve `detected=None` (flake de captura de log) 1× e 2/2 OK isolados depois;
+  `frame_resize_sync.py` FALHA esperada. Gate `02m_v2_check_final.log` EXIT=0 (bun 9 pass/0 fail); clippy
+  bench `02m_v2_clippy_final.log` EXIT=0. Critério VISUAL: ver §7.
 ## 4. Em andamento
-- 02m NÃO CONCLUÍDA: juiz visual NEGOU ("Ainda pisca" — §7). Duas tentativas no shell esgotadas; causa
-  restante está no compositor (`target=12x36` no primeiro map, §7). PARADA antes de terceira abordagem —
-  aguardando decisão do humano. NÃO mexer em 02l/protocolo/ADR sem aprovação.
+- 02m (3ª abordagem) técnica PRONTA (§3): humano autorizou especificação no compositor; baseline FALHANDO,
+  correção mínima em `grab.rs`, 3× OK, vizinhos, gate e clippy. Falta SÓ o juiz visual (§7). As 2 abordagens
+  anteriores no shell ficam registradas como histórico (2ª eliminou o 200×200; juiz ainda negou).
+  NÃO mexer em 02l/protocolo/ADR/shell sem aprovação.
 - 02l EM EXECUÇÃO: código/teste/gate/clippy prontos (§3); falta a validação visual com juiz humano (§7).
   Humano (2026-11-20): **"vi na execução dos seus testes que o problema foi resolvido."** Registrado como dado
   favorável, mas veio da execução dos harnesses, não de uma sessão visual formal com 2 `foot`; por §0.9 ainda
@@ -236,9 +251,9 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. `02m` — BLOQUEADA: juiz negou, 2 tentativas esgotadas, causa no compositor fora da decisão 0 (§7).
-   Decisão pendente do humano: autorizar cartão novo no compositor para `content=0x0 → target=12x36`, aceitar
-   como dívida, ou outro rumo. NÃO executar sem aprovação.
+0. `02m` — técnica pronta (§3), falta juiz visual (§7): abrir instância do RUNBOOK com 2 `foot`, deixar aberta;
+   humano clica/arrasta bordas da 1ª e 2ª janela (press sem transiente, arrasto lento/rápido) e dá o "ok".
+   Só então fechar 02m e 02l. Não reabrir sem decisão se o humano fechar.
 1. `02j` — CONCLUÍDA; os 3 modos nomeados (`FRAME_NEVER_ACKED`, `FRAME_NEVER_DREW_AT_SIZE`,
    `FRAME_STRETCH_ACTIVE`) estão no log bench. Próximo passo natural (NÃO executado): correlacionar esses modos
    com um novo arrasto REAL e só então decidir a causa da queixa visual de 02e/02f.
@@ -472,6 +487,12 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   (1) adiar criação no shell → deadlock; (2) `set_default_size` no shell → teste passou, juiz negou.
   PARAR e pedir decisão antes de qualquer terceira abordagem. 02m e 02l NÃO CONCLUÍDAS no visual.
   Instâncias 105740/105748/105755/105827/105852/105864 encerradas após o teste (não pelo agente).**
+- **02m (3ª ABORDAGEM — JUIZ VISUAL PENDENTE, 2026-11-20): humano autorizou nova especificação no compositor
+  (remover `source=grab-start`, zero configures no grab, só `source=final` no unset — §3). Técnica pronta e
+  provada por medição (3× `configures_no_grab=0`), MAS ainda NÃO houve juiz visual desta versão. Até o humano
+  clicar/arrastar as bordas das 2 janelas na instância nova e dar o "ok" explícito, 02m e 02l seguem NÃO
+  CONCLUÍDAS (AGENTS.md §0.9). A hipótese do `target=12x36` permanece registrada acima como descoberta; a
+  correção autorizada ataca a causa apontada pelo humano (configure de freeze no press), não aquela.**
 - 02l (JUIZ VISUAL — RELATO FAVORÁVEL ANTERIOR, agora superado): humano (2026-11-20):
   **"vi na execução dos seus testes que o problema foi resolvido."** Veredito positivo registrado como dado.
   Como o relato veio da execução dos harnesses (que abrem janela winit + `foot`), e não de uma sessão manual
@@ -547,36 +568,21 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- O que eu estava fazendo: 02m — 2 tentativas no shell esgotadas; juiz visual NEGOU ("Ainda pisca"). Causa
-  restante no compositor: `content=0x0 → target=12x36` no primeiro map (`/tmp/ibuf-comp-104057.log:1325-1326`,
-  §7). PAREI antes de terceira abordagem (regra das duas tentativas + decisão 0 era só shell). 02m/02l NÃO
-  CONCLUÍDAS. Nenhuma instância aberta — todas encerradas após o teste do humano.
-- Gate final (após a última mudança de código): `bash scripts/check.sh` → `CHECK_EXIT=0`,
-  `OK: scripts/check.sh passou`, bun 9 pass / 0 fail (`/tmp/opencode/02m_check_final.log`);
-  `cargo clippy --workspace --all-targets --features bench -- -D warnings` → EXIT=0 (`02m_clippy_final.log`).
-  Vizinhos OK; `frame_resize_sync.py` FALHA esperada.
-- Reproduzir: `python3 tests/integration/frame_initial_buffer.py` → 1º frame da janela 1 com
-  `buf=708x530 target=708x530 rescaled=false sx=1.0000`, `VEREDITO: OK`. Baseline FALHA em
-  `/tmp/opencode/02m_baseline1.log` (8 amostras `buf=200x200 sx=3.7021`); 3× OK em `02m_final{1,2,3}.log`.
-- Instância visual 1 (2026-11-20): compositor 100840, shell 100852, `foot` 100924/100972, socket
-  `wayland-aero-02l`, log `/tmp/opencode/aero-02l-visual.log`, 2 frames associados. Encerrou graciosamente
-  (`FRAME_SUMMARY samples=2`) sem ação do agente; provavelmente o humano fechou ao testar. NÃO tentar encerrar
-  PIDs antigos.
-- Instância visual 2 (para o "ok" formal): compositor 101188, shell 101196, `foot` 101271/101295, socket
-  `wayland-aero-02l-ok`, log `/tmp/opencode/aero-02l-ok.log`, 2 frames associados. O humano fez o teste e
-  relatou o flash; a instância encerrou graciosamente depois (sem ação do agente). NÃO reabrir uma terceira
-  sem decisão — registrar e pedir.
-- Humano confirmou 02m e a decisão 0 = shell + spike; cartão em `docs/tasks/02m-flash-buffer-inicial.md`.
-- Instância visual `wayland-aero-02m`: compositor 105748, shell 105755, `foot` 105827/105864, log
-  `/tmp/opencode/aero-02m-visual.log`, 2 associates. Humano testou, negou e encerrou (não foi o agente).
-  `tamanho_inicial=1292x836` nela (contra `708x530` no harness) — ambos sem 200×200; o flash restante é o alvo
-  `12x36`, não o buffer. Sem `--features bench` nela, por isso a prova veio do log do harness.
-- Próximo passo imediato (NÃO executar): humano decidir sobre a causa no compositor — (a) cartão novo 02n para
-  impedir `target=12x36` enquanto `content=0x0` [recomendado], (b) aceitar como dívida, (c) outro rumo. Só depois
-  de aprovado: teste primeiro vendo o frame `12x36` falhar, correção mínima, gate, novo juiz visual. 02l e 02m
-  NÃO fecham sem o "ok" do juiz. NÃO reabrir instância visual sem decisão.
-- NÃO mudar `target = content + extras`, move, conteúdo, ADR 0006 ou o debounce fora do grab; NÃO editar
-  protocolo sem aprovação; NÃO encerrar PIDs de instância; sem push.
-- Contexto preservado em §6: cprussin é contribuidor (criador: Victor Berger/elinorbgr); prior art é contexto,
-  não receita para copiar Chromium/CEF.
- 
+- O que eu estava fazendo: 02m — humano autorizou 3ª abordagem no COMPOSITOR (reescreveu o cartão em 2026-11-20):
+  remover `send_frame_configure(window_id, big, "grab-start")` de `start_geometry_grab` (`grab.rs`), ZERO
+  configures da decoração entre press e release, manter só `source=final` no `unset`, commit-hook calado.
+  Correção mínima aplicada em `grab.rs`; teste novo visto FALHANDO e depois 3× OK; vizinhos, gate e clippy verdes
+  (detalhes em §3). 02m e 02l NÃO CONCLUÍDAS: falta o juiz visual DESTA versão. Nenhuma instância aberta agora.
+- Gate final (após a última mudança de código): `bash scripts/check.sh` → `CHECK_EXIT=0`, bun 9 pass / 0 fail
+  (`/tmp/opencode/02m_v2_check_final.log`); `cargo clippy --workspace --all-targets --features bench -- -D warnings`
+  → EXIT=0 (`/tmp/opencode/02m_v2_clippy_final.log`). Rodar de novo ao fechar esta sessão após o commit final.
+- Reproduzir: `python3 tests/integration/frame_grab_configure_hygiene.py` → `configures_no_grab=0
+  source_final_apos_release=1 VEREDITO: OK`. Baseline cru FALHOU em `/tmp/opencode/02m_grab_baseline1.log`
+  (`source=grab-start w=1280 h=800` em +26,93 ms); 3× limpas em `/tmp/opencode/02m_grab_clean{1,2,3}.log`.
+- Próximo passo imediato: abrir validação visual do RUNBOOK com 2 `foot`, deixar aberta; humano clica/arrasta
+  bordas da 1ª e 2ª janela (press sem transiente, arrasto lento/rápido) e dá o "ok" explícito. Só então fechar
+  02m e 02l. Quem fecha a aplicação é o humano — NÃO encerrar PIDs.
+- NÃO mudar `target = content + extras`, move, conteúdo, 9-slice da 02k/02l, ADR 0006, protocolo ou shell sem
+  aprovação; NÃO encerrar PIDs de instância; sem push. Hipótese `target=12x36` segue em §7 como descoberta
+  histórica; a correção atual ataca a causa apontada pelo humano (configure de freeze no press), não aquela.
+- Contexto em §6: cprussin é contribuidor (criador: Victor Berger/elinorbgr); prior art é contexto, não receita.

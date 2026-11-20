@@ -274,8 +274,12 @@ print(f"apos soltar: finals={len(finals)} ultimo_cliente={last_size} "
 
 if not during_motions:
     problems.append("nenhuma linha RESIZE_SYNC_MOTION no intervalo do arrasto")
-if not during_configs:
-    problems.append("nenhuma linha FRAME_CONFIGURE (instrumentação ausente?)")
+# 02m: o critério foi INVERTIDO pelo humano — o antigo `grab-start` (1 configure
+# no press) causava o transiente e foi removido. Agora ZERO configures durante
+# o grab é a invariante (assertada também em frame_grab_configure_hygiene.py).
+if during_configs:
+    for c in during_configs:
+        problems.append(f"FRAME_CONFIGURE source={c[4]} durante o grab (02m exige zero)")
 elif ratio > 1.0 / 3.0:
     problems.append(f"configures/motions={ratio:.3f} > 1/3")
 if len(during_client) != len(during_motions):

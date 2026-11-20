@@ -457,17 +457,13 @@ pub fn start_geometry_grab(
                 .element_geometry(&window)
                 .map(|g| g.size)
                 .unwrap_or((320, 240).into());
-            // 02k: UM configure grande no início congela o buffer da decoração.
-            // O alvo é >= ao modo do output, então o WebKit não precisa
-            // redimensionar durante o arrasto; o 9-slice faz a composição no
-            // render. O configure final no unset usa o tamanho real do cliente.
-            let big = state
-                .outputs
-                .first()
-                .and_then(|output| output.current_mode())
-                .map(|mode| (mode.size.w.max(MIN_W), mode.size.h.max(MIN_H)))
-                .unwrap_or((1920, 1080));
-            state.send_frame_configure(window_id, big, "grab-start");
+            // 02m: NENHUM configure da decoração durante o grab. O antigo
+            // "freeze grande" (source=grab-start) forçava um resize do GTK/WebKit:
+            // por alguns frames o buffer grande chegava com layout antigo e o
+            // 9-slice recortava pixels errados (flash no clique da borda).
+            // O buffer fica congelado no último tamanho assentado — o 9-slice
+            // já compõe com buffer < target (02k/02l). O single configure
+            // source=final no unset reajusta o shell ao tamanho real.
             state.resize_grab_active = Some(window_id);
             let grab = ResizeGrab::new(window, start_data, edges, loc, size);
             pointer.set_grab(state, grab, serial, Focus::Clear);

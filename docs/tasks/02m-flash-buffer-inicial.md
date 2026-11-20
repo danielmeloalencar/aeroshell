@@ -6,9 +6,28 @@
 > Decisão do humano em 2026-11-20: abrir cartão novo, mantendo a 02l intacta.
 
 ## Objetivo (uma frase, verificável)
-No instante em que uma janela é associada ao frame — e no primeiro clique nas bordas — nenhum frame renderizado
-usa o buffer mínimo 200×200 do WebKit escalado para o tamanho da decoração (flash de ~5 ms), provado por
-medição objetiva nova e pelo juiz visual, sem mudar `target = content + extras` nem a 02l.
+Ao clicar/arrastar as bordas da decoração não há transiente: ZERO configures da decoração entre `press` e
+`release` (só o `source=final` no unset), provado por medição objetiva nova e pelo juiz visual, sem mudar
+`target = content + extras`, protocolo, shell, ADR 0006 nem a 02l.
+
+## DECISÃO DO HUMANO (2026-11-20) — substitui a decisão 0 original
+O humano forneceu a especificação técnica abaixo depois que a correção no shell (buffer 200×200 eliminado,
+3× OK) AINDA FALHOU no juiz visual ("Ainda pisca"):
+
+> Sintoma (juiz): ao clicar na borda, a decoração inteira encolhe/achata a titlebar por milissegundos e depois
+> corrige. Causa: o configure de "congelar para tamanho grande" no início do grab força resize GTK/WebKit; por
+> alguns frames o buffer é grande com layout ANTIGO, e o 9-slice recorta pixels errados (cap direito vazio,
+> miolo sobre conteúdo velho).
+> Correção (compositor, sem protocolo/shell/deps): REMOVER o `send_frame_configure` de início de grab (o
+> "freeze grande"). Durante o grab INTEIRO não enviar configure nenhum: o buffer fica congelado no último
+> tamanho assentado. O 9-slice já funciona com buffer < target (caps em (1,1) nas bordas do target; só o miolo
+> estica). Vale para crescer e encolher. MANTER só o configure `source=final` no unset/release (shell repinta e
+> re-mede slices). commit-hook continua calado durante o grab (`resize_grab_active`). Não mexer em target, move,
+> conteúdo, 9-slice da 02k/02l, ADR 0006.
+
+Código lido que sustenta a especificação: `grab.rs:470` (`send_frame_configure(..., "grab-start")`),
+`grab.rs:403-420` (`unset` com `source=final`), `winit.rs:244-289` (9-slice compõe no `target` com `buffer`
+possivelmente menor, `delta_rx` para bordas presas à direita/inferior). NÃO inventar API.
 
 ## Contexto mínimo (arquivos que importam)
 - `docs/STATE.md` §6/§7 — relato cru do juiz e reprodução com medição (7 frames `buf=200x200`,
@@ -40,13 +59,15 @@ Onde evitar o buffer 200×200? Opções:
 Se a decisão 0 não for dada, PARE e pergunte. Nenhuma das opções mexe em protocolo/ADR.
 
 ## Critério de aceite (comandos exatos + resultado esperado)
-1. **Teste primeiro, visto falhando:** estender `tests/integration/frame_resize_glue.py` (ou criar
-   `tests/integration/frame_initial_buffer.py`) para rejeitar, por frame, `buf` menor que o alvo com
-   `slice_scale_x` fora de uma faixa segura — e, especificamente, `buf=200x200` com `sx>2`. Rodar no código
-   atual com **duas janelas** (foi na 2ª que o defeito apareceu) e salvar baseline **FALHA** com as 7 amostras
-   cruas. Nenhuma amostra descartada; 3 execuções seguidas no fim.
-2. Com a decisão 0 aprovada, aplicar a correção mínima em UM arquivo por vez, com teste e gate a cada passo.
-   Nenhuma mudança em `target = content + extras`, `move`, conteúdo HTML, `set_titlebar_slices` ou 9-slice da 02l.
+1. **Teste primeiro, visto falhando:** criar `tests/integration/frame_grab_configure_hygiene.py` para
+   correlacionar `FRAME_CONFIGURE t=... source=...` com o instante do `press`/`release` sintéticos e assertar
+   **ZERO configures entre press e release** (o `source=final` deve vir só no unset, após o release). Rodar no
+   código atual e salvar baseline **FALHA** mostrando o `source=grab-start` cru. Nenhuma amostra descartada;
+   3 execuções seguidas no fim. O teste antigo `frame_initial_buffer.py` fica como prova da causa já eliminada.
+2. Aplicar a correção mínima em `crates/aeroshell-compositor/src/grab.rs` (UM arquivo): remover o
+   `send_frame_configure(window_id, big, "grab-start")` e o cálculo de `big` em `start_geometry_grab`; manter
+   `source=final` no `unset` e `resize_grab_active`. Nenhuma mudança em `target = content + extras`, `move`,
+   conteúdo HTML, `set_titlebar_slices`, 9-slice da 02k/02l, protocolo, shell ou ADR 0006.
 3. `python3 tests/integration/frame_resize_glue.py` 3× → `VEREDITO: OK`, com `title_n=3`,
    `declared=(120,96)`, `SLICE_GEOM` 9 fatias cobrindo o alvo, e **nenhum** frame com `buf=200x200`/
    `sx>2`. Vizinhos: `frame_configure_hygiene.py`, `frame_buttons.py`, `frame_follows_resize.py`,
