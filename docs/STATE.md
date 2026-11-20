@@ -500,7 +500,10 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
 - Instância visual 1 (2026-11-20): compositor 100840, shell 100852, `foot` 100924/100972, socket
   `wayland-aero-02l`, log `/tmp/opencode/aero-02l-visual.log`, 2 frames associados. Encerrou graciosamente
   (`FRAME_SUMMARY samples=2`) sem ação do agente; provavelmente o humano fechou ao testar. NÃO tentar encerrar
-  PIDs antigos. Se reaberta, atualizar aqui com os novos PIDs antes de pedir o "ok".
+  PIDs antigos.
+- Instância visual 2 (REABERTA para o "ok" formal): compositor 101188, shell 101196, `foot` 101271/101295,
+  socket `wayland-aero-02l-ok`, log `/tmp/opencode/aero-02l-ok.log`, 2 frames associados (`window_id=0` e `1`).
+  Deixada ABERTA; quem fecha é o humano. Se encerrar de novo, NÃO reabrir uma terceira — registrar e pedir decisão.
 - Próximo passo imediato (NÃO executar): humano olhar a janela aberta, arrastar bordas e barra (lento e rápido),
   confirmar que texto/botões não achatam e bordas não piscam, e dar o "ok" explícito. Só então fechar a 02l.
 - NÃO mudar `target = content + extras`, move, conteúdo, ADR 0006 ou o debounce fora do grab; NÃO editar
