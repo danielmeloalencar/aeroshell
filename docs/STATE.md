@@ -172,7 +172,18 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   → EXIT=0 (`02j_clippy_bench_final.log`); `cargo fmt --all -- --check` → EXIT=0. Binário sem bench: build OK e
   `strings target/debug/aeroshell-compositor | grep -cE 'FRAME_NEVER_ACKED|FRAME_NEVER_DREW_AT_SIZE|FRAME_STRETCH_ACTIVE'`
   → **0**. Nenhuma dependência, protocolo, ADR ou arquivo protegido alterado.
+- [x] 02k (código, critério técnico): 9-slice no render (`Relocate<Rescale<Crop<E>>>`, 9 fatias com
+      `fgeo.insets` como linhas de corte) e congelamento do buffer no grab (UM `grab-start` grande, nenhum
+      configure durante, UM `final`). Baseline FALHOU (`02k_baseline2.log`: `edge_l` 5,97–6,36 e `title_h`
+      29,43–31,94 contra insets 6/30; snap 0,0727); depois 3× OK (`02k_glue_final{1,2,3}.log`: 6,00/30,00,
+      snap 0,0163, `SLICE_COMPOSE n=9` em todas as amostras). Gate `02k_check_final.log` EXIT=0; clippy bench
+      `02k_clippy_final.log` EXIT=0; vizinhos OK conforme §6. Critério VISUAL ainda pendente (§7).
 ## 4. Em andamento
+- 02k NÃO CONCLUÍDA: código/teste/gate/clippy prontos (§3), **mas o juiz visual não deu o "ok"**. Humano:
+  "praticamente resolveu, com um único detalhe ainda, o conteúdo da barra de título achata no sentido
+  horizontal enquanto está fazendo o resize". O relato veio durante o teste de resize; nenhuma instância visual
+  02k com 2 `foot` foi aberta pelo agente nesta rodada. Corrigir exige mudar a receita do cartão
+  (faixa top esticada em X, cartão 02k:37) — aguardando decisão; NÃO corrigir por conta própria (§6, §7).
 - 02j FECHADA no critério técnico (§3): instrumentação auditável, gate verde, 6× `VEREDITO: OK`, strings de
   produção = 0. **Não há critério visual novo no cartão**; esta tarefa não muda aparência, geometria, cadência
   nem textura. Só não pode ser chamada de "validada visualmente" — ver §7.
@@ -187,16 +198,39 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. `02j` — CONCLUÍDA nesta sessão; os 3 modos nomeados (`FRAME_NEVER_ACKED`, `FRAME_NEVER_DREW_AT_SIZE`,
+0. `02k` — NÃO CONCLUÍDA no visual: achatamento horizontal do conteúdo da titlebar (§6/§7). Decisão pendente
+   do humano: (a) abrir cartão novo para preservar texto/botões da barra, definindo como o shell informa as
+   linhas de corte extras; (b) autorizar mudança da receita dentro da 02k; (c) aceitar como dívida conhecida.
+   Recomendação: (a) — não alterar cartão aprovado nem protocolo sem aprovação explícita (AGENTS.md §0.8).
+1. `02j` — CONCLUÍDA; os 3 modos nomeados (`FRAME_NEVER_ACKED`, `FRAME_NEVER_DREW_AT_SIZE`,
    `FRAME_STRETCH_ACTIVE`) estão no log bench. Próximo passo natural (NÃO executado): correlacionar esses modos
    com um novo arrasto REAL e só então decidir a causa da queixa visual de 02e/02f.
-1. `02f` — NÃO CONCLUÍDA: juiz visual negou ("moldura ainda chega atrasada"). NÃO reabrir sem novo pedido.
-2. `02g` — shell: fonte de fd GLib no `wl_display` mantendo timer de segurança de 50 ms; limite 1 h, reverter se piorar.
-3. `02h` — medições de ambiente VM (sem mudança de código): baseline / Skia CPU / GSK cairo / b+c, 3 repetições.
-4. `02i` — correções de documentação (somente docs): presentation-time, background_effect, WPE, cartões 02c/02d, F1.
-5. `05-compatibilidade-protocolos.md` — RASCUNHO; 7 mensagens do `foot` registradas em §6. NÃO executar sem ok.
+2. `02f` — NÃO CONCLUÍDA: juiz visual negou ("moldura ainda chega atrasada"). NÃO reabrir sem novo pedido.
+3. `02g` — shell: fonte de fd GLib no `wl_display` mantendo timer de segurança de 50 ms; limite 1 h, reverter se piorar.
+4. `02h` — medições de ambiente VM (sem mudança de código): baseline / Skia CPU / GSK cairo / b+c, 3 repetições.
+5. `02i` — correções de documentação (somente docs): presentation-time, background_effect, WPE, cartões 02c/02d, F1.
+6. `05-compatibilidade-protocolos.md` — RASCUNHO; 7 mensagens do `foot` registradas em §6. NÃO executar sem ok.
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- 02k (RELATO VISUAL do humano, 2026-11-20 — DADO, prevalece sobre a medição automática): "notei no seu teste
+  de resize que praticamente resolveu, com um único detalhe ainda, o conteúdo da barra de título achata no
+  sentido horizontal enquanto está fazendo o resize". Onde: faixa top do 9-slice em
+  `backend/winit.rs` (`(slice_sx, 1.0)` na spec da titlebar), exatamente o que o cartão 02k:37 prescreve.
+  Hipótese: o HTML da barra (texto à esquerda, botões à direita — `frame_webview.rs`, `RIGHT_CONTROLS=96`) é
+  amostrado da fatia central do topo e esticado em X. Preservar o canto direito exigiria linha de corte extra
+  (largura dos controles), hoje conhecida só pelo shell; passá-la ao compositor mexeria em protocolo/ADR.
+  **NÃO corrigi**: mudar a receita do cartão aprovado exige decisão do humano (AGENTS.md §0.8 / §5).
+- 02k (LACUNA DE MEDIÇÃO): `frame_resize_glue.py` lê a geometria/escala **calculadas pelo próprio compositor**;
+  não amostra pixels. Por isso `edge_l/edge_r/title_h == insets` e `SLICE_COMPOSE n=9` provam que o caminho do
+  9-slice executou e que os insets são constantes, mas **não capturam o achatamento do conteúdo da barra**.
+  Relato do humano prevalece (AGENTS.md §0.4). Falta medição objetiva de fidelidade da titlebar (largura do
+  texto/botões por frame), a criar em cartão próprio.
+- 02k (contagens dos vizinhos, sem descartar amostra): `frame_configure_hygiene.py` OK (1 configure
+  `source=grab-start`, nenhum `source=grab` no motion, ratio 0,071); `frame_buttons.py` OK;
+  `frame_resize_edges.py` FALHOU 2/4 na 02k, mas também 1/4 na 02j e 2× OK isolado depois (`..._retry{1,2}.log`)
+  — pré-existente/intermitente, não regressão confirmada; `frame_follows_resize.py` e `frame_window_id.py`
+  tiveram 1 timeout de IPC / 1 configure ausente na rodada final e 2/2 OK isolados depois;
+  `frame_resize_sync.py` FALHA como esperado (métrica antiga, fora de escopo).
 - 02j (DIVERGÊNCIA DO CARTÃO, registrada): o cartão pedia 14 passos/10 px a 50 ms; medi 0 `rescaled=true` com
   esse gesto (`/tmp/opencode/02j_diag_normal2.log`) e o `FRAME_STRETCH_ACTIVE` não aparecia. Troquei o harness
   para **40 passos/10 px a 10 ms** e o episódio de escala passou a existir (68 `rescaled=true` na 1ª rodada).
@@ -357,6 +391,15 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   citada pelo humano. Registrado aqui como contexto; **ADR 0006 (aditivo/proposto) NÃO foi editado** — incluir
   prior art em ADR exige aprovação explícita (AGENTS.md §0.8 / §6).
 ## 7. Não medido / não validado (não trate como fato)
+- 02k (JUIZ VISUAL PENDENTE — "ok" NÃO dado): humano relatou achatamento horizontal do conteúdo da titlebar
+  durante o resize (texto do relato em §6). Item **NÃO validado**; tarefa NÃO concluída (cartão 02k:47,
+  AGENTS.md §0.9). O relato veio do teste de resize do agente, não de uma sessão visual formal: ainda não abri
+  instância 02k com 2 `foot` nesta rodada. Após a decisão em §5, próximo passo: executar o comando manual do
+  RUNBOOK, deixar a aplicação **aberta**, pedir arrasto lento e rápido das bordas e da barra e esperar o "ok"
+  explícito do humano — quem fecha a aplicação é o humano.
+- 02k: fidelidade dos pixels da titlebar (posição/largura de texto e botões por frame) e suavidade percebida —
+  **não medidas**; a instrumentação é auto-referencial (§6) e tudo foi em VM sem 3D. Nenhuma conclusão de
+  desempenho em GPU real.
 - 02j (VALIDAÇÃO VISUAL REALIZADA, RESULTADO NEGATIVO): teste manual com aplicação aberta (PID 84904, socket
   `wayland-aero-02j-visual`) e instrução explícita de olhar barra e bordas; humano respondeu: **"no teste manual
   pude ver que o flicker é geral, incluindo as bordas"**. Veredito: **NÃO validado**; o "ok" NÃO foi dado.
@@ -416,24 +459,23 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- O que eu estava fazendo: 02j CONCLUÍDA e commitada (`7795d65`) — 3 diagnósticos nomeados sob `bench`, teste
-  primeiro visto falhando, 4 testes unitários OK, 6× harness OK, vizinhos OK, gate verde, strings = 0. Nenhuma
-  linha de produção muda aparência/geometria/cadência. Depois abri instância manual (PID 84904) para validar.
+- O que eu estava fazendo: 02k (cartão `9769d94`) — 9-slice + congelamento do buffer prontos e críticos
+  técnicos fechados (§3), mas o juiz visual relatou achatamento horizontal do conteúdo da titlebar. Parei
+  antes de mudar a receita do cartão; aguardando decisão em §5. Código/teste/STATE ainda não comitados nesta rodada.
 - Gate final (após a última mudança de código): `bash scripts/check.sh` → `CHECK_EXIT=0`,
-  `OK: scripts/check.sh passou`, bun 9 pass / 0 fail (`/tmp/opencode/02j_check_final3.log`);
-  `cargo clippy --workspace --all-targets --features bench -- -D warnings` → EXIT=0; `cargo fmt --all -- --check`
-  → EXIT=0; `cargo build -p aeroshell-compositor` + strings → 0. Gate de partida também verde (`02g_start_check.log`).
-- Reproduzir o estado atual: `python3 tests/integration/frame_diagnostics.py normal` e `... faults` (cada um
-  espera ~10 s); provas em `/tmp/opencode/02j_diag_final{1,2,3}.log` e `02j_diag_faults_final{1,2,3}.log`.
-- Instância 02f ainda aberta e reprovada no juiz: compositor PID 72480, shell 72487, 2 `foot` 72556/72557, socket
-  `wayland-aero-02f`, log `/tmp/opencode/aero-02f-visual.log`. Não encerrar — quem fecha é o humano.
-- VALIDAÇÃO VISUAL NEGATIVA (2026-11-20, teste manual com PID 84904): humano viu **flicker geral, incluindo as
-  bordas**, contradizendo o relato anterior de que só a titlebar piscava. Não medido nem investigado; precisa de
-  medição de posição da decoração por frame e cartão novo. O PID 84904 já encerrou com shutdown gracioso
-  (`FRAME_SUMMARY` no log, sem `panicked`); o agente não o encerrou — confirmar se foi o humano.
-  Próximo passo (NÃO executar): humano decidir se abre cartão para o flicker geral; não reabrir 02e/02f sozinho.
-- NÃO mexer no debounce/200 ms, NÃO mudar escala/move/conteúdo, NÃO editar ADR 0006, NÃO encerrar PID 72480,
-  NÃO executar 02d/02g/02h/02i/05/9-slice sem autorização nova. Sem push.
-- Contexto preservado em §6: cprussin é contribuidor (criador: Victor Berger/elinorbgr); prior art domicile é
-  contexto, não receita para copiar Chromium/CEF.
+  `OK: scripts/check.sh passou`, bun 9 pass / 0 fail (`/tmp/opencode/02k_check_final.log`);
+  `cargo clippy --workspace --all-targets --features bench -- -D warnings` → EXIT=0 (`02k_clippy_final.log`);
+  `cargo fmt --all -- --check` → EXIT=0. Gate de partida verde (`02k_start_check.log`).
+- Reproduzir o estado atual: `python3 tests/integration/frame_resize_glue.py` (~7 s; imprime faixas 6,00/30,00,
+  snap 0,0163, `SLICE_COMPOSE n=9`); baseline que falhou em `02k_baseline2.log`; 3× OK em
+  `/tmp/opencode/02k_glue_final{1,2,3}.log`. Vizinhos em `02k_*_final.log` / `02k_*_retry{1,2}.log`.
+- Nenhuma instância 02k foi aberta pelo agente nesta rodada; o relato do achatamento veio do teste automático.
+  Instância 02f (PID 72480) segue aberta e reprovada; NÃO encerrar — quem fecha é o humano.
+- Próximo passo imediato (NÃO executar): humano decidir (a) cartão novo para a titlebar [recomendado],
+  (b) mudar a receita da 02k com aprovação, ou (c) aceitar como dívida. Depois disso, abrir 2 `foot`,
+  arrasto lento e rápido, deixar aplicação aberta e pedir "ok" explícito (AGENTS.md §0.9).
+- NÃO mudar `target = content + extras`, move, conteúdo, protocolo/XML, ADR 0006 ou o debounce fora do grab;
+  NÃO corrigir o achatamento sozinho; NÃO encerrar PID 72480; sem push.
+- Contexto preservado em §6: cprussin é contribuidor (criador: Victor Berger/elinorbgr); prior art é contexto,
+  não receita para copiar Chromium/CEF.
  
