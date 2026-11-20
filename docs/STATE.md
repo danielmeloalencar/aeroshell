@@ -132,8 +132,9 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
 - Latência de resize com WebKit real; latência de ponteiro; qualquer desempenho em GPU real (tudo foi em VM sem 3D).
 - Número de processos/PSS com `related-view` foi medido só em VM; ADR 0001 está "aceito provisoriamente".
 - Estabilidade do `ext-background-effect` (blur): não implementado; Smithay 0.7 não tem handler.
-- 02c: validação visual do humano NÃO foi feita — o critério automatizado (critério 1 do cartão) falha, então não
-  abri a instância para pedir o "ok". Não escrever "validado" com base nos logs.
+- 02c: validação visual EM CURSO (2026-11-20): a pedido do humano, nested aberto com 2 `foot` (PID `34757`,
+  socket `wayland-aero-vis5-34753`, log `/tmp/opencode/aero-vis5.log`) para ele julgar o atraso no arrasto a olho nu.
+  Aguardando o relato; NÃO escrever "validado" sem o "ok" do humano. Quem fecha a instância é o humano.
 - 02c: desempenho em GPU real (VM sem 3D); 3 execuções seguidas com a LOW final (a métrica foi reprocessada de 3
   execuções históricas, uma por variante — não são 3 repetições da mesma variante).
 - Nenhuma validação visual pendente de 02b: validada pelo humano em 2026-11-20 (registro em §3). Demais itens visuais
@@ -151,8 +152,9 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
 - O que funcionou: `send_frame_configure` no `ResizeGrab::motion` reduziu o lag p95 de 177,22 → 127,19 ms;
   instrumentação bench + `frame_resize_sync.py` medem o sintoma; 4 testes vizinhos OK; gate verde.
 - Comando exato: `python3 tests/integration/frame_resize_sync.py` → `VEREDITO: FALHA` (`13/14` pendentes, p95 127 ms).
-- Próximo passo imediato (uma ação): pedir DECISÃO ao humano entre Plano B (ADR novo), redefinir o critério para
-  p95 ≤ 300 ms, ou manter parcial. NÃO tentar terceira abordagem nem abrir validação visual sem essa decisão.
+- Decisão do humano (2026-11-20): "Manter parcial, cartão novo" → cartão rascunho `02d-frame-resize-diagnostico.md`.
+- Próximo passo imediato (uma ação): aguardar o relato visual do humano na instância aberta (PID `34757`) e registrar
+  o veredito; NÃO executar 02d nem tentar terceira abordagem sem autorização.
 - Descobertas laterais em §6: arredondamento do foot (métrica corrigida), timer 1 ms sem ganho (revertido),
   `frame_resize_edges.py` intermitente, flake do S1, reatribuição de `window_id`.
  
