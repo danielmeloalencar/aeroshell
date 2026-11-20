@@ -67,8 +67,14 @@ impl CompositorHandler for AeroState {
                 (w + geo.extra_w(), h + geo.extra_h())
             });
             let ok = committed.is_some() && committed == expected;
+            let t_nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0);
+            // `t` vai no FIM para preservar o prefixo que os harnesses antigos
+            // procuram (`FRAME_BUFFER_COMMIT buffer=...`).
             eprintln!(
-                "FRAME_BUFFER_COMMIT buffer={:?} expected={:?} ok={ok}",
+                "FRAME_BUFFER_COMMIT buffer={:?} expected={:?} ok={ok} t={t_nanos}",
                 committed, expected
             );
         }
@@ -189,15 +195,21 @@ impl CompositorHandler for AeroState {
                     .find(|(_, _, _, cs)| cs.as_ref() == Some(&root))
                     .map(|(s, _, id, _)| (s.clone(), *id));
                 if let Some((frame_surface, window_id)) = assoc {
-                    if let Some(content) = self.client_content_size(window_id) {
-                        if self.frame_configured_content.get(&frame_surface) != Some(&content) {
-                            tracing::info!(
-                                bbox = ?window.bbox(),
-                                geometry = ?window.geometry(),
-                                elem_geo = ?self.space.element_geometry(&window),
-                                "geometria real do cliente (bbox vs window geometry)"
-                            );
-                            self.send_frame_configure(window_id, content);
+                    // 02f: durante o resize quem decide o tamanho da decoração é
+                    // o grab. Reconfigurar aqui com o conteúdo ATRASADO do cliente
+                    // brigava com o alvo do ponteiro (medido: 12 configures
+                    // source=commit em 14 motions).
+                    if self.resize_grab_active.is_none() {
+                        if let Some(content) = self.client_content_size(window_id) {
+                            if self.frame_configured_content.get(&frame_surface) != Some(&content) {
+                                tracing::info!(
+                                    bbox = ?window.bbox(),
+                                    geometry = ?window.geometry(),
+                                    elem_geo = ?self.space.element_geometry(&window),
+                                    "geometria real do cliente (bbox vs window geometry)"
+                                );
+                                self.send_frame_configure(window_id, content, "commit");
+                            }
                         }
                     }
                 }

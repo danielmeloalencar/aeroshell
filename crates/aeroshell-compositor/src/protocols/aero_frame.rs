@@ -56,7 +56,12 @@ impl AeroState {
     /// da layer surface do frame com o total (conteúdo + insets + shadow).
     /// O shell dimensiona a janela GTK a partir do configure (a lib C do
     /// gtk4-layer-shell ignora o tamanho do zwlr configure em eixos não esticados).
-    pub fn send_frame_configure(&mut self, window_id: u32, content: (i32, i32)) {
+    pub fn send_frame_configure(
+        &mut self,
+        window_id: u32,
+        content: (i32, i32),
+        _source: &'static str,
+    ) {
         let Some((frame_surface, frame, _, _)) = self
             .associated_frames
             .iter()
@@ -98,6 +103,18 @@ impl AeroState {
             total_h = total.1,
             "frame configure (conteúdo do cliente)"
         );
+        #[cfg(feature = "bench")]
+        {
+            let t_nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0);
+            eprintln!(
+                "FRAME_CONFIGURE t={t_nanos} serial={serial} window_id={window_id} \
+                 w={} h={} source={_source}",
+                content.0, content.1
+            );
+        }
     }
 
     /// Tamanho de conteúdo real da janela cliente, se já mapeada e com buffer.
@@ -306,7 +323,11 @@ impl Dispatch<AeroFrameManagerV1, ()> for AeroState {
                 {
                     let real = state.client_content_size(window_id);
                     if real.is_some() || pending_cmd.is_none() {
-                        state.send_frame_configure(window_id, real.unwrap_or((size.w, size.h)));
+                        state.send_frame_configure(
+                            window_id,
+                            real.unwrap_or((size.w, size.h)),
+                            "probe",
+                        );
                     }
                 }
                 // Só sob `bench`: quantos passos de resize sintéticos enviar de uma
@@ -336,8 +357,13 @@ impl Dispatch<AeroFrameManagerV1, ()> for AeroState {
                             committed: false,
                             timeout_logged: false,
                         });
+                        let t_nanos = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_nanos())
+                            .unwrap_or(0);
                         eprintln!(
-                            "FRAME_CONFIGURE serial={serial} window_id={window_id} w={w} h={h}"
+                            "FRAME_CONFIGURE t={t_nanos} serial={serial} window_id={window_id} \
+                             w={w} h={h} source=probe"
                         );
                     }
                 }
@@ -446,8 +472,13 @@ impl Dispatch<AeroFrameV1, u32> for AeroState {
                     probe.configured_at = configured_at;
                     probe.acked = false;
                     probe.timeout_logged = false;
+                    let t_nanos = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_nanos())
+                        .unwrap_or(0);
                     eprintln!(
-                        "FRAME_CONFIGURE serial={next_serial} window_id={window_id} w={w} h={h}"
+                        "FRAME_CONFIGURE t={t_nanos} serial={next_serial} window_id={window_id} \
+                         w={w} h={h} source=probe"
                     );
                 }
             }

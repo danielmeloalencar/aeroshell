@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-20 · tarefa ativa: 02f (cartão aberto; aguarda ok para executar) · 02e permanece parcial (juiz visual negativo) · modo: SPIKE
+Última atualização: 2026-11-20 · tarefa ativa: 02f (código + teste + gate prontos; aguarda juiz visual) · 02e permanece parcial · modo: SPIKE
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -125,11 +125,29 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   `cargo clippy --workspace --all-targets --features bench -- -D warnings` → EXIT=0.
 - [x] 02e (ADR aditivo): `docs/adr/0006-frame-resize-composicao-elastica.md` com causa raiz (pipeline WebKit),
   decisão, alternativas preteridas e gatilhos de reavaliação. Nenhum ADR aceito editado.
+- [x] 02f (teste escrito ANTES, visto falhando): `tests/integration/frame_configure_hygiene.py` sem instrumentação →
+  `FALHA: nenhuma linha FRAME_CONFIGURE; configure do cliente 0 != motions 14; final configs=0`
+  (`/tmp/opencode/02f_hygiene_baseline_sem_instr.log`). Com instrumentação e SEM mudança de comportamento →
+  `configures/motions=1,857` (26/14: 14 `source=grab` + 12 `source=commit`), `VEREDITO: FALHA`
+  (`/tmp/opencode/02f_hygiene_baseline2.log`); outra amostra `2,000` (`..._baseline_instrumentado.log`).
+- [x] 02f (código): `grab.rs` — `ResizeGrab.last_sent_size`/`last_sent_at` + `FRAME_CONFIGURE_DEBOUNCE` 200 ms;
+  configure do cliente em TODOS os motions; `unset` reabilita o commit-hook e envia UM configure `source=final`
+  com `client_content_size()`. `state.rs` — `resize_grab_active: Option<u32>`; `compositor.rs:195-215` —
+  commit-hook calado durante o grab. `aero_frame.rs` — `FRAME_CONFIGURE ... source=` sob `bench`.
+- [x] 02f (prova, 3 execuções seguidas com o código final, nenhuma amostra descartada):
+  `/tmp/opencode/02f_hygiene_finalcode{1,2,3}.log` → todas `VEREDITO: OK`; `motions=14`,
+  `frame_configures=4` (razão **0,286** ≤ 1/3, só `source=grab`), `client_configures=14`,
+  `finals=1` com `w,h=(834,494)` = último commit real, `glue_colados=44/31/37`, `buffers_ok=2/2/3`.
+- [x] 02f (vizinhos): `frame_resize_glue.py` → `VEREDITO: OK` em 3 execuções seguidas
+  (`02f_glue_fixed{1,2,3}.log`); `frame_resize_edges`, `frame_follows_resize`, `frame_buttons`,
+  `frame_window_id` → 4× OK; `frame_resize_sync.py` → `VEREDITO: FALHA` (métrica antiga, inalterada).
+- [x] 02f (gate): `bash scripts/check.sh` → `OK: scripts/check.sh passou` (EXIT=0, bun 9 pass / 0 fail,
+  `/tmp/opencode/02f_check_final2.log`); `cargo clippy --workspace --all-targets --features bench -- -D warnings`
+  → EXIT=0 (`02f_clippy_bench_final2.log`). Nenhum arquivo protegido alterado, nenhuma dependência nova,
+  nenhum `unsafe`/`#[allow]`/`unwrap` novo.
 ## 4. Em andamento
-- 02f AUTORIZADA (2026-11-20, "ok" do humano após escolher entre 02f e 9-slice): cartão criado em
-  `docs/tasks/02f-higiene-configures.md`, aguarda o ok para EXECUTAR. Motivo medido: no arrasto real do juiz,
-  os seriais de frame configure foram 1→92 em um único gesto (§7) — hipótese de "configure storm" competindo
-  com o commit-hook de `compositor.rs:192-200`, que puxa a moldura de volta ao tamanho atrasado do conteúdo.
+- 02f EM ANDAMENTO: código, teste, 3 repetições, vizinhos e gate prontos (§3). **Falta o juiz visual** (critério 5
+  do cartão). Instância será aberta com 2 `foot`; sem o "ok" do humano, 02f fica em §7 como não validada.
 - 02e PERMANECE PARCIAL/NÃO CONCLUÍDA: juiz visual relatou "atraso menor, porém ainda feio; a moldura chega
   atrasada". Código/teste/ADR/gate verdes não bastam. Instância `wayland-aero-02e` (PID 63221) foi encerrada
   pelo humano, não pelo agente. NÃO reabrir 02e sem novo pedido.
@@ -137,9 +155,8 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (ordem autorizada pelo humano em 2026-11-20; abrir cartão antes de executar)
-1. `02f` — CARTÃO CRIADO (`docs/tasks/02f-higiene-configures.md`), aguarda ok para executar: higiene dos
-   configures (compositor); `last_sent_size`/`last_sent_at` no grab, pular configure no commit-hook durante
-   grab, um configure final com o tamanho real ao soltar.
+1. `02f` — CARTÃO EM EXECUÇÃO (`docs/tasks/02f-higiene-configures.md`): implementado; falta SOMENTE o juiz visual.
+   Depois do "ok", fechar 02f e PARAR — 9-slice só com autorização nova.
 2. `02g` — shell: fonte de fd GLib no `wl_display` mantendo timer de segurança de 50 ms; limite 1 h, reverter se piorar.
 3. `02h` — medições de ambiente VM (sem mudança de código): baseline / Skia CPU / GSK cairo / b+c, 3 repetições.
 4. `02i` — correções de documentação (somente docs): presentation-time, background_effect, WPE, cartões 02c/02d, F1.
@@ -233,7 +250,28 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
 - 02e (gate de partida): `bash scripts/check.sh` falhou no clippy com `unused variable: window_id` em `winit.rs:195`
   porque a variável só era lida sob `cfg(feature="bench")`. Corrigido renomeando para `_window_id`, sem `allow`
   nem desligar checagem; gate e clippy `--features bench` verdes depois.
+- 02f (amostra ruim de infraestrutura, registrada e não descartada): 3 execuções do `frame_resize_glue.py` falharam
+  com `FALHA: frame WebView não commitou buffer inicial` (`/tmp/opencode/02f_glue_after{1,2,3}.log`) porque a
+  instrumentação nova pôs `t=` no início de `FRAME_BUFFER_COMMIT` e o regex antigo exige o prefixo
+  `FRAME_BUFFER_COMMIT buffer=`. Corrigido movendo `t` para o FIM da linha (nenhum parser antigo muda); as 3
+  execuções seguintes ficaram OK. Não foi flake nem problema do produto.
+- 02f (erro de medição do teste novo, corrigido): a 1ª versão registrava `t_release` DEPOIS do `sleep(0,1)` do
+  `send("button release")`, classificando o configure `source=final` como "durante o grab"
+  (`/tmp/opencode/02f_step3_test.log`: `configures/motions=0,357`, `finals=0`). O instante passou a ser logo após
+  o `sendall`; amostra crua preservada.
+- 02f (gate de partida): `bash scripts/check.sh` falhou com `unused variable: source` em `aero_frame.rs:63` porque
+  o valor só era lido sob `cfg(feature="bench")`. Renomeado para `_source` (mesmo padrão de `_window_id` na 02e),
+  sem `#[allow]`; gate e clippy `--features bench` verdes depois.
+- 02f (REGRADO PELO HUMANO nesta sessão): "nos testes considere que a decoração aparece 1 ou 2 segundos depois que
+  a janela abre". O teste novo agora espera 2,0 s depois do primeiro `FRAME_BUFFER_COMMIT` antes de arrastar.
+  Outros harnesses (`frame_resize_glue.py`, `frame_resize_sync.py`) ainda não têm essa espera explícita — não
+  alterados aqui para preservar a evidência da 02e; adotar em tarefa futura se aparecer falsa falha.
 ## 7. Não medido / não validado (não trate como fato)
+- 02f: JUIZ VISUAL PENDENTE. O pré-filtro medial (razão 0,286, 14/14 configures no cliente, final no tamanho real)
+  NÃO prova que a moldura deixou de chegar atrasada na tela — a mesma lacuna da 02e. Humano deve arrastar borda
+  direita e canto inferior-direito, lento e rápido, em 2 `foot`. Sem o "ok", 02f NÃO está concluída.
+- 02f: nenhuma conclusão de desempenho — VM sem 3D; GPU real não medida. O debounce de 200 ms foi escolhido para
+  satisfazer a razão ≤1/3; o juiz visual decide se a cadência ficou suave.
 - 02e: JUIZ VISUAL NEGATIVO/PARCIAL (2026-11-20, instância `wayland-aero-02e`, PID 63221 deixada aberta):
   humano: **"o atraso está menor, porém ainda feio. Não está natural suave como Windows, GNOME, etc."**
   Ou seja: a colagem espacial melhorou, mas a QUALIDADE VISUAL do arrasto não passou. o "ok" NÃO foi dado;
@@ -275,13 +313,16 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- O que eu estava fazendo: transição 02e→02f. Humano escolheu 02f ("ok"); cartão criado, aguardando ok para executar.
-- Gate de partida desta sessão: `bash scripts/check.sh` → EXIT=0, `OK: scripts/check.sh passou`, bun 9 pass/0 fail;
-  `git status --short` vazio; HEAD `9cd4984`. Nenhuma mudança de código feita ainda em 02f.
-- 02e continua NÃO concluída (juiz visual negativo, §7); instância `wayland-aero-02e` encerrada pelo humano.
-- Próximo passo imediato (uma ação): receber o ok do cartão `docs/tasks/02f-higiene-configures.md` e começar
-  pelo TESTEbench (`frame_configure_hygiene.py`), mostrando-o falhar antes de instrumentar/alterar o compositor.
-- NÃO executar 02d, 02g, 02h, 02i, 05 nem 9-slice sem autorização explícita. NÃO reabrir 02e.
-- Descobertas laterais em §6: `list` mudou na tarefa 03 (parsers corrigidos), amostra com `buffer=None`,
-  `window_id` sob `cfg(bench)`, IPC sem eventos, arredondamento do foot, timer 1 ms sem ganho.
+- O que eu estava fazendo: 02f com código/teste/3 repetições/gate prontos; instância de validação visual será aberta
+  com 2 `foot`. Não encerrar o processo — quem fecha é o humano.
+- O que funcionou: `python3 tests/integration/frame_configure_hygiene.py` → `VEREDITO: OK` 3× seguidas (razão 0,286;
+  14/14 configures no cliente; 1 final no tamanho real); glue 3× OK; 4 vizinhos OK; `frame_resize_sync.py` FALHO;
+  `bash scripts/check.sh` verde; clippy `--features bench` EXIT=0.
+- Comando exato da instância (após `cargo build --workspace --examples`):
+  `env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET -u AERO_PRIVILEGED_FD LD_PRELOAD=libgtk4-layer-shell.so.0 nohup target/debug/aeroshell-compositor --backend winit --socket wayland-aero-02f --shell target/debug/examples/frame_webview --shell-env LD_PRELOAD=libgtk4-layer-shell.so.0 --command 'foot & foot' > /tmp/opencode/aero-02f-visual.log 2>&1 &`
+- Próximo passo imediato (uma ação): receber o "ok" visual do humano, registrar em §3/§7, comitar o desfecho e PARAR.
+  Sem o "ok", manter 02f como parcial — NÃO reabrir 02e nem iniciar 9-slice.
+- NÃO executar 02d, 02g, 02h, 02i, 05 nem 9-slice sem autorização explícita.
+- Descobertas laterais em §6: formato de `FRAME_BUFFER_COMMIT` (3 glue FALHAS preservadas), erro de `t_release`,
+  `source` sob `cfg(bench)`, regra do humano sobre a decoração aparecer 1–2 s depois, `list` da tarefa 03.
  

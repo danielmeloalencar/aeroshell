@@ -118,6 +118,10 @@ pub struct AeroState {
     pub frame_commit_samples: Vec<(u32, f64)>,
     /// Último serial de botão recebido (validação de move/resize).
     pub last_button_serial: Option<u32>,
+    /// window_id sob resize ativo. O commit-hook não reconfigura a decoração
+    /// enquanto o grab decide o tamanho: reenviar o tamanho atrasado do cliente
+    /// "puxa" a moldura para trás e gera um storm de configures (02f).
+    pub resize_grab_active: Option<u32>,
 
     /// Última ação de geometry para medir latência até o frame atualizado.
     pub last_geometry_action: Option<(String, std::time::Instant)>,
@@ -229,6 +233,7 @@ impl AeroState {
             #[cfg(feature = "bench")]
             frame_commit_samples: Vec::new(),
             last_button_serial: None,
+            resize_grab_active: None,
             shell_manager: None,
             window_surfaces: HashMap::new(),
             frame_geometries: HashMap::new(),

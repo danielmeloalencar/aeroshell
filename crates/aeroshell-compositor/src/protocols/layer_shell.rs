@@ -66,7 +66,7 @@ impl WlrLayerShellHandler for AeroState {
             // commit do cliente — evita um frame no tamanho cheio do output.
             self.frame_layer_surfaces.push(layer);
             if let Some(content) = self.client_content_size(window_id) {
-                self.send_frame_configure(window_id, content);
+                self.send_frame_configure(window_id, content, "layer");
                 tracing::info!(
                     window_id,
                     "frame layer_surface: duplo configure, FORA do LayerMap"

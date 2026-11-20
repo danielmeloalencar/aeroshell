@@ -16,8 +16,14 @@ use smithay::{
 
 use crate::{aero_frame_protocol::aero_frame_v1::ResizeEdge, state::AeroState};
 
+use std::time::{Duration, Instant};
+
 const MIN_W: i32 = 120;
 const MIN_H: i32 = 80;
+/// 02f: intervalo mínimo entre configures da decoração durante o resize.
+/// 200 ms satisfaz o limite de 150 ms e mantém 4 configures em 14 passos de
+/// 50 ms (razão 0,29 <= 1/3). O cliente continua sendo configurado a cada motion.
+const FRAME_CONFIGURE_DEBOUNCE: Duration = Duration::from_millis(200);
 
 pub struct MoveGrab {
     window: Window,
@@ -181,6 +187,9 @@ pub struct ResizeGrab {
     edges: ResizeEdge,
     initial_loc: Point<i32, Logical>,
     initial_size: Size<i32, Logical>,
+    /// 02f: evita inundar o WebKit com configures de tamanhos já obsoletos.
+    last_sent_size: Option<(i32, i32)>,
+    last_sent_at: Option<Instant>,
 }
 
 impl ResizeGrab {
@@ -197,6 +206,8 @@ impl ResizeGrab {
             edges,
             initial_loc,
             initial_size,
+            last_sent_size: None,
+            last_sent_at: None,
         }
     }
 }
@@ -261,14 +272,33 @@ impl PointerGrab<AeroState> for ResizeGrab {
             );
         }
         // 02c: conteúdo e decoração recebem o configure no MESMO passo do grab.
-        // Esperar o commit do cliente acrescentava um ciclo inteiro e fazia a
-        // barra "correr atrás" (14/14 passos pendentes antes desta mudança).
+        // 02f: a DECORAÇÃO é enviada só quando o alvo mudou e o debounce expirou;
+        // o configure do cliente (abaixo) continua em TODOS os motions.
         if let Some(window_id) = window_id {
-            data.send_frame_configure(window_id, (size.w, size.h));
+            let requested = (size.w, size.h);
+            let elapsed = self.last_sent_at.map(|at| at.elapsed());
+            if self.last_sent_size != Some(requested)
+                && elapsed.is_none_or(|d| d >= FRAME_CONFIGURE_DEBOUNCE)
+            {
+                data.send_frame_configure(window_id, requested, "grab");
+                self.last_sent_size = Some(requested);
+                self.last_sent_at = Some(Instant::now());
+            }
         }
         if let Some(toplevel) = self.window.toplevel() {
             toplevel.with_pending_state(|state| state.size = Some(size));
             toplevel.send_configure();
+            #[cfg(feature = "bench")]
+            {
+                let t_nanos = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_nanos())
+                    .unwrap_or(0);
+                eprintln!(
+                    "RESIZE_SYNC_CLIENT_CONFIGURE t={t_nanos} window_id={:?} w={} h={}",
+                    window_id, size.w, size.h
+                );
+            }
         }
         data.space.map_element(self.window.clone(), loc, false);
         handle.motion(data, None, event);
@@ -390,7 +420,24 @@ impl PointerGrab<AeroState> for ResizeGrab {
         &self.start_data
     }
 
-    fn unset(&mut self, _data: &mut AeroState) {}
+    fn unset(&mut self, data: &mut AeroState) {
+        // 02f: reabilita o commit-hook e fecha o resize com UM configure no
+        // tamanho REAL que o cliente tem neste instante. O throttle do grab
+        // manda o alvo do ponteiro; o release manda o que foi de fato comitado.
+        let window_id = self.window.toplevel().and_then(|toplevel| {
+            let surface = toplevel.wl_surface();
+            data.associated_frames
+                .iter()
+                .find(|(_, _, _, cs)| cs.as_ref() == Some(surface))
+                .map(|(_, _, id, _)| *id)
+        });
+        data.resize_grab_active = None;
+        if let Some(window_id) = window_id {
+            if let Some(content) = data.client_content_size(window_id) {
+                data.send_frame_configure(window_id, content, "final");
+            }
+        }
+    }
 }
 
 /// Inicia o grab de move/resize para a janela cliente associada ao window_id.
@@ -430,6 +477,7 @@ pub fn start_geometry_grab(
                 .element_geometry(&window)
                 .map(|g| g.size)
                 .unwrap_or((320, 240).into());
+            state.resize_grab_active = Some(window_id);
             let grab = ResizeGrab::new(window, start_data, edges, loc, size);
             pointer.set_grab(state, grab, serial, Focus::Clear);
         }
