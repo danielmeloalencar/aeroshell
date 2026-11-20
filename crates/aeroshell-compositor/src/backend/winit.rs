@@ -7,8 +7,9 @@ use smithay::{
         renderer::{
             damage::OutputDamageTracker,
             element::{
-                surface::WaylandSurfaceRenderElement, utils::RescaleRenderElement,
-                AsRenderElements, Kind,
+                surface::WaylandSurfaceRenderElement,
+                utils::{CropRenderElement, Relocate, RelocateRenderElement, RescaleRenderElement},
+                AsRenderElements, Element, Kind,
             },
             gles::GlesRenderer,
             ImportAll, ImportMem,
@@ -29,10 +30,22 @@ use crate::{cli::Options, CalloopData};
 
 // Padrão anvil v0.7.0 (anvil/src/render.rs): um enum cobre o elemento normal e
 // o elemento reescalado. Fonte: docs.rs/smithay/0.7.0/.../macro.render_elements.html
+//
+// 02k: `Slice` é uma fatia do 9-slice. A ordem dos wrappers é
+// Relocate<Rescale<Crop<E>>>: o Crop INTERNO ajusta `src()` para a fatia do
+// buffer (elements.rs:157-172); o Rescale muda só a geometria (dst); o Relocate
+// reposiciona. Se o Crop fosse externo, ele recalcularia `src()` usando a
+// geometria já escalada e amostraria o buffer inteiro dentro da fatia.
+type FrameSlice<R> =
+    RelocateRenderElement<RescaleRenderElement<CropRenderElement<WaylandSurfaceRenderElement<R>>>>;
+type SliceRect = smithay::utils::Rectangle<i32, smithay::utils::Physical>;
+type SlicePoint = smithay::utils::Point<i32, smithay::utils::Physical>;
+
 smithay::backend::renderer::element::render_elements! {
     pub AeroRenderElements<R> where R: ImportAll + ImportMem;
     Surface = WaylandSurfaceRenderElement<R>,
     Rescaled = RescaleRenderElement<WaylandSurfaceRenderElement<R>>,
+    Slice = FrameSlice<R>,
 }
 
 pub struct WinitBackend;
@@ -236,6 +249,28 @@ pub fn init_winit(
                                                 let rescaled = buffer.w > 0
                                                     && buffer.h > 0
                                                     && (buffer.w != target.w || buffer.h != target.h);
+                                                // 02k: linhas de corte = insets do frame (state.rs:36-56).
+                                                // `shadow` é 0 nesta fase; se passar a existir,
+                                                // entra nas fatias externas.
+                                                let es = UtilsScale::from(output_scale);
+                                                let elem_geo = el.geometry(es);
+                                                let origin = elem_geo.loc;
+                                                let buf_phys = elem_geo.size;
+                                                let dst_phys: smithay::utils::Size<i32, smithay::utils::Physical> =
+                                                    target.to_physical_precise_round(output_scale);
+                                                let l = (fgeo.insets.0 as f64 * output_scale).round() as i32;
+                                                let t = (fgeo.insets.1 as f64 * output_scale).round() as i32;
+                                                let r = (fgeo.insets.2 as f64 * output_scale).round() as i32;
+                                                let b = (fgeo.insets.3 as f64 * output_scale).round() as i32;
+                                                let src_mid_w = (buf_phys.w - l - r).max(1);
+                                                let src_mid_h = (buf_phys.h - t - b).max(1);
+                                                let dst_mid_w = (dst_phys.w - l - r).max(1);
+                                                let dst_mid_h = (dst_phys.h - t - b).max(1);
+                                                // Só o interior estica: cantos fixos, laterais
+                                                // esticam em Y, topo/base esticam em X.
+                                                let slice_sx = dst_mid_w as f64 / src_mid_w as f64;
+                                                let slice_sy = dst_mid_h as f64 / src_mid_h as f64;
+                                                let delta = SlicePoint::new(loc.x - origin.x, loc.y - origin.y);
                                                 #[cfg(feature = "bench")]
                                                 {
                                                     let t_nanos = std::time::SystemTime::now()
@@ -261,15 +296,94 @@ pub fn init_winit(
                                                         std::time::Instant::now(),
                                                         crate::frame_diagnostics::now_ns(),
                                                     );
+                                                    // 02k: com 9-slice as fatias fixas mantêm os insets
+                                                    // exatos (escala 1 no eixo fixo); as demais
+                                                    // esticam só no eixo livre.
+                                                    let (sx, sy) = if rescaled {
+                                                        (slice_sx, slice_sy)
+                                                    } else {
+                                                        (1.0, 1.0)
+                                                    };
+                                                    eprintln!(
+                                                        "RESIZE_SLICE t={t_nanos} window_id={_window_id} \
+                                                         buf={}x{} target={}x{} rescaled={rescaled} \
+                                                         insets={},{},{},{} edge_l={} \
+                                                         edge_r={} title_h={} \
+                                                         slice_scale_x={sx:.4} slice_scale_y={sy:.4}",
+                                                        buffer.w, buffer.h, target.w, target.h,
+                                                        fgeo.insets.0, fgeo.insets.1,
+                                                        fgeo.insets.2, fgeo.insets.3,
+                                                        fgeo.insets.0, fgeo.insets.2, fgeo.insets.1,
+                                                    );
                                                 }
                                                 if rescaled {
-                                                    let scale = UtilsScale::from((
-                                                        target.w as f64 / buffer.w as f64,
-                                                        target.h as f64 / buffer.h as f64,
-                                                    ));
-                                                    elements.push(AeroRenderElements::Rescaled(
-                                                        RescaleRenderElement::from_element(el, loc, scale),
-                                                    ));
+                                                    let x0 = origin.x;
+                                                    let y0 = origin.y;
+                                                    let x1 = x0 + l;
+                                                    let y1 = y0 + t;
+                                                    let x2 = x0 + buf_phys.w - r;
+                                                    let y2 = y0 + buf_phys.h - b;
+                                                    let rect = |x: i32, y: i32, w: i32, h: i32| {
+                                                        SliceRect::new(SlicePoint::new(x, y), (w, h).into())
+                                                    };
+                                                    // (crop na origem, âncora do rescale, escala)
+                                                    let specs: [(
+                                                        SliceRect,
+                                                        SlicePoint,
+                                                        (f64, f64),
+                                                    ); 9] = [
+                                                        // 4 cantos: sem escala.
+                                                        (rect(x0, y0, l, t), SlicePoint::new(x0, y0), (1.0, 1.0)),
+                                                        (rect(x2, y0, r, t), SlicePoint::new(x2, y0), (1.0, 1.0)),
+                                                        (rect(x0, y2, l, b), SlicePoint::new(x0, y2), (1.0, 1.0)),
+                                                        (rect(x2, y2, r, b), SlicePoint::new(x2, y2), (1.0, 1.0)),
+                                                        // left/right: largura fixa, altura estica.
+                                                        (rect(x0, y1, l, src_mid_h), SlicePoint::new(x0, y1), (1.0, slice_sy)),
+                                                        (rect(x2, y1, r, src_mid_h), SlicePoint::new(x2, y1), (1.0, slice_sy)),
+                                                        // titlebar/base: altura fixa, largura estica.
+                                                        (rect(x1, y0, src_mid_w, t), SlicePoint::new(x1, y0), (slice_sx, 1.0)),
+                                                        (rect(x1, y2, src_mid_w, b), SlicePoint::new(x1, y2), (slice_sx, 1.0)),
+                                                        // centro (transparente sob o cliente).
+                                                        (rect(x1, y1, src_mid_w, src_mid_h), SlicePoint::new(x1, y1), (slice_sx, slice_sy)),
+                                                    ];
+                                                    #[cfg(feature = "bench")]
+                                                    let before = elements.len();
+                                                    for (crop, anchor, (sxa, sya)) in specs {
+                                                        let slice = with_states(frame_surface, |states| {
+                                                            WaylandSurfaceRenderElement::from_surface(
+                                                                renderer, frame_surface, states, f,
+                                                                1.0, Kind::Unspecified,
+                                                            )
+                                                        });
+                                                        let Ok(Some(slice)) = slice else {
+                                                            continue;
+                                                        };
+                                                        let Some(cropped) =
+                                                            CropRenderElement::from_element(slice, es, crop)
+                                                        else {
+                                                            continue;
+                                                        };
+                                                        let scaled = RescaleRenderElement::from_element(
+                                                            cropped, anchor, UtilsScale::from((sxa, sya)),
+                                                        );
+                                                        let moved = RelocateRenderElement::from_element(
+                                                            scaled, delta, Relocate::Relative,
+                                                        );
+                                                        elements.push(AeroRenderElements::Slice(moved));
+                                                    }
+                                                    #[cfg(feature = "bench")]
+                                                    {
+                                                        let composed = elements.len() - before;
+                                                        let t_nanos = std::time::SystemTime::now()
+                                                            .duration_since(std::time::UNIX_EPOCH)
+                                                            .map(|d| d.as_nanos())
+                                                            .unwrap_or(0);
+                                                        eprintln!(
+                                                            "SLICE_COMPOSE t={t_nanos} window_id={_window_id} \
+                                                             n={composed} buf={}x{} target={}x{}",
+                                                            buffer.w, buffer.h, target.w, target.h,
+                                                        );
+                                                    }
                                                 } else {
                                                     elements.push(AeroRenderElements::Surface(el));
                                                 }

@@ -33,6 +33,13 @@ STEP_PX = 10
 MOTION_DELAY = 0.05
 SETTLE_MS = 500
 TOL = 1
+# 02k: a espessura renderizada das fatias fixas tem de bater com os insets.
+# 0,25 px aceita arredondamento de raster, mas detecta a variação medida no
+# baseline (edge_l de 6,05 a 6,36 px com insets=6).
+EDGE_TOL = 0.25
+# 02k: passo do gesto é 10 px sobre ~500 px de altura => d(escala) ~= 0,02.
+# 0,05 aceita a variação normal do arrasto e detecta um snap de 0,1 ou mais.
+SNAP_LIMIT = 0.05
 
 for orphan in (f"/run/user/1000/{SOCK}", INPUT_SOCK):
     if os.path.exists(orphan):
@@ -121,9 +128,11 @@ INSETS = (6, 30, 6, 6)
 content_origin = (60, 80)
 frame_origin = (content_origin[0] - INSETS[0], content_origin[1] - INSETS[1])
 total = (config[0] + extras[0], config[1] + extras[1])
+# 02k: arrastar o CANTO inferior direito para medir borda (X) e titlebar (Y)
+# no mesmo gesto. O baseline 02e só variava X, deixando title_h sem medição.
 edge_x = frame_origin[0] + total[0] - 3
-mid_y = frame_origin[1] + total[1] // 2
-print(f"conteudo_inicial={config[:2]} extras={extras} total={total} borda_direita=({edge_x},{mid_y})")
+edge_y = frame_origin[1] + total[1] - 3
+print(f"conteudo_inicial={config[:2]} extras={extras} total={total} canto=({edge_x},{edge_y})")
 print(f"parametros: passos={STEPS} delta={STEP_PX}px delay={MOTION_DELAY:.3f}s settle={SETTLE_MS}ms")
 
 s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -135,10 +144,10 @@ def send(line, delay=MOTION_DELAY):
     time.sleep(delay)
 
 
-send(f"motion {edge_x} {mid_y}")
+send(f"motion {edge_x} {edge_y}")
 send("button press", 0.1)
 for i in range(STEPS):
-    send(f"motion {edge_x + (i + 1) * STEP_PX} {mid_y}")
+    send(f"motion {edge_x + (i + 1) * STEP_PX} {edge_y + (i + 1) * STEP_PX}")
 send("button release", 0.1)
 release_ns = time.time_ns()
 time.sleep(1.2)
@@ -198,12 +207,120 @@ elif not ok_settle:
     problems.append(f"após soltar: nenhuma linha com buffer==target e rescaled=false")
 
 print(f"durante_grab={len(during)} apos_soltar={len(settled)} colados={len(ok_settle)}")
+
+# --- 02k: espessura das fatias fixas e ausência de snap -------------------
+# O compositor (bench) emite uma linha por frame renderizado com o frame
+# associado. Nenhuma amostra é descartada em silêncio: linhas malformadas
+# são contabilizadas e impressas.
+SLICE_RE = re.compile(
+    r"RESIZE_SLICE t=(\d+) window_id=(\d+) buf=(\d+)x(\d+) "
+    r"target=(\d+)x(\d+) rescaled=(true|false) "
+    r"insets=(\d+),(\d+),(\d+),(\d+) "
+    r"edge_l=([0-9.]+) edge_r=([0-9.]+) title_h=([0-9.]+) "
+    r"slice_scale_x=([0-9.]+) slice_scale_y=([0-9.]+)"
+)
+
+slices = []
+malformed_slices = []
+for l in text.splitlines():
+    if "RESIZE_SLICE " not in l:
+        continue
+    m = SLICE_RE.search(l)
+    if not m:
+        malformed_slices.append(l)
+        continue
+    g = m.groups()
+    slices.append({
+        "t": int(g[0]), "wid": int(g[1]),
+        "buf": (int(g[2]), int(g[3])), "target": (int(g[4]), int(g[5])),
+        "rescaled": g[6] == "true",
+        "insets": tuple(int(x) for x in g[7:11]),
+        "edge_l": float(g[11]), "edge_r": float(g[12]), "title_h": float(g[13]),
+        "sx": float(g[14]), "sy": float(g[15]), "raw": l,
+    })
+
+slice_during = [s for s in slices if s["t"] < release_ns and s["rescaled"]]
+print(f"\nlinhas RESIZE_SLICE={len(slices)} malformadas={len(malformed_slices)} "
+      f"durante_grab={len(slice_during)}")
+if malformed_slices:
+    print("exemplos SLICE malformados: " + repr(malformed_slices[:3]))
+if slices:
+    print("--- trecho cru das fatias (primeiras e últimas 8) ---")
+    print("\n".join(s["raw"] for s in slices[:8]))
+    print("...")
+    print("\n".join(s["raw"] for s in slices[-8:]))
+
+if not slices:
+    problems.append("nenhuma linha RESIZE_SLICE (instrumentação 02k ausente?)")
+elif not slice_during:
+    problems.append("nenhuma linha RESIZE_SLICE com rescaled=true durante o grab")
+else:
+    def faixa(campo):
+        vals = [s[campo] for s in slice_during]
+        return f"[{min(vals):.2f},{max(vals):.2f}]"
+
+    print(f"faixas: edge_l={faixa('edge_l')} edge_r={faixa('edge_r')} "
+          f"title_h={faixa('title_h')} insets={slice_during[0]['insets']} "
+          f"(tolerancia={EDGE_TOL})")
+    edge_bad = []
+    for s in slice_during:
+        want_l, want_t, want_r = s["insets"][0], s["insets"][1], s["insets"][2]
+        if abs(s["edge_l"] - want_l) > EDGE_TOL:
+            edge_bad.append(f"t={s['t']} edge_l={s['edge_l']:.2f}!={want_l}")
+        if abs(s["edge_r"] - want_r) > EDGE_TOL:
+            edge_bad.append(f"t={s['t']} edge_r={s['edge_r']:.2f}!={want_r}")
+        if abs(s["title_h"] - want_t) > EDGE_TOL:
+            edge_bad.append(f"t={s['t']} title_h={s['title_h']:.2f}!={want_t}")
+    if edge_bad:
+        problems.append(
+            f"espessura variou ({len(edge_bad)} amostras; "
+            f"ex.: {', '.join(edge_bad[:3])})"
+        )
+
+    # Snap = salto descontínuo da escala das fatias entre frames consecutivos.
+    jumps = []
+    for a, b in zip(slice_during, slice_during[1:]):
+        jumps.append((abs(b["sx"] - a["sx"]), "sx", a["t"], b["t"]))
+        jumps.append((abs(b["sy"] - a["sy"]), "sy", a["t"], b["t"]))
+    max_jump = max(jumps) if jumps else (0.0, "-", 0, 0)
+    print(f"salto_maximo_escala={max_jump[0]:.4f} em {max_jump[1]} "
+          f"(limite={SNAP_LIMIT})")
+    if max_jump[0] > SNAP_LIMIT:
+        problems.append(
+            f"snap da escala das fatias: delta={max_jump[0]:.4f} "
+            f"em {max_jump[1]} t={max_jump[2]}->{max_jump[3]}"
+        )
+
+# Prova de que o caminho do 9-slice foi executado (não é só a medição se
+# reportando): cada frame escalado durante o grab deve compor exatamente 9
+# fatias. Uma fatia com crop vazio reduziria n e é falha.
+compose = []
+malformed_compose = []
+for l in text.splitlines():
+    if "SLICE_COMPOSE " not in l:
+        continue
+    m = re.search(r"SLICE_COMPOSE t=(\d+) window_id=(\d+) n=(\d+)", l)
+    if m:
+        compose.append((int(m.group(1)), int(m.group(3))))
+    else:
+        malformed_compose.append(l)
+compose_during = [c for c in compose if c[0] < release_ns]
+print(f"linhas SLICE_COMPOSE={len(compose)} durante_grab={len(compose_during)} "
+      f"malformadas={len(malformed_compose)} n_min="
+      f"{min((n for _, n in compose_during), default='-')}")
+if not compose_during:
+    problems.append("nenhuma linha SLICE_COMPOSE durante o grab")
+elif any(n != 9 for _, n in compose_during):
+    bad = [(t, n) for t, n in compose_during if n != 9][:3]
+    problems.append(f"composição com != 9 fatias: {bad}")
+
 if problems:
     print("FALHA: " + "; ".join(problems[:5]), file=sys.stderr)
     verdict = "FALHA"
 else:
     verdict = "OK"
 print(f"\nVEREDITO: {verdict}")
-print("(esperado: target == content + extras e rescaled == (buffer != target) no grab; "
-      "buffer==target e rescaled=false após soltar)")
+print("(esperado: target == content + extras; rescaled == (buffer != target) no grab; "
+      "buffer==target e rescaled=false após soltar; edge_l/edge_r/title_h == insets e "
+      f"sem salto de escala > {SNAP_LIMIT} durante o grab)")
 sys.exit(0 if verdict == "OK" else 1)

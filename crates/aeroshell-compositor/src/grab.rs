@@ -16,14 +16,8 @@ use smithay::{
 
 use crate::{aero_frame_protocol::aero_frame_v1::ResizeEdge, state::AeroState};
 
-use std::time::{Duration, Instant};
-
 const MIN_W: i32 = 120;
 const MIN_H: i32 = 80;
-/// 02f: intervalo mínimo entre configures da decoração durante o resize.
-/// 200 ms satisfaz o limite de 150 ms e mantém 4 configures em 14 passos de
-/// 50 ms (razão 0,29 <= 1/3). O cliente continua sendo configurado a cada motion.
-const FRAME_CONFIGURE_DEBOUNCE: Duration = Duration::from_millis(200);
 
 pub struct MoveGrab {
     window: Window,
@@ -187,9 +181,6 @@ pub struct ResizeGrab {
     edges: ResizeEdge,
     initial_loc: Point<i32, Logical>,
     initial_size: Size<i32, Logical>,
-    /// 02f: evita inundar o WebKit com configures de tamanhos já obsoletos.
-    last_sent_size: Option<(i32, i32)>,
-    last_sent_at: Option<Instant>,
 }
 
 impl ResizeGrab {
@@ -206,8 +197,6 @@ impl ResizeGrab {
             edges,
             initial_loc,
             initial_size,
-            last_sent_size: None,
-            last_sent_at: None,
         }
     }
 }
@@ -253,6 +242,7 @@ impl PointerGrab<AeroState> for ResizeGrab {
             size.h = (self.initial_size.h - dy).max(MIN_H);
             loc.y = self.initial_loc.y + (self.initial_size.h - size.h);
         }
+        #[cfg(feature = "bench")]
         let window_id = self.window.toplevel().and_then(|toplevel| {
             let surface = toplevel.wl_surface();
             data.associated_frames
@@ -271,20 +261,10 @@ impl PointerGrab<AeroState> for ResizeGrab {
                 window_id, size.w, size.h
             );
         }
-        // 02c: conteúdo e decoração recebem o configure no MESMO passo do grab.
-        // 02f: a DECORAÇÃO é enviada só quando o alvo mudou e o debounce expirou;
-        // o configure do cliente (abaixo) continua em TODOS os motions.
-        if let Some(window_id) = window_id {
-            let requested = (size.w, size.h);
-            let elapsed = self.last_sent_at.map(|at| at.elapsed());
-            if self.last_sent_size != Some(requested)
-                && elapsed.is_none_or(|d| d >= FRAME_CONFIGURE_DEBOUNCE)
-            {
-                data.send_frame_configure(window_id, requested, "grab");
-                self.last_sent_size = Some(requested);
-                self.last_sent_at = Some(Instant::now());
-            }
-        }
+        // 02k: NENHUM configure da decoração durante o grab. O buffer foi
+        // congelado no início (grab-start) e o 9-slice compõe a fatia no alvo;
+        // reenviar tamanhos obsoletos a cada motion causava a pulsação. O
+        // configure do cliente (abaixo) continua em TODOS os motions.
         if let Some(toplevel) = self.window.toplevel() {
             toplevel.with_pending_state(|state| state.size = Some(size));
             toplevel.send_configure();
@@ -477,6 +457,17 @@ pub fn start_geometry_grab(
                 .element_geometry(&window)
                 .map(|g| g.size)
                 .unwrap_or((320, 240).into());
+            // 02k: UM configure grande no início congela o buffer da decoração.
+            // O alvo é >= ao modo do output, então o WebKit não precisa
+            // redimensionar durante o arrasto; o 9-slice faz a composição no
+            // render. O configure final no unset usa o tamanho real do cliente.
+            let big = state
+                .outputs
+                .first()
+                .and_then(|output| output.current_mode())
+                .map(|mode| (mode.size.w.max(MIN_W), mode.size.h.max(MIN_H)))
+                .unwrap_or((1920, 1080));
+            state.send_frame_configure(window_id, big, "grab-start");
             state.resize_grab_active = Some(window_id);
             let grab = ResizeGrab::new(window, start_data, edges, loc, size);
             pointer.set_grab(state, grab, serial, Focus::Clear);
