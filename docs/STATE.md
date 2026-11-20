@@ -198,10 +198,11 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. `02k` — NÃO CONCLUÍDA no visual: achatamento horizontal do conteúdo da titlebar (§6/§7). Decisão pendente
-   do humano: (a) abrir cartão novo para preservar texto/botões da barra, definindo como o shell informa as
-   linhas de corte extras; (b) autorizar mudança da receita dentro da 02k; (c) aceitar como dívida conhecida.
-   Recomendação: (a) — não alterar cartão aprovado nem protocolo sem aprovação explícita (AGENTS.md §0.8).
+0. `02l` — DECISÃO DO HUMANO (2026-11-20): abrir cartão novo para o achatamento da titlebar, mantendo a 02k
+   intacta. Rascunho criado em `docs/tasks/02l-titlebar-sem-achatamento.md`, **aguarda confirmação para
+   executar** (AGENTS.md §0.2). A decisão 0 do rascunho (como o shell informa as linhas de corte extras) é
+   bloqueante: a opção recomendada mexe em `protocols/aero_frame_v1.xml`, arquivo protegido, e exige
+   aprovação explícita antes de qualquer edição. 02k segue NÃO CONCLUÍDA no visual (§6/§7).
 1. `02j` — CONCLUÍDA; os 3 modos nomeados (`FRAME_NEVER_ACKED`, `FRAME_NEVER_DREW_AT_SIZE`,
    `FRAME_STRETCH_ACTIVE`) estão no log bench. Próximo passo natural (NÃO executado): correlacionar esses modos
    com um novo arrasto REAL e só então decidir a causa da queixa visual de 02e/02f.
@@ -471,9 +472,11 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
   `/tmp/opencode/02k_glue_final{1,2,3}.log`. Vizinhos em `02k_*_final.log` / `02k_*_retry{1,2}.log`.
 - Nenhuma instância 02k foi aberta pelo agente nesta rodada; o relato do achatamento veio do teste automático.
   Instância 02f (PID 72480) segue aberta e reprovada; NÃO encerrar — quem fecha é o humano.
-- Próximo passo imediato (NÃO executar): humano decidir (a) cartão novo para a titlebar [recomendado],
-  (b) mudar a receita da 02k com aprovação, ou (c) aceitar como dívida. Depois disso, abrir 2 `foot`,
-  arrasto lento e rápido, deixar aplicação aberta e pedir "ok" explícito (AGENTS.md §0.9).
+- DECISÃO DO HUMANO (2026-11-20): abrir cartão novo, mantendo a 02k intacta. Rascunho
+  `docs/tasks/02l-titlebar-sem-achatamento.md` escrito e comitado; NÃO executar sem confirmação (AGENTS.md §0.2).
+- Próximo passo imediato (NÃO executar): humano confirmar o rascunho 02l e responder a decisão 0 (como o shell
+  informa as linhas de corte extras). Só depois: teste primeiro visto falhando, implementação, validação visual
+  com 2 `foot`, aplicação deixada aberta e "ok" explícito (AGENTS.md §0.9).
 - NÃO mudar `target = content + extras`, move, conteúdo, protocolo/XML, ADR 0006 ou o debounce fora do grab;
   NÃO corrigir o achatamento sozinho; NÃO encerrar PID 72480; sem push.
 - Contexto preservado em §6: cprussin é contribuidor (criador: Victor Berger/elinorbgr); prior art é contexto,
