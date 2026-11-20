@@ -77,9 +77,12 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   `--focus 0` inverteu a ordem de render de `[...,@3[1],...,@3[0]]` para `[...,@3[0],...,@3[1]]`;
   `--close 1` deixou só a janela 0. Amostra crua: `/tmp/opencode/sdk_cli_run5.log`.
 - [x] 03 (gate): `bash scripts/check.sh` → `OK: scripts/check.sh passou` (EXIT=0), `bun test` 6 pass / 0 fail.
+- [x] 03 — VALIDAÇÃO VISUAL DO HUMANO (2026-11-20): com o nested aberto (2 `foot` + shell de frame), o humano rodou
+  `--list` (2 linhas com id/título), `--focus 0` (elevou a janela certa) e `--close 1` (fechou só aquela) e respondeu
+  **"ok validado"**. O próprio humano fechou a aplicação (PID 39214 encerrado); nenhum processo meu ficou órfão.
+  Tarefa 03 FECHADA.
 ## 4. Em andamento
-- 03: código e pré-filtros prontos; **aguarda o "ok" visual do humano** no nested com 2 `foot` (critério 4 do cartão).
-  Até o juiz falar, a tarefa NÃO está concluída e o item fica em §7 como não validado.
+- Nenhuma tarefa em andamento: 03 fechada com "ok validado" do humano; 02c segue bloqueada (decisão pendente).
 - 02c BLOQUEADA: duas abordagens tentadas e insuficientes no critério de pendência — (1) configure no motion e
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). Não abrir validação visual até a decisão.
@@ -151,8 +154,6 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   pode ser reatribuído. O mapa `window_surfaces` é limpo no hook de destruição, mas ids monotonicamente estáveis
   (não reutilizados) ficam para uma tarefa futura se o cenário aparecer.
 ## 7. Não medido / não validado (não trate como fato)
-- 03: **validação visual do humano PENDENTE** — `--list`/`--focus`/`--close` passaram no pré-filtro automatizado,
-  mas o critério 4 do cartão exige o "ok" do humano com a aplicação aberta. Não escrever "validado" sem isso.
 - 03: latência do IPC, taxa de perda e reconexão NÃO medidos (S4 do plano mestre, fora do cartão).
 - Latência de resize com WebKit real; latência de ponteiro; qualquer desempenho em GPU real (tudo foi em VM sem 3D).
 - Número de processos/PSS com `related-view` foi medido só em VM; ADR 0001 está "aceito provisoriamente".
@@ -173,12 +174,12 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- O que eu estava fazendo: 03 — código pronto, aguarda o juiz visual do humano no nested com 2 `foot`.
+- O que eu estava fazendo: nada em andamento — 03 FECHADA com "ok validado" do humano (2026-11-20).
 - O que funcionou: 4 bindings TS gerados de `aeroshell-ipc`; `bun test packages/sdk` 5/5; `sdk_cli.py` provou
   `--list` (id+título), `--focus` (ordem de render inverteu) e `--close` seletivo; gate verde (bun 6/6).
-- Comando exato do estado: `python3 tests/integration/sdk_cli.py` → `OK: --list mostrou 2 janelas; --close 1 deixou só a janela 0`.
-- Próximo passo imediato (uma ação): humano dá o "ok" visual na instância aberta; só então marcar 03 como fechada.
-- Depois: registrar o veredito em §3/§7, commitar e abrir cartão do painel React (04). NÃO executar 02d sem "ok".
+- Comando exato para reproduzir: `python3 tests/integration/sdk_cli.py` → `OK: --list mostrou 2 janelas; --close 1 deixou só a janela 0`.
+- Próximo passo imediato (uma ação): criar o cartão da tarefa 04 (painel React `useWindows()`) e aguardar seu "ok".
+- NÃO executar 02d (resize) nem tentar terceira abordagem sem autorização explícita.
 - Descobertas laterais em §6: IPC sem eventos (patches vêm do `list`), `send_close` assíncrono (teste com polling),
   arredondamento do foot, timer 1 ms sem ganho, `frame_resize_edges.py` intermitente, flake do S1.
  
