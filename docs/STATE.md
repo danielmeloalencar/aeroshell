@@ -213,9 +213,9 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   Gate `02m_check_final.log` EXIT=0 (`OK: scripts/check.sh passou`, bun 9 pass/0 fail); clippy bench
   `02m_clippy_final.log` EXIT=0. Critério VISUAL: ver §7. Nenhuma mudança em 02l/protocolo/ADR.
 ## 4. Em andamento
-- 02m técnica PRONTA (§3): baseline FALHANDO, spike citado, correção no shell, 3× OK, vizinhos, gate e clippy.
-  Falta SÓ o juiz visual (§7) no instante do clique nas bordas da 1ª e da 2ª janela. A 1ª tentativa (adiar criação)
-  falhou e foi revertida (§3/§6). NÃO mexer em 02l/protocolo/ADR.
+- 02m NÃO CONCLUÍDA: juiz visual NEGOU ("Ainda pisca" — §7). Duas tentativas no shell esgotadas; causa
+  restante está no compositor (`target=12x36` no primeiro map, §7). PARADA antes de terceira abordagem —
+  aguardando decisão do humano. NÃO mexer em 02l/protocolo/ADR sem aprovação.
 - 02l EM EXECUÇÃO: código/teste/gate/clippy prontos (§3); falta a validação visual com juiz humano (§7).
   Humano (2026-11-20): **"vi na execução dos seus testes que o problema foi resolvido."** Registrado como dado
   favorável, mas veio da execução dos harnesses, não de uma sessão visual formal com 2 `foot`; por §0.9 ainda
@@ -236,8 +236,9 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. `02m` — técnica pronta (§3), falta juiz visual (§7): abrir instância do RUNBOOK com 2 `foot`, deixar aberta,
-   humano clica/arrasta bordas da 1ª e 2ª janela e dá o "ok". Só então fechar 02m e 02l.
+0. `02m` — BLOQUEADA: juiz negou, 2 tentativas esgotadas, causa no compositor fora da decisão 0 (§7).
+   Decisão pendente do humano: autorizar cartão novo no compositor para `content=0x0 → target=12x36`, aceitar
+   como dívida, ou outro rumo. NÃO executar sem aprovação.
 1. `02j` — CONCLUÍDA; os 3 modos nomeados (`FRAME_NEVER_ACKED`, `FRAME_NEVER_DREW_AT_SIZE`,
    `FRAME_STRETCH_ACTIVE`) estão no log bench. Próximo passo natural (NÃO executado): correlacionar esses modos
    com um novo arrasto REAL e só então decidir a causa da queixa visual de 02e/02f.
@@ -458,9 +459,19 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   com `SLICE_GEOM` correto (126/480/102) e nenhum frame anômalo; o defeito só apareceu com a 2ª janela.
   Critério 5 do cartão 02l **NÃO passou**; tarefa NÃO concluída. NÃO corrigir sem decisão: é causa nova,
   fora do cartão aprovado (AGENTS.md §0.4/§0.8). Instância 2 encerrou graciosamente após o teste.
-- **02m (2026-11-20): causa tratada no shell e medida — `buf=200x200` eliminado em 3 execuções (§3).
-  Ainda NÃO há juiz visual para o flash: humano precisa repetir o clique nas bordas das 2 janelas na instância
-  nova e dar o "ok". Até lá 02l e 02m seguem NÃO CONCLUÍDAS no visual (AGENTS.md §0.9).**
+- **02m (JUIZ VISUAL NEGOU — 2026-11-20): humano, ao clicar/arrastar as bordas das 2 janelas na instância
+  `wayland-aero-02m`: "Ainda pisca". Dado prevalece sobre o teste automatizado (AGENTS.md §0.4/§0.9).
+  `buf=200x200` foi mesmo eliminado (3× OK), mas o flash persiste por OUTRA causa, encontrada nos logs já
+  coletados (sem nova correção): `/tmp/ibuf-comp-104057.log:1325-1326` →
+  `RESIZE_GLUE window_id=1 content=0x0 target=12x36 buffer=708x530 rescaled=true` e
+  `RESIZE_SLICE ... target=12x36 slice_scale_x=0.0014 slice_scale_y=0.0020 title_gap_w=1` — no primeiro
+  `map` o cliente ainda tem geometry 0×0 (`aero-02m-visual.log`: `width: 0, height: 0`), então
+  `target = content + extras = 12x36` e o 9-slice comprime a decoração inteira por 1 frame. Isso bate com o
+  relato original do juiz ("a decoracao inteira parece encolher para uma janela menor").
+  Causa está no COMPOSITOR, fora da decisão 0 autorizada (shell + spike). Regra das duas tentativas atingida:
+  (1) adiar criação no shell → deadlock; (2) `set_default_size` no shell → teste passou, juiz negou.
+  PARAR e pedir decisão antes de qualquer terceira abordagem. 02m e 02l NÃO CONCLUÍDAS no visual.
+  Instâncias 105740/105748/105755/105827/105852/105864 encerradas após o teste (não pelo agente).**
 - 02l (JUIZ VISUAL — RELATO FAVORÁVEL ANTERIOR, agora superado): humano (2026-11-20):
   **"vi na execução dos seus testes que o problema foi resolvido."** Veredito positivo registrado como dado.
   Como o relato veio da execução dos harnesses (que abrem janela winit + `foot`), e não de uma sessão manual
@@ -536,9 +547,10 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- O que eu estava fazendo: 02m técnica PRONTA (§3): flash do buffer 200×200 eliminado no shell (2ª tentativa;
-  a 1ª, adiar criação, criou deadlock e foi revertida). 02l e 02m seguem NÃO CONCLUÍDAS: falta o juiz visual
-  do clique nas bordas. Nenhuma instância aberta; humano fechou as anteriores.
+- O que eu estava fazendo: 02m — 2 tentativas no shell esgotadas; juiz visual NEGOU ("Ainda pisca"). Causa
+  restante no compositor: `content=0x0 → target=12x36` no primeiro map (`/tmp/ibuf-comp-104057.log:1325-1326`,
+  §7). PAREI antes de terceira abordagem (regra das duas tentativas + decisão 0 era só shell). 02m/02l NÃO
+  CONCLUÍDAS. Nenhuma instância aberta — todas encerradas após o teste do humano.
 - Gate final (após a última mudança de código): `bash scripts/check.sh` → `CHECK_EXIT=0`,
   `OK: scripts/check.sh passou`, bun 9 pass / 0 fail (`/tmp/opencode/02m_check_final.log`);
   `cargo clippy --workspace --all-targets --features bench -- -D warnings` → EXIT=0 (`02m_clippy_final.log`).
@@ -555,14 +567,14 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
   relatou o flash; a instância encerrou graciosamente depois (sem ação do agente). NÃO reabrir uma terceira
   sem decisão — registrar e pedir.
 - Humano confirmou 02m e a decisão 0 = shell + spike; cartão em `docs/tasks/02m-flash-buffer-inicial.md`.
-- Instância visual ABERTA (2026-11-20): compositor 105748 (bash pai 105740), shell 105755, `foot` 105827 e
-  105864, socket `wayland-aero-02m`, log `/tmp/opencode/aero-02m-visual.log`, 2 associates (0 e 1). NÃO encerrar:
-  quem fecha é o humano. Ressalva: nesta instância `tamanho_inicial=1292x836` (configure final da janela 0 ainda
-  não tinha chegado), contra `708x530` no harness — ambos evitam 200×200, mas o juiz visual é quem decide se
-  ainda há flash de compressão. Sem `--features bench` nesta instância, logo não há `RESIZE_SLICE` no log.
-- Próximo passo imediato (NÃO executar neste momento): abrir a validação visual do RUNBOOK (seção §3/§7 do
-  cartão) com 2 `foot`, deixar aberta; humano clica/arrasta as bordas da 1ª e da 2ª janela e dá o "ok" explícito.
-  Só com esse "ok" fecham 02m e 02l. Quem fecha a aplicação é o humano.
+- Instância visual `wayland-aero-02m`: compositor 105748, shell 105755, `foot` 105827/105864, log
+  `/tmp/opencode/aero-02m-visual.log`, 2 associates. Humano testou, negou e encerrou (não foi o agente).
+  `tamanho_inicial=1292x836` nela (contra `708x530` no harness) — ambos sem 200×200; o flash restante é o alvo
+  `12x36`, não o buffer. Sem `--features bench` nela, por isso a prova veio do log do harness.
+- Próximo passo imediato (NÃO executar): humano decidir sobre a causa no compositor — (a) cartão novo 02n para
+  impedir `target=12x36` enquanto `content=0x0` [recomendado], (b) aceitar como dívida, (c) outro rumo. Só depois
+  de aprovado: teste primeiro vendo o frame `12x36` falhar, correção mínima, gate, novo juiz visual. 02l e 02m
+  NÃO fecham sem o "ok" do juiz. NÃO reabrir instância visual sem decisão.
 - NÃO mudar `target = content + extras`, move, conteúdo, ADR 0006 ou o debounce fora do grab; NÃO editar
   protocolo sem aprovação; NÃO encerrar PIDs de instância; sem push.
 - Contexto preservado em §6: cprussin é contribuidor (criador: Victor Berger/elinorbgr); prior art é contexto,
