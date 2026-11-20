@@ -264,9 +264,10 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   `cargo clippy --workspace --all-targets --features bench -- -D warnings` → EXIT=0
   (`/tmp/opencode/02n_clippy_final.log`).
 ## 4. Em andamento
-- 02n: técnica/gate/clippy prontos e provados 3× (§3). Falta SOMENTE o juiz visual do release (arrastar E soltar,
-  2 `foot`, aplicação deixada aberta). Nenhuma instância aberta neste momento. NÃO encerrar PIDs iniciados para o juiz.
-  Se o humano ainda vir flicker, NÃO abrir 5ª correção sem nova decisão (cartão 02n).
+- 02n: **JUIZ VISUAL NEGOU (2026-11-20)** — humano: "problema ainda ocorre". Técnica/gate/clippy provados 3× (§3),
+  mas o dado visual prevalece; 0 frames inconsistentes no teste NÃO mede o que o humano viu (lacuna registrada em §7).
+  Instância deixada aberta: compositor PID 118815, socket `wayland-aero-02n`, 2 `foot` (PIDs 118897/118942).
+  NÃO encerrar PIDs. **PARAR**: cartão 02n proíbe 5ª correção sem nova decisão do humano.
 - 02m (3ª abordagem): juiz CONFIRMOU que clique/arrasto está resolvido (§3). Sintoma NOVO no release com arrasto
   (flicker) é o alvo da 02n (autorizada). Press/arrasto NÃO foi alterado pela 02n.
 - 02l EM EXECUÇÃO: código/teste/gate/clippy prontos (§3); falta a validação visual com juiz humano (§7).
@@ -289,12 +290,10 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. `02n` — técnica pronta (§3), falta juiz visual (§7): abrir instância do RUNBOOK com 2 `foot`, deixar aberta;
-   humano clica, segura, ARRASTA e SOLTA bordas da 1ª e 2ª janela e dá o "ok" explícito. Verificar que não
-   há flicker no soltar e que press/arrasto (02m, já aprovado) não regrediu. Só então fechar 02n/02m/02l.
-   Se ainda houver flicker no soltar: PARAR e pedir decisão (NÃO abrir 5ª correção).
-   Comando exato para abrir: ver RUNBOOK + `frame_release_swap_hygiene.py` (socket/input sintético é só teste;
-   o juiz usa a execução manual com 2 `foot`).
+0. `02n` — JUIZ NEGOU ("problema ainda ocorre"); instância aberta, não encerrar. PRÓXIMO PASSO É DO HUMANO:
+   (a) autorizar nova abordagem com cartão próprio, (b) aceitar como dívida e fechar 02m/02l/02n como parciais
+   no visual, (c) outro rumo. NÃO abrir 5ª correção sem decisão explícita. Antes de diagnosticar, perguntar ao
+   humano se o flicker segue só no soltar ou voltou no press/arrasto (02m aprovada).
 1. `02j` — CONCLUÍDA; os 3 modos nomeados (`FRAME_NEVER_ACKED`, `FRAME_NEVER_DREW_AT_SIZE`,
    `FRAME_STRETCH_ACTIVE`) estão no log bench. Próximo passo natural (NÃO executado): correlacionar esses modos
    com um novo arrasto REAL e só então decidir a causa da queixa visual de 02e/02f.
@@ -505,9 +504,14 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   citada pelo humano. Registrado aqui como contexto; **ADR 0006 (aditivo/proposto) NÃO foi editado** — incluir
   prior art em ADR exige aprovação explícita (AGENTS.md §0.8 / §6).
 ## 7. Não medido / não validado (não trate como fato)
-- 02n (JUIZ VISUAL PENDENTE): 0 frames inconsistentes e swap atômico são MEDIDOS (§3), mas "sem flicker ao soltar"
-  NÃO foi visto pelo humano nesta versão. Nenhuma instância aberta; não encerrar PIDs do juiz. Não escrever
-  "validado visualmente" sem o "ok" explícito (AGENTS.md §0.9).
+- **02n (JUIZ VISUAL NEGOU — 2026-11-20): humano, ao arrastar E SOLTAR bordas das 2 janelas na instância aberta
+  `wayland-aero-02n` (2 `foot`): "problema ainda ocorre."** Dado prevalece sobre os 3× `VEREDITO: OK` do teste
+  automatizado (AGENTS.md §0.4). O teste mede SÓ a sequência de estados (`rescaled`, tamanho do buffer, serial do
+  configure); ele NÃO mede pixels nem a percepção de flicker do humano — lacuna de medição registrada, não amostra
+  descartada. A hipótese "visualmente idênticos em tema uniforme" (§6) segue SEM confirmação e pode explicar a
+  divergência: o 9-slice do buffer 708 e o nativo 768 podem diferir mesmo com scale=1.
+  Não foi registrado se o flicker voltou no press/arrasto (02m aprovada) ou segue só no soltar — perguntar ao humano
+  antes de qualquer diagnóstico. NÃO corrigir sem decisão; NÃO encerrar a instância.
 - 02n (NÃO MEDIDO): desempenho em GPU real — VM sem 3D; só funcionamento/geometria foram medidos. Diferença de
   pixels entre 9-slice(708) e nativo(768) com tema não-uniforme também não foi medida (hipótese em §6).
 - 02l (JUIZ VISUAL NEGATIVO PARCIAL — 2026-11-20, teste feito na instância 100840/101188): humano:
@@ -646,10 +650,11 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
 - Reproduzir: `python3 tests/integration/frame_release_swap_hygiene.py` → `frames_buffer_inconsistente=0
   swaps_atomicos=1 VEREDITO: OK`. Baseline cru FALHOU em `/tmp/opencode/02n_release_baseline2.log`;
   3× limpas em `/tmp/opencode/02n_release_clean{1,2,3}.log`.
-- JUIZ VISUAL (PENDENTE): humano aprovou press/arrasto da 02m; resta arrastar E SOLTAR bordas das 2 janelas sem
-  flicker. Abrir instância manual do RUNBOOK com 2 `foot`, DEIXAR ABERTA, dizer o que olhar, pedir "ok" explícito.
-  Quem fecha é o humano. Nenhuma instância aberta agora. Sem "ok", 02n/02m/02l NÃO fecham (§7).
-- Se o humano ainda vir flicker no soltar: NÃO abrir 5ª correção; parar e pedir decisão (cartão 02n).
+- JUIZ VISUAL (2026-11-20, instância `wayland-aero-02n`, 2 `foot` — **AINDA ABERTA, não encerrar**): humano
+  arrastou e soltou bordas das 2 janelas e disse **"problema ainda ocorre"**. Veredito NEGATIVO prevalece sobre
+  3× teste OK (§7). Press/arrasto da 02m estava aprovado; não foi registrado se regrediu.
+- PARAR. Próximo passo é decisão do humano: nova abordagem (novo cartão) / aceitar como dívida / outro rumo.
+  NÃO abrir 5ª correção, NÃO mexer no código, NÃO encerrar PIDs 118815/118897/118942 sem pedido. Cartão 02n.
 - NÃO mudar `target = content + extras`, move, conteúdo, 9-slice da 02k/02l, press/arrasto da 02m, ADR 0006,
   protocolo, shell ou dependências sem aprovação; NÃO encerrar PIDs de instância; sem push. VM sem 3D: sem
   medição de desempenho/GPU real (§7). Ressalva "visualmente idêntico em tema uniforme" é hipótese (§6).
