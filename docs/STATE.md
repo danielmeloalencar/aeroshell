@@ -89,9 +89,10 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
 - [x] 04a (critérios 2/3): `bun run generate:types` → `EXIT=0` e `git diff -- packages/sdk/src/generated` vazio;
   `bash scripts/check.sh` → `OK: scripts/check.sh passou` (EXIT=0), `bun test` 9 pass / 0 fail.
 - [x] 04b (pré-filtro): `python3 tests/integration/react_panel.py` → `OK: painel React listou 2 e 3 janelas;
-  clique na 1ª linha elevou só ela`. Escrito antes e visto falhando (`bundle ausente`). O teste prova: bundle servido
-  por `aero://panel/app.js`, lista `(id,título)` entregue via bridge, clique injetado no 1º botão inverte a ordem
-  de render (`wl_surface@3[1]` sobe) sem alterar as demais.
+  clique no botão da janela de trás elevou só ela; bridge continuou respondendo`. Escrito antes e visto falhando
+  (`bundle ausente`, depois `bridge parou de responder após o clique`). O teste prova: bundle servido por
+  `aero://panel/app.js`, lista `(id,título)` entregue via bridge, clique injetado no botão escolhido pela ordem de
+  render inverte a ordem sem alterar as demais.
 - [x] 04b (travamento do bridge): causa raiz reproduzida e corrigida. `forward()` esperava o `.` que só o `list`
   envia; `focus` responde `OK` e o main loop congelava (botões na tela, porém mortos). Teste de regressão escrito
   antes e visto falhando: `FALHA: bridge parou de responder após o clique`. Com `shutdown(Shutdown::Write)`:
