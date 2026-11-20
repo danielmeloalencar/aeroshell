@@ -221,10 +221,26 @@ impl Dispatch<AeroFrameManagerV1, ()> for SpikeState {
             eprintln!("FRAMEWEB: window_id={window_id} já tem WebView; ignorado");
             return;
         }
+        // 02m: o frame_requested do `map` vem com conteudo=0x0 (o cliente ainda
+        // não commitou tamanho) e o do `associate` — com o tamanho real — só é
+        // gerado DEPOIS da WebView existir. Não dá para adiar a criação. Usa o
+        // total já configurado da janela âncora (window_id=0): é o mesmo alvo que
+        // o Configure desta janela vai receber, e evita que o WebKit commite o
+        // buffer mínimo 200x200 antes do primeiro buffer real.
+        let initial_total = state
+            .entries
+            .first()
+            .filter(|e| e.total.0 > 0 && e.total.1 > 0)
+            .map(|e| e.total)
+            .unwrap_or((0, 0));
+        eprintln!(
+            "FRAMEWEB: frame_requested window_id={window_id} tamanho_inicial={}x{}",
+            initial_total.0, initial_total.1
+        );
         // Cria na próxima idle: este handler roda dentro do borrow do RUNTIME
         // (dispatch) e não pode reassumir o RUNTIME para associar a superfície.
         glib::idle_add_local(move || {
-            open_frame_window(window_id);
+            open_frame_window(window_id, initial_total.0, initial_total.1);
             glib::ControlFlow::Break
         });
     }
@@ -366,7 +382,9 @@ fn associate_frame(
 
 /// Uma WebView por janela. O handler de mensagens captura o window_id DESTA
 /// WebView: o comando vai para a janela dona do frame, nunca para "a primeira".
-fn open_frame_window(window_id: u32) {
+/// 02m: `total_w`/`total_h` já incluem os insets (vêm de `FrameEntry::total`) e
+/// definem o tamanho inicial antes do realize, evitando o buffer mínimo 200x200.
+fn open_frame_window(window_id: u32, total_w: i32, total_h: i32) {
     let app = APP
         .with(|cell| cell.borrow().clone())
         .expect("APP não inicializado");
@@ -374,6 +392,12 @@ fn open_frame_window(window_id: u32) {
         .application(&*app)
         .title(format!("frame webview {window_id}"))
         .build();
+    // A doc fixada (/usr/share/gir-1.0/Gtk-4.0.gir:185031) diz que o default
+    // size é usado "if no other constraints apply". Chamado antes do present(),
+    // a janela ainda não foi realizada, então o WebKit recebe o tamanho real.
+    if total_w > 0 && total_h > 0 {
+        window.set_default_size(total_w, total_h);
+    }
     window.add_css_class("aero-frame");
     window.init_layer_shell();
     window.set_namespace(Some("aeroshell-frame-webview"));
@@ -460,8 +484,9 @@ fn main() {
         );
 
         // Janela 0 também é a âncora: associa window_id=0 e libera o cliente
-        // inicial adiado (cold-start temporário).
-        open_frame_window(0);
+        // inicial adiado (cold-start temporário). Sem tamanho do frame_requested
+        // (é criada direto no activate): o Configure define o default depois.
+        open_frame_window(0, 0, 0);
 
         glib::timeout_add_local(std::time::Duration::from_millis(20), || {
             dispatch_nonblocking();

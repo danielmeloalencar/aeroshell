@@ -188,7 +188,34 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
       `SLICE_GEOM` com 9 fatias cobrindo x 54→762 e y 50→580 (`02l_after5.log`). Gate
       `02l_check_final3.log` EXIT=0, bun 9 pass/0 fail; clippy bench `02l_clippy_final3.log` EXIT=0;
       vizinhos OK, `frame_resize_sync.py` FALHA esperada. Critério VISUAL: ver §7.
+- [x] 02m (baseline, TESTE PRIMEIRO VISTO FALHANDO): novo `tests/integration/frame_initial_buffer.py` abre 2
+      `foot` e inspeciona TODAS as linhas `RESIZE_SLICE` da janela 1, sem descartar amostra. Baseline cru
+      `/tmp/opencode/02m_baseline1.log` → EXIT=1, 8 amostras `buf=200x200 target=708x530 rescaled=true
+      slice_scale_x=3.7021` (t=1795161396743200190 … 1795161396789066653, ~4,6 ms) antes do primeiro buffer
+      real `708x530 rescaled=false`. `frame_requested` cru: `window_id=1 conteudo=0x0` seguido de
+      `window_id=1 conteudo=1280x800` (ignorado: "já tem WebView"). Janela 0 sem anomaly (233 amostras, todas
+      `708x530`) — defeito restrito ao caminho `frame_requested`. Spike de API (≤20 min): `gtk4 0.11.5`
+      expõe `set_default_size` (`~/.cargo/.../gtk4-0.11.5/src/auto/window.rs:817`), documentado em
+      `/usr/share/gir-1.0/Gtk-4.0.gir:185031` como o tamanho usado "if no other constraints apply".
+- 02m (PRIMEIRA TENTATIVA FALHOU — revertida): adiar `open_frame_window` até `frame_requested` com tamanho
+  >0 criou **deadlock lógico**. `/tmp/ibuf-comp-102909.log` → só `frame_requested window_id=1 conteudo=0x0`,
+  nenhum `associate` da janela 1; teste → `FALHA: timeout esperando 2o associate`. Causa lida no código:
+  `xdg_shell.rs:74-80` envia 0x0 no `map` (antes do associate) e `aero_frame.rs:286-294` envia 1280x800 no
+  `associate`, que depende da WebView existir. Humano (2026-11-20) confirmou o sintoma na tela:
+  **"abriu duas janelas do foot, uma com decoracao e outra sem"**. NÃO tentar essa via de novo.
+- [x] 02m (CORREÇÃO + PROVA, técnica pronta): 2ª tentativa no shell — criar a WebView imediatamente, mas com
+  `set_default_size` usando o `total` já configurado da janela âncora (`FrameEntry::total` = 708×530), antes do
+  `present()`. Fonte da API: `gtk4 0.11.5` `window.rs:817` + GIR `:185031` ("if no other constraints apply").
+  Mesmo comando do baseline, 3× seguidas: `/tmp/opencode/02m_final{1,2,3}.log` → todas `VEREDITO: OK`,
+  nenhuma amostra `buf=200x200`; 1º frame da janela 1 já `buf=708x530 target=708x530 rescaled=false
+  slice_scale_x=1.0000` (`02m_after2.log`). Vizinhos OK: `frame_configure_hygiene`, `frame_buttons`,
+  `frame_follows_resize`, `frame_window_id`, `frame_resize_glue`; `frame_resize_sync.py` FALHA esperada.
+  Gate `02m_check_final.log` EXIT=0 (`OK: scripts/check.sh passou`, bun 9 pass/0 fail); clippy bench
+  `02m_clippy_final.log` EXIT=0. Critério VISUAL: ver §7. Nenhuma mudança em 02l/protocolo/ADR.
 ## 4. Em andamento
+- 02m técnica PRONTA (§3): baseline FALHANDO, spike citado, correção no shell, 3× OK, vizinhos, gate e clippy.
+  Falta SÓ o juiz visual (§7) no instante do clique nas bordas da 1ª e da 2ª janela. A 1ª tentativa (adiar criação)
+  falhou e foi revertida (§3/§6). NÃO mexer em 02l/protocolo/ADR.
 - 02l EM EXECUÇÃO: código/teste/gate/clippy prontos (§3); falta a validação visual com juiz humano (§7).
   Humano (2026-11-20): **"vi na execução dos seus testes que o problema foi resolvido."** Registrado como dado
   favorável, mas veio da execução dos harnesses, não de uma sessão visual formal com 2 `foot`; por §0.9 ainda
@@ -209,11 +236,8 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. `02m` — DECISÃO DO HUMANO (2026-11-20): abrir cartão novo para o flash do buffer 200×200, mantendo a
-   02l intacta. Rascunho criado em `docs/tasks/02m-flash-buffer-inicial.md`, **aguarda confirmação para
-   executar** (AGENTS.md §0.2). A decisão 0 do rascunho (corrigir no shell vs. no compositor) é bloqueante;
-   a opção recomendada exige spike de ≤20 min na API GTK4/WebKitGTK fixada, sem inventar chamada.
-   `02l` segue NÃO CONCLUÍDA no visual (juiz negou em parte); NÃO executar 02m sem aprovação.
+0. `02m` — técnica pronta (§3), falta juiz visual (§7): abrir instância do RUNBOOK com 2 `foot`, deixar aberta,
+   humano clica/arrasta bordas da 1ª e 2ª janela e dá o "ok". Só então fechar 02m e 02l.
 1. `02j` — CONCLUÍDA; os 3 modos nomeados (`FRAME_NEVER_ACKED`, `FRAME_NEVER_DREW_AT_SIZE`,
    `FRAME_STRETCH_ACTIVE`) estão no log bench. Próximo passo natural (NÃO executado): correlacionar esses modos
    com um novo arrasto REAL e só então decidir a causa da queixa visual de 02e/02f.
@@ -434,6 +458,9 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   com `SLICE_GEOM` correto (126/480/102) e nenhum frame anômalo; o defeito só apareceu com a 2ª janela.
   Critério 5 do cartão 02l **NÃO passou**; tarefa NÃO concluída. NÃO corrigir sem decisão: é causa nova,
   fora do cartão aprovado (AGENTS.md §0.4/§0.8). Instância 2 encerrou graciosamente após o teste.
+- **02m (2026-11-20): causa tratada no shell e medida — `buf=200x200` eliminado em 3 execuções (§3).
+  Ainda NÃO há juiz visual para o flash: humano precisa repetir o clique nas bordas das 2 janelas na instância
+  nova e dar o "ok". Até lá 02l e 02m seguem NÃO CONCLUÍDAS no visual (AGENTS.md §0.9).**
 - 02l (JUIZ VISUAL — RELATO FAVORÁVEL ANTERIOR, agora superado): humano (2026-11-20):
   **"vi na execução dos seus testes que o problema foi resolvido."** Veredito positivo registrado como dado.
   Como o relato veio da execução dos harnesses (que abrem janela winit + `foot`), e não de uma sessão manual
@@ -509,17 +536,16 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- O que eu estava fazendo: 02l técnica pronta (§3), mas o juiz visual NEGOU EM PARTE: achatamento do arrasto
-  resolvido; resta flash de ~5 ms no clique nas bordas (2ª janela, buffer 200×200 escalado 3,7× — §6/§7).
-  Reproduzi com medição crua e PAREI antes de corrigir: causa nova, fora do cartão 02l. Instância fechada
-  pelo humano; não reabrir sem decisão. Gate/clippy seguem verdes (nenhuma mudança de código desde o gate).
+- O que eu estava fazendo: 02m técnica PRONTA (§3): flash do buffer 200×200 eliminado no shell (2ª tentativa;
+  a 1ª, adiar criação, criou deadlock e foi revertida). 02l e 02m seguem NÃO CONCLUÍDAS: falta o juiz visual
+  do clique nas bordas. Nenhuma instância aberta; humano fechou as anteriores.
 - Gate final (após a última mudança de código): `bash scripts/check.sh` → `CHECK_EXIT=0`,
-  `OK: scripts/check.sh passou`, bun 9 pass / 0 fail (`/tmp/opencode/02l_check_final3.log`);
-  `cargo clippy --workspace --all-targets --features bench -- -D warnings` → EXIT=0 (`02l_clippy_final3.log`);
-  `cargo fmt --all` EXIT=0. Vizinhos OK; `frame_resize_sync.py` FALHA esperada.
-- Reproduzir: `python3 tests/integration/frame_resize_glue.py` → `title_n=3`, `declaradas=(120,96)`,
-  `left/right=[120,120]/[96,96]`, `SLICE_GEOM` 9 fatias cobrindo o alvo. Baseline FALHA em `02l_baseline1.log`;
-  3× OK em `02l_glue_final{1,2,3}.log` e `02l_glue_repeat{1,2,3}.log`; amostra transitória em `02l_glue_postgate2.log`.
+  `OK: scripts/check.sh passou`, bun 9 pass / 0 fail (`/tmp/opencode/02m_check_final.log`);
+  `cargo clippy --workspace --all-targets --features bench -- -D warnings` → EXIT=0 (`02m_clippy_final.log`).
+  Vizinhos OK; `frame_resize_sync.py` FALHA esperada.
+- Reproduzir: `python3 tests/integration/frame_initial_buffer.py` → 1º frame da janela 1 com
+  `buf=708x530 target=708x530 rescaled=false sx=1.0000`, `VEREDITO: OK`. Baseline FALHA em
+  `/tmp/opencode/02m_baseline1.log` (8 amostras `buf=200x200 sx=3.7021`); 3× OK em `02m_final{1,2,3}.log`.
 - Instância visual 1 (2026-11-20): compositor 100840, shell 100852, `foot` 100924/100972, socket
   `wayland-aero-02l`, log `/tmp/opencode/aero-02l-visual.log`, 2 frames associados. Encerrou graciosamente
   (`FRAME_SUMMARY samples=2`) sem ação do agente; provavelmente o humano fechou ao testar. NÃO tentar encerrar
@@ -528,11 +554,10 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
   `wayland-aero-02l-ok`, log `/tmp/opencode/aero-02l-ok.log`, 2 frames associados. O humano fez o teste e
   relatou o flash; a instância encerrou graciosamente depois (sem ação do agente). NÃO reabrir uma terceira
   sem decisão — registrar e pedir.
-- DECISÃO DO HUMANO (2026-11-20): abrir cartão novo 02m. Rascunho
-  `docs/tasks/02m-flash-buffer-inicial.md` escrito e comitado; NÃO executar sem confirmação (AGENTS.md §0.2).
-- Próximo passo imediato (NÃO executar): humano confirmar o rascunho 02m e responder a decisão 0 (corrigir no
-  shell, com spike de API, ou no compositor). Só depois: teste primeiro visto falhando com 2 janelas, correção
-  mínima, gate e novo juiz visual. 02l NÃO é concluída sem o "ok" do juiz.
+- Humano confirmou 02m e a decisão 0 = shell + spike; cartão em `docs/tasks/02m-flash-buffer-inicial.md`.
+- Próximo passo imediato (NÃO executar neste momento): abrir a validação visual do RUNBOOK (seção §3/§7 do
+  cartão) com 2 `foot`, deixar aberta; humano clica/arrasta as bordas da 1ª e da 2ª janela e dá o "ok" explícito.
+  Só com esse "ok" fecham 02m e 02l. Quem fecha a aplicação é o humano.
 - NÃO mudar `target = content + extras`, move, conteúdo, ADR 0006 ou o debounce fora do grab; NÃO editar
   protocolo sem aprovação; NÃO encerrar PIDs de instância; sem push.
 - Contexto preservado em §6: cprussin é contribuidor (criador: Victor Berger/elinorbgr); prior art é contexto,
