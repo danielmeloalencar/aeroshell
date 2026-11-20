@@ -189,6 +189,8 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
 - 02b (dívida menor): `window_id` ainda é `space.elements().count()` no map; se uma janela fecha e outra abre, o id
   pode ser reatribuído. O mapa `window_surfaces` é limpo no hook de destruição, mas ids monotonicamente estáveis
   (não reutilizados) ficam para uma tarefa futura se o cenário aparecer.
+- Gate 04b: aviso não bloqueante em `cargo test` — `unused dependency gdk4-wayland` em `crates/aeroshell-shell/Cargo.toml:26`.
+  Não é erro (clippy e gate passam); remover dependência exige conferir uso em builds com feature, fora desta tarefa.
 ## 7. Não medido / não validado (não trate como fato)
 - 04b: nada pendente — veredito visual POSITIVO do humano e causa do travamento registrados em §3. Instância da
   validação fechada pelo próprio humano; nenhum PID meu ficou órfão.
