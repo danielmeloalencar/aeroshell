@@ -238,6 +238,16 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   ele não mede distorção da escala, suavidade da cadência nem aparência de bordas/cantos. O relato do humano
   prevalece sobre o teste automatizado (`AGENTS.md §0.4`). Criar medição que faltava antes de qualquer nova
   mudança de código.
+- 02e (dados do arrasto REAL, `/tmp/opencode/aero-02e-visual.log`): 21.821 linhas `RESIZE_GLUE` válidas;
+  `target != content+extras` = 0; `rescaled != (buffer!=target)` = 0; 1.276 com `rescaled=true`,
+  20.545 com `false`; `max |buffer-target|` = 331 px. O invariante espacial tambem vale no arrasto humano —
+  logo a métrica NÃO captura a queixa. Uma correlação ingênua por timestamp sugeriu 2.858 divergências,
+  mas estava ERRADA (dois clientes intercalados); corrigida por `window_id`, não há divergência. Não descartada:
+  foi diagnóstico meu, registrado para não virar "achado".
+- 02e (sinal para 02f, medido no mesmo log): durante um único arrasto os seriais de `frame configure` foram
+  1→92 e houve 199 linhas "geometria real do cliente". O compositor inunda o WebKit com configures; o buffer
+  nativo dificilmente alcança o alvo, deixando a escala ativa. Hipótese: a higiene de configures de 02f pode
+  reduzir a sensação de atraso sem mudar a arquitetura de 02e.
 - 02e: nenhuma conclusão de desempenho — medições feitas em VM sem 3D; GPU real não foi medida.
 - 04b: nada pendente — veredito visual POSITIVO do humano e causa do travamento registrados em §3. Instância da
   validação fechada pelo próprio humano; nenhum PID meu ficou órfão.
@@ -268,8 +278,10 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
 - Comando exato para reproduzir (instância de validação): `cargo build --workspace --examples` e
   `LD_PRELOAD=libgtk4-layer-shell.so.0 target/debug/aeroshell-compositor --backend winit --socket wayland-aero-02e \
   --shell target/debug/examples/frame_webview --shell-env LD_PRELOAD=libgtk4-layer-shell.so.0 --command 'foot & foot'`.
-- Próximo passo imediato (uma ação): perguntar ao humano qual aspecto de "feio" predomina (distorção/degraus/
-  descolamento) e abrir um cartão novo — NÃO alterar 02e por conta própria. Depois: 02f só com autorização.
+- Próximo passo imediato (uma ação): decidir entre (a) abrir cartão 02f (higiene de configures — recomendado,
+  já autorizado no plano e com sinal medido acima) e (b) cartão novo de 9-slice (`CropRenderElement`, gatilho 1
+  do ADR 0006). NÃO alterar 02e nem iniciar qualquer um sem o "ok" do humano.
+- Instância visual `/tmp/opencode/aero-02e-visual.log` (PID 63221) foi encerrada pelo humano, não pelo agente.
 - NÃO executar 02d, 02f, 02g, 02h, 02i nem 05 sem autorização explícita.
 - Descobertas laterais em §6: `list` mudou na tarefa 03 (parsers dos vizinhos corrigidos), amostra com
   `buffer=None`, `window_id` sob `cfg(bench)`, IPC sem eventos, arredondamento do foot, timer 1 ms sem ganho.
