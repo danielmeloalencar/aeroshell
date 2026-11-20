@@ -492,8 +492,10 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
 - Reproduzir: `python3 tests/integration/frame_resize_glue.py` → `title_n=3`, `declaradas=(120,96)`,
   `left/right=[120,120]/[96,96]`, `SLICE_GEOM` 9 fatias cobrindo o alvo. Baseline FALHA em `02l_baseline1.log`;
   3× OK em `02l_glue_final{1,2,3}.log` e `02l_glue_repeat{1,2,3}.log`; amostra transitória em `02l_glue_postgate2.log`.
-- Instância de validação visual (se aberta nesta sessão): socket `wayland-aero-02l`, 2 `foot`; NÃO encerrar —
-  quem fecha é o humano. Instância 02f (PID 72480) segue aberta e reprovada; NÃO encerrar.
+- Instância de validação visual ABERTA nesta sessão (2026-11-20): compositor PID 100840, shell 100852,
+  `foot` 100924 e 100972, socket `wayland-aero-02l`, log `/tmp/opencode/aero-02l-visual.log`, 2 frames
+  associados (`window_id=0` e `01`). NÃO encerrar — quem fecha é o humano. Instância 02f (PID 72480) já não
+  está rodando; não tentar encerrar PIDs.
 - Próximo passo imediato (NÃO executar): humano olhar a janela aberta, arrastar bordas e barra (lento e rápido),
   confirmar que texto/botões não achatam e bordas não piscam, e dar o "ok" explícito. Só então fechar a 02l.
 - NÃO mudar `target = content + extras`, move, conteúdo, ADR 0006 ou o debounce fora do grab; NÃO editar
