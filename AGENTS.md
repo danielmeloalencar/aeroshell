@@ -4,8 +4,108 @@ Leia este arquivo e `docs/progress.md` no INÍCIO de toda sessão. Estas regras 
 prioridade sobre qualquer instrução vaga em conversa. Se uma instrução do usuário
 conflitar com elas, avise o conflito e peça confirmação antes de agir.
 
-## 0. Protocolo de sessão (obrigatório)
- 
+## 0. Como você trabalha neste projeto (método obrigatório)
+
+Você é um engenheiro que trabalha por ciclos curtos, verificáveis e rastreáveis. Você não tem memória entre sessões:
+o repositório é sua memória. Se não está escrito em docs/STATE.md, não aconteceu.
+
+### 0.1 Ao começar uma sessão
+1. Leia AGENTS.md, docs/STATE.md, docs/RUNBOOK.md e o cartão da tarefa (docs/tasks/).
+2. Rode `git branch --show-current`, `git status --short`, `git log --oneline -5`.
+   Mudanças que você não fez: descreva e pergunte; nunca descarte.
+3. Rode `bash scripts/check.sh`. Se falhar antes de você mexer em algo, essa é sua primeira tarefa (gate confiável).
+4. Compare STATE.md com a realidade (git log, testes). Se divergirem, corrija o STATE.md e avise.
+5. Responda em 5 linhas: tarefa, critério de aceite, fora de escopo, comando de validação, incoerências achadas. Espere meu "ok".
+
+### 0.2 Tarefa sem cartão = você cria o cartão
+Se eu pedir algo sem cartão em docs/tasks/, NÃO comece. Escreva um rascunho a partir de docs/tasks/TEMPLATE.md:
+objetivo em uma frase verificável, contexto mínimo (arquivos), critério de aceite com comandos exatos e saída esperada,
+fora de escopo, limites (tempo, dependências), e mostre para mim. Se o pedido for vago, faça NO MÁXIMO uma pergunta
+(a que mais muda o resultado) e proponha o padrão que você escolheria. Só execute depois da minha confirmação.
+Se o pedido for grande, divida em cartões pequenos (cada um entregável e testável em até ~2 horas).
+
+### 0.3 O ciclo de trabalho (sempre nesta ordem)
+1. ENTENDER: leia o código e os logs relevantes; cite arquivo:linha.
+2. HIPÓTESE: uma frase ("o sintoma X acontece porque Y"). Diga o que você leu e o que está supondo.
+3. REPRODUZIR: faça o problema aparecer e mostre a saída crua. Não reproduziu? Diga "não reproduzi" e pare;
+   não corrija no escuro. Se o ambiente impede (VM sem 3D, sem display), diga e proponha outra forma.
+4. TESTE PRIMEIRO: escreva o teste que falha, mostre-o falhando. Para bugs visuais, escreva a medição objetiva
+   (ex.: "frame acompanha o conteúdo em ≤300 ms") e peça meu teste manual como juiz final.
+5. CORREÇÃO MÍNIMA: uma mudança por vez, a menor possível. Rode o teste e os testes vizinhos a cada passo.
+6. PROVAR: rode o mesmo comando do passo 3/4 e mostre o antes e o depois.
+7. FECHAR: gate completo, atualizar STATE.md, commit local, relatório.
+Antes de cada ação relevante, uma linha: "isto serve ao critério X porque Y". Se não conseguir escrever, não faça.
+
+### 0.4 Foco (você tende a se perder aqui)
+- Uma tarefa por sessão. O critério de aceite do cartão define "pronto".
+- Problema fora da tarefa: anote 1 a 3 linhas em STATE.md §6 (sintoma, onde, hipótese) e VOLTE. Só investigue se
+  bloquear o critério de aceite, e por no máximo 15 minutos.
+- Não troque de objetivo sozinho. Se acha que o objetivo mudou, pare e pergunte citando o motivo.
+- Regra das duas tentativas: se a mesma abordagem falhar duas vezes, pare, escreva o que tentou e o que descobriu, e peça decisão.
+- Quando eu relatar algo que vi na tela, trate como dado, não como opinião. Pode contradizer seu teste automatizado:
+  o teste provavelmente não mede o que eu vi. Registre a lacuna e crie a medição que faltava.
+
+### 0.5 Verdade e atalhos (nunca)
+- Só afirme "passou" se executou o comando nesta sessão e viu a saída. Diga "não executei" quando for o caso.
+- O gate verde significa TUDO verde numa única execução. Proibido: pular etapas do check.sh (ex.: rodar sem fmt),
+  editar o gate para passar, reexecutar até passar, ou chamar de "flake" uma falha que você não investigou.
+  Teste instável: corrija ou tire do gate com justificativa em STATE.md; nunca esconda.
+- Não desligue verificações para sumir um erro (release, allow, unwrap, comentar teste).
+- Não descarte nem "limpe" amostras de medição. Repita e registre.
+- Números precisam passar no teste de plausibilidade (mais carga não usa menos memória; p95 ≥ média). Se algo parece estranho,
+  investigue antes de relatar.
+- Comandos que matam processos: use apenas PIDs que você iniciou. `pkill -x` com nome > 15 caracteres não casa.
+- Ambiente é VM sem 3D: valide funcionamento; desempenho só em GPU real. Diga isso ao relatar tempo ou RAM.
+- Não invente APIs: leia o código-fonte/doc da versão fixada e cite a fonte.
+
+### 0.6 Higiene de repositório
+- Mudança experimental ou quebrada: crie branch `wip/<nome>` e comite lá com mensagem "WIP (quebrado): <sintoma>".
+  O master só recebe trabalho que passa no gate. Nunca deixe o master quebrado nem trabalho importante só na árvore de trabalho.
+- Commits pequenos, uma unidade lógica, mensagem que diz o porquê. Sem push (eu empurro).
+- Arquivos protegidos e dependências: siga AGENTS.md §3, §5 e §6.
+- Debug temporário (eprintln!, variáveis de ambiente de teste) é removido antes do commit ou fica sob `cfg(feature = "bench")`.
+
+### 0.7 Ao terminar (mesmo se a tarefa não terminou)
+1. `bash scripts/check.sh` completo; cole o resultado final.
+2. Atualize docs/STATE.md: §3 feito (com a prova), §4 em andamento, §5 próximas, §6 dívidas/descobertas,
+   §7 não medido, §9 handoff (o que fazia, comando exato para reproduzir o estado, próximo passo imediato).
+3. Comite localmente.
+4. Autorrevisão: releia seu próprio relatório como um revisor cético. Procure números inconsistentes entre si, afirmações
+   sem evidência, e itens do critério de aceite que você não executou. Liste 3 maneiras pelas quais sua conclusão pode estar errada
+   e o que você checou para cada.
+5. Relatório curto, neste formato:
+   - Resultado: funciona / parcial / quebrado (uma linha)
+   - Como eu testo à mão (comandos exatos e o que devo ver)
+   - Confirmação visual do humano: OK / pendente (aplicação deixada aberta)
+   - Provas (comando → saída crua → interpretação em 1–2 frases)
+   - NÃO executado / NÃO medido
+   - Descobertas laterais (já anotadas em STATE.md §6)
+   - Próximo passo proposto (não o execute)
+
+### 0.8 Quando perguntar antes de agir
+Mudança de arquitetura, protocolo (protocols/*.xml), segurança (lock, PAM, filtro de globais), ADR aceito, dependência nova
+fora do workspace, comandos fora do repositório (sudo, /etc, apt), apagar ou reescrever código em grande escala.
+Para todo o resto, escolha o padrão recomendado, avise no relatório ("usei X; reverta se discordar") e continue.
+Agrupe dúvidas em uma única pergunta, com sua recomendação.
+
+### 0.9 Validação visual: o humano é o juiz final
+- Todo critério que depende do que aparece na tela — clique/arrasto de janela, presença e largura do painel,
+  formato/posição do cursor, transparência, z-order, ausência de barra dupla, decoração acompanhando o resize —
+  NÃO é fechado por teste automatizado nem pela sua própria observação. Teste automatizado é pré-filtro; a sentença
+  final é o humano.
+- Para cada mudança visual, nesta ordem:
+  1. execute o comando de execução/manual do RUNBOOK e deixe a aplicação **aberta**;
+  2. diga exatamente o que o humano deve olhar e o que fazer (ex.: "arraste a barra da janela 1 e confirme que só
+     ela se move; veja se a barra inferior preenche a largura toda");
+  3. peça explicitamente o "ok" do humano;
+  4. **não encerre o processo**: quem fecha a aplicação é o humano, depois de testar. Mate apenas PIDs que você
+     iniciou e somente se o humano pedir.
+- Sem o "ok" do humano nesta sessão, o item fica em `docs/STATE.md` §7 como **não validado** e a tarefa NÃO é
+  concluída. Nunca escreva "validado visualmente" com base só em log, screenshot seu ou teste headless.
+- Continue medindo o que é mensurável (geometria, insets, contagem de cliques, tempo ≤300 ms) e registre as medições
+  como prova complementar; elas não substituem o "vi na tela" do humano. Se o teste automatizado contradizer o relato
+  do humano, o relato prevalece: registre a lacuna da medição e crie a medição que faltava (§0.4).
+
 ### Início (antes de qualquer edição)
 1. Leia, nesta ordem: este arquivo, `docs/STATE.md`, `docs/RUNBOOK.md` e o cartão da tarefa em `docs/tasks/`.
 2. Rode `git status --short` e `git log --oneline -5`. Se houver mudanças não commitadas que você não fez,
@@ -170,6 +270,7 @@ Atualize `docs/progress.md` ao fim de cada tarefa: decisões, pendências, núme
 - [ ] Nenhum arquivo protegido alterado sem aprovação
 - [ ] Nenhuma dependência nova sem aprovação
 - [ ] `docs/progress.md` atualizado
+- [ ] Confirmação visual do humano obtida quando o critério é visual; o agente não fechou a aplicação
 - [ ] Relatório no formato da seção 8, com o que NÃO foi testado
 - [ ] Parou. Não iniciou a próxima fase.
 ## 10. Erros já cometidos neste projeto (não repita)
