@@ -82,21 +82,26 @@ impl AeroState {
         if pointer.is_grabbed() {
             return;
         }
-        let window = self
-            .space
-            .element_under(pointer.current_location())
-            .map(|(w, _)| w.clone())
-            .or_else(|| {
-                // Clique na DECORAÇÃO: a titlebar é uma layer surface e não está
-                // no Space, então `element_under` não a vê. Descobre a janela
-                // dona pelo window_id associado à superfície do frame sob o ponto.
-                let (surface, _) = self.surface_under(pointer.current_location())?;
-                let (_, _, window_id, _) = self
-                    .associated_frames
-                    .iter()
-                    .find(|(frame_surface, _, _, _)| frame_surface == &surface)?;
-                self.window_for_id(*window_id).cloned()
-            });
+        // A superfície sob o ponteiro é a fonte da verdade: `surface_under`
+        // respeita layers/decoração e z-order. NUNCA usar `element_under` aqui:
+        // ele ignora a titlebar (layer surface), então um clique na barra da
+        // janela da frente sobre o conteúdo da de trás elevaria a de trás.
+        let under = self.surface_under(pointer.current_location());
+        let window = under.as_ref().and_then(|(surface, _)| {
+            // Frame -> janela dona pelo window_id associado.
+            if let Some((_, _, window_id, _)) = self
+                .associated_frames
+                .iter()
+                .find(|(frame_surface, _, _, _)| frame_surface == surface)
+            {
+                return self.window_for_id(*window_id).cloned();
+            }
+            // Superfície de cliente -> Window correspondente no Space.
+            self.space
+                .elements()
+                .find(|w| w.toplevel().map(|t| t.wl_surface()) == Some(surface))
+                .cloned()
+        });
         if let Some(window) = window {
             self.space.raise_element(&window, true);
             if let Some(toplevel) = window.toplevel() {

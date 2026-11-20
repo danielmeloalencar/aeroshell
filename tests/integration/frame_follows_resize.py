@@ -84,8 +84,17 @@ def wait(pattern, timeout=60, group=0):
 
 
 def ipc(command):
+    # O socket do compositor pode ainda não existir nos primeiros instantes.
+    # Espera até 15 s em vez de falhar com ConnectionRefusedError.
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    s.connect(IPC_SOCK)
+    for _ in range(150):
+        try:
+            s.connect(IPC_SOCK)
+            break
+        except (ConnectionRefusedError, FileNotFoundError):
+            time.sleep(0.1)
+    else:
+        raise RuntimeError(f"socket IPC {IPC_SOCK} não apareceu em 15 s")
     s.sendall((command + "\n").encode())
     time.sleep(0.4)
     lines = [l for l in s.recv(4096).decode().splitlines() if l and l != "."]
@@ -223,6 +232,35 @@ time.sleep(0.5)
 focus2 = focus_surfaces(mark_click2)
 print(f"foco após 2º clique na mesma janela A: {focus2}")
 
+# 2c) BARRA da janela da FRENTE sobre o CONTEÚDO da de trás: o clique não pode
+#     "passar direto" e elevar a janela de trás (relato do humano).
+#     B(y=120) tem a titlebar em y=90..120; A(y=80) tem conteúdo em y=80..574.
+#     (200,100) está na barra de B e no conteúdo de A. Garante B na frente
+#     clicando primeiro num ponto só dela (x=780 está fora do frame de A).
+send("motion 780 560")
+send("button press")
+send("button release")
+time.sleep(0.5)
+top_before = rows()[-1][2]
+bar_over_surface = surface_at(200, 100)
+mark_over = len(log())
+send("motion 200 100")
+send("button press")
+send("button release")
+time.sleep(0.5)
+top_after = rows()[-1][2]
+focus_over = focus_surfaces(mark_over)
+print(f"barra de B sobre conteúdo de A: superfície em (200,100)={bar_over_surface}")
+print(f"frente antes y={top_before}, depois y={top_after}; foco={focus_over} (A={surf_a}, B={surf_b})")
+# B já estava focada pelo clique que a elevou: não deve haver novo focus=true,
+# apenas NÃO pode o foco saltar para A. A superfície sob o ponto deve ser o
+# frame (nem a superfície de cliente de A, nem a de B).
+overlap_ok = bool(
+    top_before == Y_B and top_after == Y_B
+    and surf_a not in focus_over
+    and bar_over_surface not in (surf_a, surf_b)
+)
+
 # 3) resize pela borda esquerda do frame de A. frame origin = A - insets.
 cA = content_of(0)
 if cA is None:
@@ -258,8 +296,11 @@ b_intact = bool(b1 and b0 and (b1[3], b1[4]) == (b0[3], b0[4]))
 # `focus=true`. O critério é: A recebeu foco em algum clique e B nunca recebeu.
 all_focus = focus_bar + focus1 + focus2
 focus_ok = bool(surf_a in all_focus and surf_b not in all_focus)
-verdict = bool(detected and grabbed and a_moved and b_intact and focus_ok and bar_ok)
-print(f"\nA mudou={a_moved}  B intacta={b_intact}  foco só em A={focus_ok}  barra eleva A={bar_ok}")
+verdict = bool(
+    detected and grabbed and a_moved and b_intact and focus_ok and bar_ok and overlap_ok
+)
+print(f"\nA mudou={a_moved}  B intacta={b_intact}  foco só em A={focus_ok}  barra eleva A={bar_ok}"
+      f"  barra da frente não passa={overlap_ok}")
 print(f"VEREDITO: {'OK' if verdict else 'FALHA'}")
-print("(esperado: clique na barra de A eleva/foca A; resize muda A, B idêntica, foco nunca em B)")
+print("(esperado: clique na barra da janela da frente mantém ela na frente mesmo sobre conteúdo da de trás)")
 sys.exit(0 if verdict else 1)

@@ -283,22 +283,18 @@ impl AeroState {
                 }
             }
         }
-        if let Some((window, location)) = self.space.element_under(pos) {
-            if let Some((s, p)) =
-                window.surface_under(pos - location.to_f64(), WindowSurfaceType::ALL)
-            {
-                tracing::debug!(?pos, hit_client = ?s.id(), "hit-test cliente (antes do frame)");
-                return Some((s, (p + location).to_f64()));
-            }
-        }
-        // Frames: a região de decoração (total menos o conteúdo do cliente)
-        // roteia para a superfície do frame. O conteúdo já foi tratado acima.
-        for (frame_surface, _, _, client_surface) in &self.associated_frames {
-            let Some(cs) = client_surface else { continue };
-            let Some(window) = self
-                .space
-                .elements()
-                .find(|w| w.toplevel().map(|t| t.wl_surface()) == Some(cs))
+        // Frames: a decoração (total menos o conteúdo do cliente) tem PRIORIDADE
+        // sobre o conteúdo de outras janelas. Se a barra da janela da frente cobre
+        // o conteúdo da de trás, o hit é da barra — não do conteúdo. Percorre o
+        // Space do topo (z-order) para baixo para a janela da frente ganhar.
+        for window in self.space.elements().rev() {
+            let Some(cs) = window.toplevel().map(|t| t.wl_surface()) else {
+                continue;
+            };
+            let Some((frame_surface, _, _, _)) = self
+                .associated_frames
+                .iter()
+                .find(|(_, _, _, c)| c.as_ref() == Some(cs))
             else {
                 continue;
             };
@@ -333,6 +329,14 @@ impl AeroState {
             // superfície (não o hit local), para que enter/motion cheguem certos.
             tracing::debug!(?pos, ?frame_rect, ?content_rect, hit_frame = ?frame_surface.id(), "hit-test frame (região de decoração)");
             return Some((frame_surface.clone(), frame_loc.to_f64()));
+        }
+        if let Some((window, location)) = self.space.element_under(pos) {
+            if let Some((s, p)) =
+                window.surface_under(pos - location.to_f64(), WindowSurfaceType::ALL)
+            {
+                tracing::debug!(?pos, hit_client = ?s.id(), "hit-test cliente");
+                return Some((s, (p + location).to_f64()));
+            }
         }
         None
     }

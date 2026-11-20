@@ -63,3 +63,11 @@ Ao final: atualizar STATE.md (§3, §4, §5, §9) e comitar localmente (sem push
   ANTES `barra eleva A=False`; DEPOIS `True`, foco em A. Critério 4 (visual) segue pendente para este detalhe.
 - Amostra falha registrada (não descartada): `frame_resize_edges.py` falhou 1× em 3 no `BottomRight` porque os pontos
   são calculados uma vez e um probe aplicou `content_w=1002`; causa em `STATE.md §6`, teste a corrigir depois.
+- 3º detalhe (relato do humano): barra da janela da frente sobre o conteúdo da de trás fazia o clique "passar direto".
+  Causas: `surface_under` checava o cliente antes da decoração; `focus_on_press` usava `element_under` (ignora layers).
+  Corrigido: decoração primeiro (z-order do topo) e `surface_under` como fonte única de foco.
+  Prova ANTES/DEPOIS em `frame_follows_resize.py`: superfície `(200,100)` cliente de A → frame de B; frente `120→80`
+  → `120→120`. Critério 4 (visual) segue pendente para este detalhe.
+- Amostra falha registrada: `frame_follows_resize.py` falhou 1× com `ConnectionRefusedError` no socket IPC inicial;
+  `ipc()` agora espera até 15 s. Também 1 execução com asserção de foco inválida (B já focada) — corrigida para
+  "foco não salta para A".

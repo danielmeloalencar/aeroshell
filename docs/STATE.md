@@ -43,9 +43,20 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
       `associated_frames` quando `element_under` não vê janela (titlebar é layer surface). Prova:
       `frame_follows_resize.py` ANTES: `ordem ... BARRA` inalterada, `foco=[]`, `barra eleva A=False`;
       DEPOIS: ordem inverte, `foco=['wl_surface@3[1]']` (A), `barra eleva A=True`.
+- [x] 02b (barra da frente sobre conteúdo da de trás, relato do humano): DUAS causas corrigidas:
+      (1) `surface_under` verificava o CLIENTE antes da decoração dos frames — o conteúdo de A roubava o hit da barra
+      de B; agora a decoração vem primeiro e percorre o Space do topo (z-order) para baixo;
+      (2) `focus_on_press` usava `element_under` (ignora layers) — trocado por `surface_under` como fonte única,
+      resolvendo frame→`window_id` ou cliente→`Window`.
+      Prova: ANTES `superfície em (200,100)=wl_surface@3[1]` (conteúdo de A), `frente antes y=120, depois y=80`,
+      `barra da frente não passa=False`; DEPOIS `superfície=wl_surface@45[0]` (frame de B), `frente 120→120`,
+      `foco=[]` (B já estava focada, foco não saltou para A), `barra da frente não passa=True`.
+- [x] Gate final desta rodada: `bash scripts/check.sh` → `OK: scripts/check.sh passou` (EXIT=0);
+      `frame_follows_resize.py`, `frame_window_id.py`, `frame_buttons.py`, `frame_resize_edges.py` → 4× OK.
 ## 4. Em andamento
-- [ ] 02b — código pronto e gate verde; falta SOMENTE a confirmação visual do humano para o clique na BARRA da janela
-      de trás (critério 4 do cartão). Aplicação deve ser deixada aberta; quem fecha é o humano (`AGENTS.md §0.9`).
+- [ ] 02b — código pronto e gate verde; falta SOMENTE a confirmação visual do humano para o clique na barra da janela
+      da FRENTE quando ela cobre o conteúdo da de trás (critério 4). Aplicação deixada aberta; quem fecha é o humano
+      (`AGENTS.md §0.9`).
 ## 5. Próximas tarefas (ordem; cada uma tem um cartão em docs/tasks/)
 1. `02b-window-id.md` — validação visual final (2 janelas no nested, mover/resize/✕/foco), depois fechar tarefa.
 2. `03-runtime-bun-sdk.md` — `aero.windows.list/focus/close`, snapshot + patches; tipos TS gerados de `aeroshell-ipc`.
@@ -76,7 +87,14 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   (1) o map não anunciava `frame_requested` para a 2ª janela; (2) `nth(window_id)` usava ordem z. Confirmado por log.
 - 02b (relato do humano, 2026-11-20, após "ok" parcial): clicar na BARRA/DECORAÇÃO da janela de trás não a elevava
   (só com arrasto). Confirmado e CORRIGIDO: `element_under` ignora layer surfaces; fallback por `surface_under` +
-  `associated_frames` em `input.rs`. Aguardando confirmação visual deste último detalhe.
+  `associated_frames` em `input.rs`.
+- 02b (relato do humano, 2026-11-20, 3º detalhe): barra da janela da FRENTE sobre o CONTEÚDO da de trás — o clique
+  "passava direto" e elevava a de trás. Confirmado e CORRIGIDO (duas camadas: ordem em `surface_under` e fonte em
+  `focus_on_press`). Amostra falha crua em `/tmp/opencode/overlap-before2.log`, não descartada.
+- Amostra falha de infraestrutura do teste (registrada, não descartada): `frame_follows_resize.py` falhou 1× com
+  `ConnectionRefusedError` no socket IPC antes da inicialização; `ipc()` agora espera até 15 s pelo socket.
+  Também houve 1 execução com falha apenas na asserção de foco (B já estava focada, então não emite `focus=true`);
+  a asserção foi corrigida para "foco não salta para A", que é o critério real.
 - `frame_resize_edges.py` é intermitente: 1 de 3 execuções nesta sessão falhou no `BottomRight` (`hit_no_frame=False`).
   Causa identificada no log cru `/tmp/edges-comp-25191.log`: o probe `Right` aplicou `content_w=1002`, mas o teste
   calcula `EDGE_POINTS` UMA vez com `696`; o ponto (759,577) passa a cair dentro do conteúdo. Não é regressão de
@@ -90,19 +108,22 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
 - Estabilidade do `ext-background-effect` (blur): não implementado; Smithay 0.7 não tem handler.
 - Nenhuma validação visual com juiz humano foi feita nestas duas últimas sessões (só documentação). Item visual só entra
   na seção 3 com o "ok" do humano registrado, conforme `AGENTS.md §0.9`.
-- 02b: confirmação visual PENDENTE para o clique na barra da janela de trás — deixar o nested aberto e o humano dar o "ok".
-- 02b (honestidade metodológica): a medição de **resize** e a de **clique na barra** foram vistas FALHANDO antes das
-  respectivas correções. A medição de **foco** foi adicionada depois do `nth` e não foi vista falhando antes; medida
-  depois: foco em A, nunca em B (no clique na barra e nos dois cliques no conteúdo).
+- 02b: confirmação visual PENDENTE para o clique na barra da janela da FRENTE sobre o conteúdo da de trás — deixar o
+  nested aberto e o humano dar o "ok".
+- 02b (honestidade metodológica): **resize**, **clique na barra da janela de trás** e **barra da frente sobre conteúdo**
+  foram vistos FALHANDO antes das respectivas correções. A medição de **foco** foi adicionada depois do `nth` e não
+  foi vista falhando antes; medida depois: foco em A, nunca em B. No 3º caso, B já estava focada: o critério medido
+  é "o foco não salta para A", não "novo focus=true em B".
 ## 8. Ambiente
 Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), gtk4-layer-shell, Rust via rustup, Bun.
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- O que eu estava fazendo: tarefa 02b — correção final do clique na barra; gate verde.
-- O que funcionou: `focus_on_press` com fallback do frame (`surface_under` → `associated_frames` → `window_for_id`).
-  ANTES `barra eleva A=False`; DEPOIS `True` e foco em A, nunca em B.
+- O que eu estava fazendo: tarefa 02b — 3º detalhe visual (barra da frente sobre conteúdo da de trás); gate verde.
+- O que funcionou: `surface_under` prioriza decoração (z-order do topo) sobre conteúdo; `focus_on_press` usa
+  `surface_under` como fonte única. ANTES `frente 120→80`; DEPOIS `120→120`, superfície do frame, foco não salta.
 - Comando exato: `python3 tests/integration/frame_follows_resize.py && bash scripts/check.sh`
-- Próximo passo imediato (uma ação): abrir o nested com 2 `foot`, deixar aberto, pedir o "ok" visual do clique na barra.
-- Descobertas laterais em §6: teste `frame_resize_edges.py` intermitente (causa identificada), flake do S1 sem causa.
+- Próximo passo imediato (uma ação): abrir o nested com 2 `foot`, deixar aberto, pedir o "ok" visual deste 3º detalhe.
+- Descobertas laterais em §6: `frame_resize_edges.py` intermitente (causa identificada), flake do S1 sem causa,
+  `ConnectionRefusedError` no IPC do teste (corrigido com espera de 15 s).
  
