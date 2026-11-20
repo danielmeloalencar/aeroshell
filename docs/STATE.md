@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-20 · commit: `8f5a97b` (na entrada da tarefa 02b; ver `git log --oneline -3`) · modo: SPIKE
+Última atualização: 2026-11-20 · tarefa ativa: 02c (PARCIAL — aguarda decisão) · modo: SPIKE
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -56,16 +56,33 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
 - [x] 02b — VALIDAÇÃO VISUAL DO HUMANO (2026-11-20): "ok validado e fechada a instancia", após testar na janela
       aberta com 2 `foot` o clique na barra da janela da frente sobre o conteúdo da de trás; o próprio humano fechou
       a aplicação (`AGENTS.md §0.9`). Tarefa 02b FECHADA.
+- [~] 02c (PARCIAL): instrumentação `RESIZE_SYNC_{MOTION,CLIENT,FRAME}` sob `cfg(feature="bench")` em `grab.rs`,
+      `compositor.rs`; teste `tests/integration/frame_resize_sync.py` escrito e visto FALHANDO antes da correção
+      (14/14, depois 13/14 passos pendentes). Correção mantida: `send_frame_configure` no próprio `ResizeGrab::motion`
+      (`grab.rs:245`), em vez de só no commit do cliente. Prova com a MESMA métrica, reprocessando os logs crus:
+      baseline `lag p95=177,22 ms / 13-14 pendentes`; após a correção `127,19 ms / 13-14` (−28% no lag, −1 commit).
+      Critério 1 do cartão NÃO passa (falta `0` pendentes); gate `bash scripts/check.sh` verde.
 ## 4. Em andamento
-- Nenhuma. Próxima: `03-runtime-bun-sdk.md` (Aguardando sua autorização para iniciar).
+- 02c BLOQUEADA: duas abordagens tentadas e insuficientes no critério de pendência — (1) configure no motion e
+  (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
+  do humano (`AGENTS.md §3.12`, regra das duas tentativas). Não abrir validação visual até a decisão.
 ## 5. Próximas tarefas (ordem; cada uma tem um cartão em docs/tasks/)
-1. `03-runtime-bun-sdk.md` — `aero.windows.list/focus/close`, snapshot + patches; tipos TS gerados de `aeroshell-ipc`.
-2. Passo 4 — Painel React (`useWindows()`), clique foca a janela certa; testar com 2 e 3 janelas (cartão a criar).
-3. Decisão sobre modo produto (sua).
+1. DECISÃO DO HUMANO sobre 02c: (A) aprovar Plano B (decoração 9-slice no compositor / buffer sobredimensionado
+   + src-rect, ADR novo) — única forma de eliminar a pendência com WebKit no caminho crítico; (B) redefinir o
+   critério para "lag p95 ≤ 300 ms" (já atendido: 127 ms) e encerrar 02c; (C) manter como está e abrir cartão novo.
+2. `03-runtime-bun-sdk.md` — `aero.windows.list/focus/close`, snapshot + patches; tipos TS gerados de `aeroshell-ipc`.
+3. Passo 4 — Painel React (`useWindows()`), clique foca a janela certa; testar com 2 e 3 janelas (cartão a criar).
+4. Decisão sobre modo produto (sua).
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
 - Atraso da decoração no resize (frame repinta depois do conteúdo; VM sem 3D piora). Causas baratas aplicadas
   (frame usa geometria commitada; fundo transparente). Timer de 20 ms no frame_webview.rs ainda existe (loop de despacho).
   Alternativas se persistir: nove fatias no compositor ou buffer sobredimensionado + src-rect (ADR 0001, Plano B).
+- PRIORIDADE ALTA (relato do humano, 2026-11-20, logo após fechar 02b): "o conteúdo acompanha o mouse muito bem,
+  porém a decoração fica atrasada correndo atrás". É o mesmo item acima, agora com sentença do juiz humano —
+  NÃO é só dívida teórica. Cartão rascunho: `docs/tasks/02c-frame-resize-sync.md` (aguarda confirmação para executar).
+  Leitura preliminar (HIPÓTESE, não medida): o frame só é reconfigurado no commit do cliente
+  (`protocols/compositor.rs:130-149`) e o shell despacha eventos Wayland num timer de 20 ms
+  (`frame_webview.rs:458`), somando um ciclo entre conteúdo e decoração.
 - Maximizar não move o cliente para a origem do output; restaurar manda `size = None`.
 - `button: 0x110` fixo no grab de resize (só botão esquerdo).
 - `--command` via `sh -c` pode orfanar netos (usar exec/lançamento direto).
@@ -95,6 +112,15 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   `ConnectionRefusedError` no socket IPC antes da inicialização; `ipc()` agora espera até 15 s pelo socket.
   Também houve 1 execução com falha apenas na asserção de foco (B já estava focada, então não emite `focus=true`);
   a asserção foi corrigida para "foco não salta para A", que é o critério real.
+- 02c (MEDIÇÃO, não é bug do produto): o `foot` arredonda o tamanho pedido para múltiplos de 6 (`want=706` →
+  conteúdo real `702`). A primeira versão do teste comparava o frame contra o `want` do motion; a métrica foi
+  corrigida em `frame_resize_sync.py` para usar o tamanho REAL commitado pelo cliente. Amostra falha crua em
+  `/tmp/opencode/sync-before.log` e `/tmp/opencode/sync-before2.log`, não descartadas.
+- 02c (LIMITAÇÃO ARQUITETURAL): com a decoração em WebView, o commit do frame leva ~60–100 ms após o configure;
+  motions de 50 ms tornam "zero pendentes no próximo motion" inatingível sem tirar o WebKit do caminho crítico
+  (Plano B, ADR 0001). Duas abordagens falharam; NÃO tentar uma terceira sem aprovação (`AGENTS.md §3.12`).
+- 02c (timer 1 ms sem ganho): `frame_webview.rs` foi temporariamente trocado de 20 ms para 1 ms; p95 piorou
+  (127,19 → 158,05 ms) e a pendência ficou em 13/14. Revertido para 20 ms. Amostra em `/tmp/opencode/sync-after3.log`.
 - `frame_resize_edges.py` é intermitente: 1 de 3 execuções nesta sessão falhou no `BottomRight` (`hit_no_frame=False`).
   Causa identificada no log cru `/tmp/edges-comp-25191.log`: o probe `Right` aplicou `content_w=1002`, mas o teste
   calcula `EDGE_POINTS` UMA vez com `696`; o ponto (759,577) passa a cair dentro do conteúdo. Não é regressão de
@@ -106,7 +132,11 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
 - Latência de resize com WebKit real; latência de ponteiro; qualquer desempenho em GPU real (tudo foi em VM sem 3D).
 - Número de processos/PSS com `related-view` foi medido só em VM; ADR 0001 está "aceito provisoriamente".
 - Estabilidade do `ext-background-effect` (blur): não implementado; Smithay 0.7 não tem handler.
-- Nenhuma validação visual pendente: 02b foi validada pelo humano em 2026-11-20 (registro em §3). Demais itens visuais
+- 02c: validação visual do humano NÃO foi feita — o critério automatizado (critério 1 do cartão) falha, então não
+  abri a instância para pedir o "ok". Não escrever "validado" com base nos logs.
+- 02c: desempenho em GPU real (VM sem 3D); 3 execuções seguidas com a LOW final (a métrica foi reprocessada de 3
+  execuções históricas, uma por variante — não são 3 repetições da mesma variante).
+- Nenhuma validação visual pendente de 02b: validada pelo humano em 2026-11-20 (registro em §3). Demais itens visuais
   das seções anteriores seguem como histórico, não reabertos nesta sessão.
 - 02b (honestidade metodológica): **resize**, **clique na barra da janela de trás** e **barra da frente sobre conteúdo**
   foram vistos FALHANDO antes das respectivas correções. A medição de **foco** foi adicionada depois do `nth` e não
@@ -117,11 +147,12 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- O que eu estava fazendo: tarefa 02b — FECHADA; `ok` do humano registrado e instância fechada pelo próprio humano.
-- O que funcionou: 2 frames HTML, ações por `window_id`, clique na decoração eleva/foca a dona, barra da frente
-  sobre conteúdo da de trás não "passa direto". Gate completo verde; 4 testes de integração OK.
-- Comando exato: `python3 tests/integration/frame_follows_resize.py && python3 tests/integration/frame_window_id.py && bash scripts/check.sh`
-- Próximo passo imediato (uma ação): abrir `docs/tasks/03-runtime-bun-sdk.md` e aguardar autorização para iniciar.
-- Descobertas laterais em §6: `frame_resize_edges.py` intermitente (causa identificada), flake do S1 sem causa,
-  `ConnectionRefusedError` no IPC do teste (corrigido), reatribuição de `window_id` após close.
+- O que eu estava fazendo: 02c — PARCIAL e BLOQUEADA; duas abordagens tentadas, critério de pendência não passa.
+- O que funcionou: `send_frame_configure` no `ResizeGrab::motion` reduziu o lag p95 de 177,22 → 127,19 ms;
+  instrumentação bench + `frame_resize_sync.py` medem o sintoma; 4 testes vizinhos OK; gate verde.
+- Comando exato: `python3 tests/integration/frame_resize_sync.py` → `VEREDITO: FALHA` (`13/14` pendentes, p95 127 ms).
+- Próximo passo imediato (uma ação): pedir DECISÃO ao humano entre Plano B (ADR novo), redefinir o critério para
+  p95 ≤ 300 ms, ou manter parcial. NÃO tentar terceira abordagem nem abrir validação visual sem essa decisão.
+- Descobertas laterais em §6: arredondamento do foot (métrica corrigida), timer 1 ms sem ganho (revertido),
+  `frame_resize_edges.py` intermitente, flake do S1, reatribuição de `window_id`.
  

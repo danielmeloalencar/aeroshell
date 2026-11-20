@@ -116,6 +116,58 @@ impl CompositorHandler for AeroState {
                 );
             }
         }
+        #[cfg(feature = "bench")]
+        {
+            // 02c: medir o instante em que o conteúdo e a decoração realmente
+            // entram na tela (commit do buffer), não o instante do configure.
+            // Lido ANTES de `on_commit_buffer_handler`, que faz `attrs.buffer.take()`.
+            let t_nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0);
+            let committed = with_states(surface, |states| {
+                match &states
+                    .cached_state
+                    .get::<SurfaceAttributes>()
+                    .current()
+                    .buffer
+                {
+                    Some(BufferAssignment::NewBuffer(buffer)) => {
+                        smithay::wayland::shm::with_buffer_contents(buffer, |_, _, data| {
+                            (data.width, data.height)
+                        })
+                        .ok()
+                    }
+                    _ => None,
+                }
+            });
+            if let Some((w, h)) = committed {
+                if self
+                    .space
+                    .elements()
+                    .any(|window| window.toplevel().map(|t| t.wl_surface()) == Some(surface))
+                {
+                    eprintln!("RESIZE_SYNC_CLIENT t={t_nanos} size={w}x{h}");
+                }
+                if let Some((frame_surface, window_id)) = self
+                    .associated_frames
+                    .iter()
+                    .find(|(frame_surface, _, _, _)| frame_surface == surface)
+                    .map(|(frame_surface, _, id, _)| (frame_surface.clone(), *id))
+                {
+                    let geo = self
+                        .frame_geometries
+                        .get(&frame_surface)
+                        .copied()
+                        .unwrap_or_default();
+                    eprintln!(
+                        "RESIZE_SYNC_FRAME t={t_nanos} window_id={window_id} buffer={w}x{h} content={}x{}",
+                        w - geo.extra_w(),
+                        h - geo.extra_h()
+                    );
+                }
+            }
+        }
         on_commit_buffer_handler::<Self>(surface);
         if !is_sync_subsurface(surface) {
             let mut root = surface.clone();

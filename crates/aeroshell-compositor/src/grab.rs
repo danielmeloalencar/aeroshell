@@ -242,6 +242,30 @@ impl PointerGrab<AeroState> for ResizeGrab {
             size.h = (self.initial_size.h - dy).max(MIN_H);
             loc.y = self.initial_loc.y + (self.initial_size.h - size.h);
         }
+        let window_id = self.window.toplevel().and_then(|toplevel| {
+            let surface = toplevel.wl_surface();
+            data.associated_frames
+                .iter()
+                .find(|(_, _, _, cs)| cs.as_ref() == Some(surface))
+                .map(|(_, _, id, _)| *id)
+        });
+        #[cfg(feature = "bench")]
+        {
+            let t_nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0);
+            eprintln!(
+                "RESIZE_SYNC_MOTION t={t_nanos} window_id={:?} want={}x{}",
+                window_id, size.w, size.h
+            );
+        }
+        // 02c: conteúdo e decoração recebem o configure no MESMO passo do grab.
+        // Esperar o commit do cliente acrescentava um ciclo inteiro e fazia a
+        // barra "correr atrás" (14/14 passos pendentes antes desta mudança).
+        if let Some(window_id) = window_id {
+            data.send_frame_configure(window_id, (size.w, size.h));
+        }
         if let Some(toplevel) = self.window.toplevel() {
             toplevel.with_pending_state(|state| state.size = Some(size));
             toplevel.send_configure();
