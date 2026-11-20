@@ -215,17 +215,19 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
 - 02j (classificação de `source=final` no hygiene): o configure final é enviado no release, mas o relógio do
   harness pode registrá-lo antes de `t_release`. Agora é classificado pelo rótulo semântico `source=final`, com
   tolerância de 20 ms antes do release; amostra crua `/tmp/opencode/02j_hygiene_final1.log` (ratio 0,357).
-- 02j (RELATOS VISUAIS do humano, 2026-11-20, em tempo real durante os harnesses — AMBOS são dados):
-  (1) "o redimensionamento aparentemente resolveu visualmente, está a decoração seguindo muito bem o resize";
-  (2) logo depois: "notei um problema no acompanhamento da barra de título. Ela ficava piscando entre uma
-  posição antiga mais pra trás e a atual mais pra frente."; (3) refinamento imediato: **"só na barra de título,
-  a moldura está ok"**. O flicker é, portanto, localizado na titlebar — as bordas/cantos da moldura não piscam.
-  O 2º/3º são sintomas NOVOS e concretos, NÃO são confirmação de que o resize está bom. Nenhum dos relatos é a
-  confirmação formal de
-  `AGENTS.md §0.9` (não houve aplicação deixada aberta com instrução explícita). Hipótese (NÃO investigada):
-  o `RescaleRenderElement` da 02e pode estar desenhando o frame na geometria antiga por um frame antes do
-  configure seguinte; amostra não capturada. **NÃO reabrir 02e/02f nem mudar escala/debounce por conta própria** —
-  exige cartão novo e decisão do humano.
+- 02j (RELATOS VISUAIS do humano, 2026-11-20 — TODOS são dados, o último prevalece):
+  (1) em tempo real durante os harnesses: "o redimensionamento aparentemente resolveu visualmente, está a
+  decoração seguindo muito bem o resize"; (2) "notei um problema no acompanhamento da barra de título. Ela
+  ficava piscando entre uma posição antiga mais pra trás e a atual mais pra frente."; (3) refinamento: "só na
+  barra de título, a moldura está ok"; (4) **TESTE MANUAL com aplicação aberta (compositor PID 84904, socket
+  `wayland-aero-02j-visual`, log `/tmp/opencode/aero-02j-visual.log`): "no teste manual pude ver que o flicker é
+  geral, incluindo as bordas"**. O item (4) contradiz (3): com o arrasto manual a janela aberta, o flicker
+  ATINGE também as bordas. Registro a contradição, não a resolvo — a medição automática (geometria/escala por
+  frame) NÃO capturou o que a pessoa viu (AGENTS.md §0.4). Hipótese (NÃO investigada): o `RescaleRenderElement`
+  da 02e desenha o frame na geometria antiga por um ou mais frames antes do configure seguinte, e o
+  `FRAME_STRETCH_ACTIVE` medido no arrasto real (4 episódios, 482/5439/846/937 ms, `max_scale` até 2,165;
+  1 `FRAME_NEVER_DREW_AT_SIZE` com `buffer=964x530` vs alvo `708x530`) é compatível com o flicker geral.
+  **NÃO reabrir 02e/02f nem mudar escala/debounce por conta própria** — exige cartão novo e decisão do humano.
 - 04b: `tests/integration/s3_input.sh` falha **também no baseline** (`0fc05e7`, worktree isolado): a input region
   é aplicada (`rects=[(24,8,189,36)]`) mas o clique "dentro" dá `under=None`. Não é regressão do painel React;
   S3 não está no gate. 04b não mexeu no teste (tentei `AERO_PANEL_LEGACY=1`, sem efeito, e revertei).
@@ -355,12 +357,14 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   citada pelo humano. Registrado aqui como contexto; **ADR 0006 (aditivo/proposto) NÃO foi editado** — incluir
   prior art em ADR exige aprovação explícita (AGENTS.md §0.8 / §6).
 ## 7. Não medido / não validado (não trate como fato)
-- 02j: **confirmação visual formal PENDENTE.** O humano relatou em tempo real que a moldura está OK, mas viu
-  flicker **só na barra de título** (posição antiga ↔ atual) — registrado em §6. Não houve aplicação deixada
-  aberta com instrução explícita nem o "ok" de `AGENTS.md §0.9`. Como a 02j não muda aparência, o item fica
-  pendente apenas como contexto — NÃO escrever "validado visualmente" com base nesses relatos informais.
-  O flicker da titlebar NÃO foi medido, capturado nem investigado nesta sessão; precisa de cartão novo.
-  Instância 02f (PID 72480) continua aberta; quem fecha é o humano.
+- 02j (VALIDAÇÃO VISUAL REALIZADA, RESULTADO NEGATIVO): teste manual com aplicação aberta (PID 84904, socket
+  `wayland-aero-02j-visual`) e instrução explícita de olhar barra e bordas; humano respondeu: **"no teste manual
+  pude ver que o flicker é geral, incluindo as bordas"**. Veredito: **NÃO validado**; o "ok" NÃO foi dado.
+  O relato contradiz o anterior ("só na barra, moldura ok") — o dado do teste manual prevalece (§6).
+  A 02j não muda aparência, logo NÃO é ela que introduziu o flicker, mas a instrumentação só prova que a escala
+  esteve ativa por 5,4 s seguidos; **não mede o flicker em si**. Falta a medição que Capture posição da decoração
+  por frame durante o arrasto (lacuna registrada, exige cartão novo). Aplicação deixada aberta; quem fecha é o
+  humano. Instância 02f (PID 72480) também continua aberta.
 - 02j: não medido — latência/qualidade visual em GPU real; os 3 modos nomeados foram medidos só em VM sem 3D.
 - 02f: JUIZ VISUAL NEGATIVO (2026-11-20): humano: **"A moldura ainda está chegando atrasada"**. O pré-filtro
   (razão 0,286, 14/14 configures no cliente, final no tamanho real) NÃO mediu o que a pessoa viu — mesma lacuna
@@ -410,9 +414,9 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- O que eu estava fazendo: 02j CONCLUÍDA — 3 diagnósticos nomeados sob `bench`, teste primeiro visto falhando,
-  4 testes unitários OK, 6× harness OK, vizinhos OK, gate verde, strings de produção = 0. Árvore suja em `master`,
-  pronta para commit local (sem push). Nenhuma linha de produção muda aparência/geometria/cadência.
+- O que eu estava fazendo: 02j CONCLUÍDA e commitada (`7795d65`) — 3 diagnósticos nomeados sob `bench`, teste
+  primeiro visto falhando, 4 testes unitários OK, 6× harness OK, vizinhos OK, gate verde, strings = 0. Nenhuma
+  linha de produção muda aparência/geometria/cadência. Depois abri instância manual (PID 84904) para validar.
 - Gate final (após a última mudança de código): `bash scripts/check.sh` → `CHECK_EXIT=0`,
   `OK: scripts/check.sh passou`, bun 9 pass / 0 fail (`/tmp/opencode/02j_check_final3.log`);
   `cargo clippy --workspace --all-targets --features bench -- -D warnings` → EXIT=0; `cargo fmt --all -- --check`
@@ -421,9 +425,10 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
   espera ~10 s); provas em `/tmp/opencode/02j_diag_final{1,2,3}.log` e `02j_diag_faults_final{1,2,3}.log`.
 - Instância 02f ainda aberta e reprovada no juiz: compositor PID 72480, shell 72487, 2 `foot` 72556/72557, socket
   `wayland-aero-02f`, log `/tmp/opencode/aero-02f-visual.log`. Não encerrar — quem fecha é o humano.
-- NOVO dado do humano (2026-11-20): durante os arrastos viu flicker **só na barra de título** (posição antiga ↔
-  atual); a moldura está OK. Não foi medido nem investigado. Próximo passo (NÃO executar): humano decidir se abre
-  cartão novo para esse flicker; não reabrir 02e/02f por conta própria.
+- VALIDAÇÃO VISUAL NEGATIVA (2026-11-20, teste manual com PID 84904): humano viu **flicker geral, incluindo as
+  bordas**, contradizendo o relato anterior de que só a titlebar piscava. Não medido nem investigado; precisa de
+  medição de posição da decoração por frame e cartão novo. Instância 84904 deixada aberta; quem fecha é o humano.
+  Próximo passo (NÃO executar): humano decidir se abre cartão para o flicker geral; não reabrir 02e/02f sozinho.
 - NÃO mexer no debounce/200 ms, NÃO mudar escala/move/conteúdo, NÃO editar ADR 0006, NÃO encerrar PID 72480,
   NÃO executar 02d/02g/02h/02i/05/9-slice sem autorização nova. Sem push.
 - Contexto preservado em §6: cprussin é contribuidor (criador: Victor Berger/elinorbgr); prior art domicile é
