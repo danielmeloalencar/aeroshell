@@ -14,8 +14,8 @@ lock, login) é TSX renderizado por WebKitGTK; runtime de política em Bun. Dev 
 **Fase atual: F1** (núcleo do compositor). F0/fatia vertical FECHADA pelo humano em 2026-11-21: `foot` com
 decoração HTML funcional e painel React/TSX; fechamento formal em `docs/f0-relatorio-go-no-go.md` (quadro
 S1–S5, ratificação registrada dos ADRs, S4→F2/F9 e S5→F5/F6 deferidos com justificativa).
-F1 em andamento por cartões pequenos: F1a FECHADA (render compartilhado, juiz visual OK); próximo cartão F1b,
-somente após novo pedido/aprovação.
+F1 em andamento por cartões pequenos: F1a e F1b FECHADAS (F1a com juiz visual OK; F1b fechada pelo humano);
+F1c pronta com juiz visual pendente (§7); F1d bloqueado até aprovação separada de apt/features.
  
 ## 3. Feito (com onde está a prova)
 - [x] Compositor nested (winit) com socket próprio, xdg-shell, layer-shell — `scripts/check.sh` (S1 nested)
