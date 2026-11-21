@@ -14,7 +14,8 @@ lock, login) é TSX renderizado por WebKitGTK; runtime de política em Bun. Dev 
 **Fase atual: F1** (núcleo do compositor). F0/fatia vertical FECHADA pelo humano em 2026-11-21: `foot` com
 decoração HTML funcional e painel React/TSX; fechamento formal em `docs/f0-relatorio-go-no-go.md` (quadro
 S1–S5, ratificação registrada dos ADRs, S4→F2/F9 e S5→F5/F6 deferidos com justificativa).
-F1 autorizada, mas NÃO iniciada: exige cartões pequenos e aprovação por tarefa (próximo: F1a).
+F1 em andamento por cartões pequenos: F1a (reimplementação) com código pronto e juiz visual pendente (§7);
+F1b/F1c/F1d somente após nova aprovação. F1 anterior foi revertida em `4307cc4` e reimplementada do zero.
  
 ## 3. Feito (com onde está a prova)
 - [x] Compositor nested (winit) com socket próprio, xdg-shell, layer-shell — `scripts/check.sh` (S1 nested)
@@ -316,10 +317,28 @@ F1 autorizada, mas NÃO iniciada: exige cartões pequenos e aprovação por tare
   relatório F0) e 0006 (superado por 0007); conteúdo técnico intacto e diff mostrado ao humano.
   `grep -n "Fase atual: F1" docs/STATE.md` → encontrado; "modo: SPIKE" removido.
   Gate: `bash scripts/check.sh` → `OK: scripts/check.sh passou` (saída colada no relatório da sessão).
+- [x] F1a (REIMPLEMENTAÇÃO, código + prova técnica; JUIZ VISUAL PENDENTE em §7): após `4307cc4 revert(f1)`,
+  `render/mod.rs` + `render/elements.rs` voltam a abrigar `AeroRenderElements`, `FrameSlice`, `frame_target`
+  e `push_frame_elements` (9-slice do canvas fixo + placeholder), escritos do zero a partir do bloco de
+  `backend/winit.rs` (que passou de 712 para 386 linhas e só monta a entrada/consome o resultado). Nenhuma
+  mudança de geometria, escala, ordem, cores, timers ou formato de log. Cartão:
+  `docs/tasks/F1a-render-compartilhado.md`.
+  **Teste primeiro visto falhando:** `cargo test -p aeroshell-compositor render_compartilhado` →
+  `E0433: cannot find render in the crate root` (EXIT=101, `/tmp/opencode/f1a-v2/test_baseline.log`);
+  depois `1 passed`.
+  **Harnesses antes/depois** (`/tmp/opencode/f1a-v2/{baseline,after}_*.log`): glue `VEREDITO: OK` nas duas
+  rodadas com `edge_l=[6.00,6.00] edge_r=[6.00,6.00] title_h=[30.00,30.00]`, `titlebar n={3} left=120
+  right=96 gap=[480,618]`, `SLICE_COMPOSE n_min=9` (293→322 linhas de cadência; 0→1 malformada por
+  interleaving, registrada); `FRAME_PLACEHOLDER` 2 linhas antes/depois. fixed_canvas, release_pixels,
+  buttons, window_id, configure_hygiene, grab_hygiene, initial_buffer, diagnostics normal/faults → OK.
+  `frame_follows_resize.py` FALHOU no baseline (resize não engatou) e passou depois;
+  `frame_fixed_canvas_hygiene.py` falhou depois (timeout do 1º buffer) e passou na **repetição diagnóstica
+  única** (`after_fixed_canvas_hygiene_retry1.log`). `frame_cold_start.py` segue baseline-falha (§7).
+  Gate `bash scripts/check.sh` → `OK: scripts/check.sh passou`; clippy default e `--features bench`
+  `-D warnings` → EXIT=0; fmt → EXIT=0.
 ## 4. Em andamento
-- Nenhuma implementação: F0 formalmente fechada; F1 autorizada, aguardando cartão próprio. Não avançar
-  automaticamente para código, protocolo ou arquitetura novos. Próximo cartão: F1a (extrair o render do
-  frame de `backend/winit.rs` para `render/elements.rs`), somente após aprovação.
+- F1a: código, teste-primeiro, gate/clippy e harnesses de render prontos (§3). Falta **juiz visual** com
+  nested de 2 `foot`, aplicação deixada aberta, antes de F1b. Não avançar para F1b sem o "ok".
 - A 02p foi concluída com pixels, vizinhos, gate/clippy e juiz visual positivos (§3).
 - 02o SUBSTITUÍDA pela medição/correção 02p; não ajustar sua grade antiga nem reabrir sem novo pedido.
 - 02n: **JUIZ VISUAL NEGOU (2026-11-20)** — humano: "problema ainda ocorre". Técnica/gate/clippy provados 3× (§3),
@@ -348,8 +367,8 @@ F1 autorizada, mas NÃO iniciada: exige cartões pequenos e aprovação por tare
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. `F1a` — extrair o render do frame de `backend/winit.rs` para `render/elements.rs`, sem mudança de
-   comportamento; pré-requisito do backend udev. Abrir cartão próprio e obter ok visual antes de F1b.
+0. `F1a` — CÓDIGO PRONTO (§3), aguardando só o juiz visual; **não iniciar F1b antes do "ok"**.
+   Próximo após F1a: `F1b` (headless com render/damage), com cartão próprio e aprovação.
    Não reabrir 02q pela divergência do cronômetro sem pedido explícito do humano.
 1. `02o` — SUBSTITUÍDA: a 02p criou sonda full-res que reproduziu o flicker (2×1.910 pixels) e depois
    comprovou canvas fixo sem transiente. A grade antiga não é mais critério; não reabrir sem novo pedido.
@@ -364,6 +383,11 @@ F1 autorizada, mas NÃO iniciada: exige cartões pequenos e aprovação por tare
 8. `05-compatibilidade-protocolos.md` — RASCUNHO; 7 mensagens do `foot` registradas em §6. NÃO executar sem ok.
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- F1a (HARNESS, intermitências preservadas — NÃO corrigir nesta tarefa): `frame_follows_resize.py` falhou no
+  BASELINE (`resize detectado=None`, A não mudou) e passou depois; `frame_fixed_canvas_hygiene.py` falhou
+  depois (`timeout esperando buffer inicial`) e passou na repetição diagnóstica única. No glue pós-extração
+  houve 1 linha `SLICE_COMPOSE` malformada por interleaving de `eprintln!` (0 no baseline). Logs crus em
+  `/tmp/opencode/f1a-v2/`. Nenhuma amostra descartada; não chamar de "todos os harnesses verdes".
 - 02q (POOL, 2 tentativas preservadas): a 1ª marcou ready por double-rAF sem realizar/apresentar as views;
   `02q-cold-comp-36184.log` só contém `pool_vazio`, nenhum ready, e o teste deu timeout (`02q_after_pool1.log`).
   A 2ª esperou `LoadEvent::Finished` + `get_snapshot`; `02q-cold-comp-36843.log` mostra
@@ -599,6 +623,9 @@ F1 autorizada, mas NÃO iniciada: exige cartões pequenos e aprovação por tare
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- F1a (JUIZ VISUAL PENDENTE): extração técnica provada por gate, teste-primeiro e harnesses de geometria;
+  **ainda não houve "ok" do humano olhando o nested com 2 `foot`**. Instância deixada aberta pelo agente;
+  quem fecha é o humano (AGENTS.md §0.9). Sem o "ok", F1a NÃO é concluída e F1b NÃO começa.
 - F0 (BASELINE-FALHA PRESERVADO, NÃO SÃO GATES): `frame_cold_start.py` falha o sub-cronômetro >300 ms
   (374–415 ms medidos na via A) e `frame_resize_sync.py` falha pela métrica antiga de p95. Ambos ficam
   registrados como baseline-falha; 02p e 02q foram FECHADAS pelo juiz visual, não por esses harnesses.
@@ -755,14 +782,15 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **Fase atual: F1.** F0 fechada formalmente: `docs/f0-relatorio-go-no-go.md`; S4→F2/F9, S5→F5/F6 deferidos.
-- ADRs: só a linha de status de 0001 (ratificado) e 0006 (superado por 0007) editadas; conteúdo técnico intacto.
-- Gate desta sessão: `bash scripts/check.sh` verde (27 Rust + 9 Bun); commit `docs(f0): ...` local, sem push.
-- 02q/02p fechadas pelo juiz; cronômetro >300 ms e `frame_resize_sync.py` seguem como baseline-falha em §7.
-- Implementado em F0: placeholder sólido, âncora + related-view, pool de 2, canvas fixo + 9-slice.
-- Nested winit é a regressão; VM sem 3D não valida desempenho nem udev real.
-- Próximo passo imediato: abrir cartão F1a (render compartilhado) e obter aprovação antes de editar código.
-- Reproduzir o estado: `git log --oneline -1` (commit `docs(f0)`) + `bash scripts/check.sh`.
+- **Fase atual: F1.** F0 fechada; F1 anterior revertida (`4307cc4`) e F1a REIMPLEMENTADA do zero nesta sessão.
+- F1a (código): `render/elements.rs` dono do 9-slice/canvas/placeholder; `winit.rs` (712→386 linhas) só consome.
+- Teste-primeiro: `E0433 cannot find render` → depois `1 passed`; gate `bash scripts/check.sh` verde,
+  clippy default+bench EXIT=0, fmt OK. Cartão: `docs/tasks/F1a-render-compartilhado.md`.
+- Harnesses de render com assinaturas idênticas antes/depois (`/tmp/opencode/f1a-v2/{baseline,after}_*.log`);
+  intermitências de harness registradas em §6 — não chamar de "todos verdes".
+- **PENDENTE: juiz visual** com nested de 2 `foot`, aplicação deixada aberta; F1b NÃO começa sem o "ok".
+- Reproduzir: `git log --oneline -1` (`refactor(render)`) + `bash scripts/check.sh` + harnesses §3.
+- VM sem 3D: sem conclusão de desempenho; udev real não validado aqui.
 - F1d (udev) exige aprovação SEPARADA de apt (libgbm-dev, libseat-dev, libdrm-dev, libinput-dev,
   libudev-dev) e das features do Smithay no `Cargo.toml`; na VM só compile/revisão + "não validado em
-  hardware real". F1a deve parar para ok visual antes de F1b.
+  hardware real". Parar para ok visual antes de F1b.
