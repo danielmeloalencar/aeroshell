@@ -749,4 +749,4 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
 - Gate `02q_check_final.log` EXIT=0 (27 Rust + 9 Bun); clippy bench `02q_clippy_final.log` EXIT=0.
 - Intermitência initial_buffer: 2 timeouts sem causa; amostras e investigação em §6, não declarada corrigida.
 - Instância visual fechada pelo humano. Próximo passo: criar cartão F1 somente após pedido do usuário.
-- Árvore tinha remoção PRÉ-EXISTENTE `D docs/prior-art/domicile.md`; não tocar. Commit/push não autorizados.
+- Commits locais da 02q/F0 criados com autorização; sem push. A remoção PRÉ-EXISTENTE de Domicile ficou fora.
