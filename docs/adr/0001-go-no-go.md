@@ -76,7 +76,7 @@ simples de removê-lo sem recompilar WebKitGTK/Mesa, e neste VM `WebKitGPUProces
 Heap próprio é majoritariamente alocação de objetos GTK/WebKit; abrir o `WebContext` sob
 demanda pode reduzir alguns MB, mas não é relevante frente a 500 MB do WebProcess em N=20.
 
-## Recomendação proposta (NÃO ratificada)
+## Recomendação (ratificada pelo relatório F0)
 - **Adotar `related-view` para todas as WebViews de frame** — é a decisão de maior impacto e
   custo de implementação quase zero (uma propriedade no builder).
 - **Tratar o pool como otimização de latência**, não como requisito de memória; dimensionar o
@@ -87,7 +87,7 @@ demanda pode reduzir alguns MB, mas não é relevante frente a 500 MB do WebProc
   GPU real antes de fechar o desenho de frames. Se lá o PSS/latência satisfizerem, follow-up
   é S5 com protocolo e pool; se não, reabrir o atlas.
 
-## Decisão do usuário (provisória) e ajustes obrigatórios
+## Decisão do usuário (ratificada) e ajustes obrigatórios
 
 1. **`related-view` é o padrão de frames.** Uma **view-âncora oculta** deve ser mantida viva
    durante toda a sessão para que novos frames possam ser criados com o mesmo processo.
