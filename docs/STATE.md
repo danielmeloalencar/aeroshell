@@ -14,8 +14,7 @@ lock, login) é TSX renderizado por WebKitGTK; runtime de política em Bun. Dev 
 **Fase atual: F1** (núcleo do compositor). F0/fatia vertical FECHADA pelo humano em 2026-11-21: `foot` com
 decoração HTML funcional e painel React/TSX; fechamento formal em `docs/f0-relatorio-go-no-go.md` (quadro
 S1–S5, ratificação registrada dos ADRs, S4→F2/F9 e S5→F5/F6 deferidos com justificativa).
-F1 em andamento por cartões pequenos: F1a e F1b FECHADAS (F1a com juiz visual OK; F1b fechada pelo humano);
-F1c pronta com juiz visual pendente (§7); F1d bloqueado até aprovação separada de apt/features.
+F1 autorizada, mas NÃO iniciada: exige cartões pequenos e aprovação por tarefa (próximo: F1a).
  
 ## 3. Feito (com onde está a prova)
 - [x] Compositor nested (winit) com socket próprio, xdg-shell, layer-shell — `scripts/check.sh` (S1 nested)
@@ -317,72 +316,10 @@ F1c pronta com juiz visual pendente (§7); F1d bloqueado até aprovação separa
   relatório F0) e 0006 (superado por 0007); conteúdo técnico intacto e diff mostrado ao humano.
   `grep -n "Fase atual: F1" docs/STATE.md` → encontrado; "modo: SPIKE" removido.
   Gate: `bash scripts/check.sh` → `OK: scripts/check.sh passou` (saída colada no relatório da sessão).
-- [x] ADR 0001 (corpo): marcadores de ratificação desatualizados substituídos — "Recomendação proposta
-  (NÃO ratificada)" → "Recomendação (ratificada pelo relatório F0)" e "Decisão do usuário (provisória)"
-  → "Decisão do usuário (ratificada)". Só wording de estado; diff mostrado. Commit `4a2ccb2`.
-- [x] F1a (CÓDIGO + JUIZ VISUAL, FECHADA): `render/mod.rs` + `render/elements.rs`
-  passaram a abrigar `AeroRenderElements`, `FrameSlice`, `frame_target` e `push_frame_elements`
-  (9-slice do canvas fixo + placeholder); `backend/winit.rs` só monta a entrada e consome o resultado
-  (`winit.rs` perdeu 369 linhas de render). Nenhuma geometria, escala, ordem ou formato de log mudou.
-  **Teste primeiro visto falhando:** `cargo test -p aeroshell-compositor render_compartilhado` →
-  `E0433: cannot find render in the crate root` (`/tmp/opencode/f1a/test_baseline.log`, EXIT=101);
-  depois `1 passed`. Mesmos harnesses antes/depois em `/tmp/opencode/f1a/{baseline,after}_*.log`:
-  glue `VEREDITO: OK` nas duas rodadas com `faixas edge_l=[6.00,6.00] edge_r=[6.00,6.00]
-  title_h=[30.00,30.00]`, `titlebar n={3} left=120 right=96 gap=[480,618]`,
-  `SLICE_COMPOSE n_min=9 malformadas=0` (226→225 linhas, 1 frame de diferença de cadência);
-  fixed_canvas, release_pixels, configure_hygiene, grab_hygiene, initial_buffer, window_id,
-  diagnostics normal → OK antes e depois; `FRAME_PLACEHOLDER` 2 linhas antes/depois.
-  Gate `bash scripts/check.sh` → `OK: scripts/check.sh passou`; clippy default e `--features bench`
-  → EXIT=0; `cargo fmt --all -- --check` → EXIT=0.
-- [x] F1a — JUIZ VISUAL DO HUMANO (2026-11-21): nested aberto com 2 `foot` (compositor PID 17149, shell
-  17156, socket `wayland-aero-f1a-visual`, log `/tmp/opencode/f1a-visual.log`), deixado aberto para teste:
-  humano respondeu **"ok visual"** após olhar barras/bordas das duas janelas, clique na barra da frente
-  sobre o conteúdo da de trás, resize lento/rápido e botões maximizar/restaurar/fechar. Critério visual
-  PASSOU. A instância não está mais em `ps`; nenhum processo foi encerrado pelo agente. **F1a FECHADA.**
-- [x] F1b (CÓDIGO + PROVA TÉCNICA, FECHADA PELO HUMANO em 2026-11-21): `backend/headless.rs` passou a renderizar com
-  `GlesRenderer` EGL surfaceless (`EGLSurfacelessDisplay`, `GlesRenderbuffer` offscreen),
-  `OutputDamageTracker` por output e timer calloop de 16 ms; a cena usa o **mesmo**
-  `render::elements::push_frame_elements` do winit. Nenhuma feature do Cargo, apt, protocolo ou ADR novo.
-  **Teste primeiro visto falhando:** `python3 tests/integration/headless_render_damage.py` →
-  `FALHA: timeout esperando HEADLESS_FRAME`, 0 linhas (`/tmp/opencode/f1b/baseline.log`, EXIT=1).
-  Depois, 3 execuções seguidas (`/tmp/opencode/f1b/after{1,2,3}.log`) → `VEREDITO: OK`:
-  76/84/85 linhas `HEADLESS_FRAME`, 3/10/9 `RENDER_SHARED window_id=0 kind=placeholder`, 5 `PIXEL_FRAME`
-  por execução, grid 64×40×3 = 7680 bytes com 7680 bytes não-nulo. Cartão:
-  `docs/tasks/F1b-headless-render-damage.md`.
-  **Damage medido, não otimizado:** `damage=1280x800@0,0` em TODOS os frames. Causa lida na fonte fixada:
-  `age=0` faz o Smithay marcar tudo (`smithay-0.7.0/src/backend/renderer/damage/mod.rs:692-707`); o alvo
-  offscreen não tem buffer-age. Não há claim de redução de damage aqui (§7).
-  Gate `bash scripts/check.sh` → `OK: scripts/check.sh passou`; clippy `--features bench -D warnings`
-  → EXIT=0; fmt → EXIT=0. Regressão nested: 10/12 harnesses OK na 1ª rodada; `frame_resize_glue.py`
-  (1 `SLICE_GEOM` malformada → 8 fatias num frame) e `frame_configure_hygiene.py` (first-buffer) falharam
-  e **passaram na repetição diagnóstica única** (`/tmp/opencode/f1b/nested_retry_*.log`) — intermitências
-  já registradas em §6; nenhuma amostra descartada.
-- [x] F1c (código + prova técnica, JUIZ VISUAL PENDENTE em §7): winit `--outputs N` agora monta a cena de
-  **todos** os outputs (`collect_output_elements`) e, com N>1, renderiza cada output num `GlesTexture`
-  offscreen com seu **próprio** `OutputDamageTracker`, compondo as texturas na janela via
-  `TextureRenderElement` (enum `ComposedElements` separado, specialized em `GlesRenderer`). Caminho N=1
-  inalterado (regressão F0/F1a). Teste-first: `python3 tests/integration/multi_output_damage.py` →
-  `VEREDITO: FALHA` no código pré-F1c (stash, `/tmp/opencode/f1c/multi_baseline.log`: 0 `OUTPUT_FRAME`);
-  depois 2 execuções → `VEREDITO: OK` (318 linhas, 159 por output, `age=['0','1']` nos dois). Log cru
-  `/tmp/multi-comp-27401.log`: **307 frames `damage=none`** e damage parcial real com cliente
-  (`12x30@54,50;12x6@54,80`, `546x30@54,50;546x534@54,80`) — incremental PROVADO no winit, não só ligado.
-  Headless: `age=1` após o 1º frame → 75–78 `damage=none` e 11–15 damage parciais;
-  `RENDER_SHARED kind=9slice` exercitado (18 linhas em 3 execuções), com retângulo `54,50,708,530`;
-  comparação de grid 02o: `diff_dentro=29280` vs `diff_fora=13740` (a região do frame mudou muito mais
-  que o fundo). Uma execução teve 1 linha corrompida por interleaving, tratada como malformada e
-  registrada, sem descartar amostra. Gate `bash scripts/check.sh` verde; clippy bench `-D warnings` EXIT=0;
-  fmt OK. Regressão nested: 11/12 harnesses OK; `frame_window_id.py` (sem configure da janela 1) passou
-  na repetição diagnóstica única. Cartão: `docs/tasks/F1c-multi-output-damage.md`.
 ## 4. Em andamento
-- F1c: código, teste-first, gate/clippy, multi-output, damage incremental e 9-slice no headless prontos
-  (§3). **Juiz visual pendente** (§7): instância `--outputs 2 --size 600x800` aberta para o humano.
-  F1d NÃO começa sem o ok.
-- F1a (harnesses com corrida de parse, NÃO regressão de produto): `frame_buttons.py` falhou ANTES e
-  DEPOIS (comandos `maximize`/`close` executados de fato no log cru do compositor, só o parse do harness
-  perdeu linhas intercaladas); `frame_follows_resize.py` passou no baseline e falhou 2× depois
-  (`associate por window_id: [0]` e `resize detectado=None`), mas o log cru `/tmp/follow-comp-14944.log`
-  mostra os associates 0 e 1 e o resize real (A 696→732). `frame_diagnostics.py faults` falhou antes
-  e passou depois (intermitência conhecida do primeiro buffer). Amostras preservadas em §6/§7.
+- Nenhuma implementação: F0 formalmente fechada; F1 autorizada, aguardando cartão próprio. Não avançar
+  automaticamente para código, protocolo ou arquitetura novos. Próximo cartão: F1a (extrair o render do
+  frame de `backend/winit.rs` para `render/elements.rs`), somente após aprovação.
 - A 02p foi concluída com pixels, vizinhos, gate/clippy e juiz visual positivos (§3).
 - 02o SUBSTITUÍDA pela medição/correção 02p; não ajustar sua grade antiga nem reabrir sem novo pedido.
 - 02n: **JUIZ VISUAL NEGOU (2026-11-20)** — humano: "problema ainda ocorre". Técnica/gate/clippy provados 3× (§3),
@@ -411,10 +348,9 @@ F1c pronta com juiz visual pendente (§7); F1d bloqueado até aprovação separa
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. `F1d` — backend udev/DRM/GBM/libseat: **NÃO ABRIR sem aprovação SEPARADA** de apt (libgbm-dev,
-   libseat-dev, libdrm-dev, libinput-dev, libudev-dev) e das features do Smithay no `Cargo.toml`.
-   VM sem 3D = só compile/revisão + "não validado em hardware real"; nunca fabricar resultado udev.
-   F1c pronta (§3), aguardando juiz visual. Não reabrir 02q sem pedido explícito.
+0. `F1a` — extrair o render do frame de `backend/winit.rs` para `render/elements.rs`, sem mudança de
+   comportamento; pré-requisito do backend udev. Abrir cartão próprio e obter ok visual antes de F1b.
+   Não reabrir 02q pela divergência do cronômetro sem pedido explícito do humano.
 1. `02o` — SUBSTITUÍDA: a 02p criou sonda full-res que reproduziu o flicker (2×1.910 pixels) e depois
    comprovou canvas fixo sem transiente. A grade antiga não é mais critério; não reabrir sem novo pedido.
 2. `02n` — JUIZ NEGOU ("problema ainda ocorre"); instância já não existe. NÃO abrir 5ª correção sem decisão.
@@ -428,23 +364,6 @@ F1c pronta com juiz visual pendente (§7); F1d bloqueado até aprovação separa
 8. `05-compatibilidade-protocolos.md` — RASCUNHO; 7 mensagens do `foot` registradas em §6. NÃO executar sem ok.
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
-- F1b (DAMAGE, limitação medida — não é bug): o alvo é um `GlesRenderbuffer` offscreen sem buffer-age,
-  então `render_output(age=0)` marca a output inteira em todo frame (`damage/mod.rs:692-707` da versão
-  fixada). `HEADLESS_FRAME` reportou `1280x800@0,0` nas 3 execuções. **Não chamar isso de damage
-  otimizado**; para medir redução de repaint seria preciso um esquema com idade de buffer (fora do cartão).
-- F1b (HARNESS, intermitências preservadas): na rodada de regressão nested, `frame_resize_glue.py` falhou
-  com 1 `SLICE_GEOM` malformada (`n_geoms=8`) e `frame_configure_hygiene.py` com "frame WebView não
-  commitou buffer inicial"; ambos passaram em UMA repetição diagnóstica (`/tmp/opencode/f1b/nested_retry_*.log`).
-  São as mesmas classes de F1a/02q; nenhuma amostra foi descartada e nenhuma correção foi declarada.
-- F1a (HARNESS, corrida de parse do log — amostras preservadas, NÃO é regressão de produto): as linhas
-  `FRAMEWEB: associate(...)` e `FRAMEWEB: IPC 'close 0'` saem intercaladas com `eprintln!` do compositor
-  no mesmo arquivo de log (`/tmp/buttons-comp-14638.log`: `FRAMEWEB: associate(window_id=FRAME_PLACEHOLDER...`;
-  `/tmp/follow-comp-14944.log`: associate 0 e 1 presentes, o harness só parseou `[0]`). Consequência:
-  `frame_buttons.py` FALHOU antes e depois da extração; `frame_follows_resize.py` passou no baseline e
-  falhou 2× depois (`associate... [0]`, depois `resize detectado=None` com A 696→732 de fato).
-  `frame_diagnostics.py faults` falhou antes e passou depois (intermitência do primeiro buffer).
-  O comando cru prova maximize/restore/close executados e os 2 associates — **não corrigir harness nesta
-  tarefa**; registrar como lacuna de medição em §7 e não chamar de "todos os harnesses verdes".
 - 02q (POOL, 2 tentativas preservadas): a 1ª marcou ready por double-rAF sem realizar/apresentar as views;
   `02q-cold-comp-36184.log` só contém `pool_vazio`, nenhum ready, e o teste deu timeout (`02q_after_pool1.log`).
   A 2ª esperou `LoadEvent::Finished` + `get_snapshot`; `02q-cold-comp-36843.log` mostra
@@ -680,19 +599,6 @@ F1c pronta com juiz visual pendente (§7); F1d bloqueado até aprovação separa
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- F1b (LACUNAS HISTÓRICAS — FECHADA PELO HUMANO, AGORA FECHADAS TECNICAMENTE PELO F1c): em F1b o headless
-  rodava `age=0`, só `kind=placeholder` e capturava clear color. F1c mediu `age=1` com 307+ `damage=none`
-  no winit, exercitou `kind=9slice` no headless e comparou a região do frame na sonda 02o (§3). Fica como
-  histórico: desempenho/FPS em GPU real (VM sem 3D) segue **não medido**.
-- F1c (JUIZ VISUAL PENDENTE): código, multi-output, damage incremental e pixels provados (§3); falta o
-  "ok" do humano olhando a instância `--outputs 2 --size 600x800` com 2 `foot`. Instância deixada aberta
-  (compositor PID 30887, shell 30894, socket `wayland-aero-f1c-visual`, log `/tmp/opencode/f1c-visual.log`).
-  Quem fecha é o humano (AGENTS.md §0.9). Sem o ok, F1c NÃO é concluída e F1d NÃO começa.
-- F1c (NÃO MEDIDO): ganho de desempenho do damage incremental em GPU real (VM sem 3D); o que foi medido
-  foi a **quantidade** de frames skippados (`damage=none`) e a área dos retângulos, não tempo de render.
-- F1a (LACUNA DE MEDIÇÃO dos harnesses de parse): ver §6 — 3 harnesses tiveram falha de parse/ intermitência
-  (dois já no baseline). O log cru do compositor mostra a ação executada, mas o parse do harness não a
-  capturou; isso NÃO é evidência de que o comportamento mudou, e também NÃO autoriza dizer "todos verdes".
 - F0 (BASELINE-FALHA PRESERVADO, NÃO SÃO GATES): `frame_cold_start.py` falha o sub-cronômetro >300 ms
   (374–415 ms medidos na via A) e `frame_resize_sync.py` falha pela métrica antiga de p95. Ambos ficam
   registrados como baseline-falha; 02p e 02q foram FECHADAS pelo juiz visual, não por esses harnesses.
@@ -849,16 +755,14 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **Fase atual: F1.** F0, F1a e F1b FECHADAS; F1c pronta, aguardando juiz visual (§7).
-- F1c: `--outputs N` renderiza todos os outputs (textura offscreen + tracker por output + composição);
-  `age=1` provou damage incremental no winit e no headless; `kind=9slice` e pixels da região do frame
-  provados no 2º backend. Teste-first `VEREDITO: FALHA` no baseline → depois OK. Cartão `docs/tasks/F1c-multi-output-damage.md`.
-- Gate `bash scripts/check.sh` verde; clippy bench `-D warnings` EXIT=0; fmt OK. Nested 11/12 (1 intermitente
-  passou na repetição). Sem features/apt/protocolo/ADR novos.
-- instância visual aberta: PID 30887 / shell 30894, socket `wayland-aero-f1c-visual`, log `/tmp/opencode/f1c-visual.log`.
-- Próximo passo: ok visual do humano para FECHAR F1c; **não iniciar F1d antes da aprovação separada**.
-- Reproduzir: `python3 tests/integration/multi_output_damage.py`, `python3 tests/integration/headless_render_damage.py`,
-  `bash scripts/check.sh`. VM sem 3D: sem conclusão de desempenho.
+- **Fase atual: F1.** F0 fechada formalmente: `docs/f0-relatorio-go-no-go.md`; S4→F2/F9, S5→F5/F6 deferidos.
+- ADRs: só a linha de status de 0001 (ratificado) e 0006 (superado por 0007) editadas; conteúdo técnico intacto.
+- Gate desta sessão: `bash scripts/check.sh` verde (27 Rust + 9 Bun); commit `docs(f0): ...` local, sem push.
+- 02q/02p fechadas pelo juiz; cronômetro >300 ms e `frame_resize_sync.py` seguem como baseline-falha em §7.
+- Implementado em F0: placeholder sólido, âncora + related-view, pool de 2, canvas fixo + 9-slice.
+- Nested winit é a regressão; VM sem 3D não valida desempenho nem udev real.
+- Próximo passo imediato: abrir cartão F1a (render compartilhado) e obter aprovação antes de editar código.
+- Reproduzir o estado: `git log --oneline -1` (commit `docs(f0)`) + `bash scripts/check.sh`.
 - F1d (udev) exige aprovação SEPARADA de apt (libgbm-dev, libseat-dev, libdrm-dev, libinput-dev,
   libudev-dev) e das features do Smithay no `Cargo.toml`; na VM só compile/revisão + "não validado em
-  hardware real". Nunca fabricar resultado udev.
+  hardware real". F1a deve parar para ok visual antes de F1b.
