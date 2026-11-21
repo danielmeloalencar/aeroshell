@@ -1,6 +1,6 @@
 # ADR 0001 — Go/No-Go do S5 e arquitetura de frames
 
-- Status: **aceito provisoriamente pelo usuário em 2026-11-18** (S3 liberado após os ajustes abaixo)
+- Status: **ratificado pelo relatório F0 em 2026-11-21** (aceito provisoriamente pelo usuário em 2026-11-18; S3 liberado após os ajustes abaixo)
 - Data: 2026-11-18
 - Ambiente: VirtualBox sem 3D, build `--release`, WebKitGTK 2.52.6, Smithay 0.7.0,
   gtk4-layer-shell 0.8.0 / lib C 1.3.0. **Números de VM não são representativos em GPU real.**
@@ -108,4 +108,4 @@ demanda pode reduzir alguns MB, mas não é relevante frente a 500 MB do WebProc
 4. **Aviso obrigatório**: dados de **VM sem 3D**; `WebKitGPUProcess = 0`; revalidar em hardware
    real ou VM trixie com 3D antes de fechar o desenho de frames.
 
-Status: aceito provisoriamente; S3 liberado. O ADR será revisitado após S5 com o protocolo.
+Status: ratificado pelo relatório F0 em 2026-11-21; S3 liberado. O ADR será revisitado após S5 com o protocolo.

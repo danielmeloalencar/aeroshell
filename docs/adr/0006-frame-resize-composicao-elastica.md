@@ -1,6 +1,6 @@
 # ADR 0006 — Composição elástica do frame no compositor
 
-- Status: **proposto pelo agente em 2026-11-20** (aditivo; não edita nem substitui ADR aceito)
+- Status: **superado por 0007 em 2026-11-20** (proposto pelo agente em 2026-11-20; aditivo; não edita nem substitui ADR aceito)
 - Data: 2026-11-20
 - Relação: complementa o ADR 0001 (Plano B leve) e o ADR 0004 (frame = `layer_surface` abaixo do
   cliente). Não altera `aero_frame_v1.xml`, protocolos, fases nem dependências.

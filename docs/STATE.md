@@ -4,15 +4,17 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-21 · tarefa `02q` FECHADA por decisão do juiz humano (visual perfeito; harness de 300 ms diverge e permanece registrado) · modo: SPIKE
+Última atualização: 2026-11-21 · **Fase atual: F1** · F0 fechada formalmente (relatório go/no-go + deferimentos) · 02q FECHADA pelo juiz (harness de 300 ms segue como lacuna registrada)
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
 lock, login) é TSX renderizado por WebKitGTK; runtime de política em Bun. Dev em nested (winit).
  
 ## 2. Objetivo atual (F1 autorizada)
-F0/fatia vertical FECHADA pelo humano em 2026-11-21: `foot` com decoração HTML funcional e painel React/TSX.
-A F1 (núcleo do compositor) está autorizada, mas NÃO iniciada: exige cartões pequenos e aprovação por tarefa.
+**Fase atual: F1** (núcleo do compositor). F0/fatia vertical FECHADA pelo humano em 2026-11-21: `foot` com
+decoração HTML funcional e painel React/TSX; fechamento formal em `docs/f0-relatorio-go-no-go.md` (quadro
+S1–S5, ratificação registrada dos ADRs, S4→F2/F9 e S5→F5/F6 deferidos com justificativa).
+F1 autorizada, mas NÃO iniciada: exige cartões pequenos e aprovação por tarefa (próximo: F1a).
  
 ## 3. Feito (com onde está a prova)
 - [x] Compositor nested (winit) com socket próprio, xdg-shell, layer-shell — `scripts/check.sh` (S1 nested)
@@ -307,9 +309,17 @@ A F1 (núcleo do compositor) está autorizada, mas NÃO iniciada: exige cartões
   medição em §7, não como reabertura automática.
 - [x] F0 FECHADA e F1 AUTORIZADA pelo humano em 2026-11-21: "Com isso fechamos a fase 0 f0 do plano master
   e ja poderemos ir para o f1". Registro no `docs/plano-mestre.md` §7; F1 NÃO iniciada nesta sessão.
+- [x] F0 (FECHAMENTO FORMAL, cartão 0): `docs/f0-relatorio-go-no-go.md` consolida S1–S5 com números já medidos
+  e GO/NO-GO por spike (S2 NO-GO em WPE → GO WebKitGTK-cliente + canvas fixo; frame GO no juiz); S4 deferido
+  para F2/F9 e S5/PAM-greetd para F5/F6, com justificativa. Cartão de rastreabilidade:
+  `docs/tasks/F0-fechamento-formal.md`. ADRs: **somente a linha de status** de 0001 (ratificado pelo
+  relatório F0) e 0006 (superado por 0007); conteúdo técnico intacto e diff mostrado ao humano.
+  `grep -n "Fase atual: F1" docs/STATE.md` → encontrado; "modo: SPIKE" removido.
+  Gate: `bash scripts/check.sh` → `OK: scripts/check.sh passou` (saída colada no relatório da sessão).
 ## 4. Em andamento
-- Nenhuma implementação: F0/02q fechadas pelo humano. F1 autorizada, aguardando cartão próprio; não avançar
-  automaticamente para código, protocolo ou arquitetura novos.
+- Nenhuma implementação: F0 formalmente fechada; F1 autorizada, aguardando cartão próprio. Não avançar
+  automaticamente para código, protocolo ou arquitetura novos. Próximo cartão: F1a (extrair o render do
+  frame de `backend/winit.rs` para `render/elements.rs`), somente após aprovação.
 - A 02p foi concluída com pixels, vizinhos, gate/clippy e juiz visual positivos (§3).
 - 02o SUBSTITUÍDA pela medição/correção 02p; não ajustar sua grade antiga nem reabrir sem novo pedido.
 - 02n: **JUIZ VISUAL NEGOU (2026-11-20)** — humano: "problema ainda ocorre". Técnica/gate/clippy provados 3× (§3),
@@ -338,7 +348,8 @@ A F1 (núcleo do compositor) está autorizada, mas NÃO iniciada: exige cartões
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. `F1` — autorizada pelo humano, mas NÃO iniciada: abrir cartão pequeno antes de qualquer implementação.
+0. `F1a` — extrair o render do frame de `backend/winit.rs` para `render/elements.rs`, sem mudança de
+   comportamento; pré-requisito do backend udev. Abrir cartão próprio e obter ok visual antes de F1b.
    Não reabrir 02q pela divergência do cronômetro sem pedido explícito do humano.
 1. `02o` — SUBSTITUÍDA: a 02p criou sonda full-res que reproduziu o flicker (2×1.910 pixels) e depois
    comprovou canvas fixo sem transiente. A grade antiga não é mais critério; não reabrir sem novo pedido.
@@ -588,6 +599,10 @@ A F1 (núcleo do compositor) está autorizada, mas NÃO iniciada: exige cartões
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- F0 (BASELINE-FALHA PRESERVADO, NÃO SÃO GATES): `frame_cold_start.py` falha o sub-cronômetro >300 ms
+  (374–415 ms medidos na via A) e `frame_resize_sync.py` falha pela métrica antiga de p95. Ambos ficam
+  registrados como baseline-falha; 02p e 02q foram FECHADAS pelo juiz visual, não por esses harnesses.
+  Não alterar os testes para passar, não re-litigar resize/cold-start, não descartar amostras.
 - 02q (LACUNA DE MEDIÇÃO, tarefa FECHADA pelo humano): o cronômetro map→`RESIZE_GLUE` continua >300 ms
   (363–415 ms nas amostras da via A), enquanto o humano viu decoração instantânea e declarou "visualmente
   perfeito e bem otimizado". Por `AGENTS.md` §0.4/§0.9, o relato visual prevalece e fecha a tarefa; o harness
@@ -740,13 +755,14 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- F0/02q FECHADAS pelo humano; F1 autorizada, NÃO iniciada. Abrir cartão antes de qualquer código F1.
-- Implementado: placeholder sólido, âncora + related-view, pool de 2 com HTML carregado e reposição idle.
-- Baseline `02q_cold_baseline2.log`: 469/543 ms, 0 placeholders, 3 processos; via A: 374/415 ms, 1 processo.
-- Juiz final: humano disse "visualmente perfeito e bem otimizado"; sua verdade prevalece sobre o cronômetro.
-- Divergência map→RESIZE_GLUE >300 ms preservada em §7; não editar o teste para passar nem reabrir sem pedido.
-- Vizinhos finais initial_buffer/fixed_canvas/repeated_activate/buttons/window_id → 5× OK (`02q_final2_*.log`).
-- Gate `02q_check_final.log` EXIT=0 (27 Rust + 9 Bun); clippy bench `02q_clippy_final.log` EXIT=0.
-- Intermitência initial_buffer: 2 timeouts sem causa; amostras e investigação em §6, não declarada corrigida.
-- Instância visual fechada pelo humano. Próximo passo: criar cartão F1 somente após pedido do usuário.
-- Commits locais da 02q/F0 criados com autorização; sem push. A remoção PRÉ-EXISTENTE de Domicile ficou fora.
+- **Fase atual: F1.** F0 fechada formalmente: `docs/f0-relatorio-go-no-go.md`; S4→F2/F9, S5→F5/F6 deferidos.
+- ADRs: só a linha de status de 0001 (ratificado) e 0006 (superado por 0007) editadas; conteúdo técnico intacto.
+- Gate desta sessão: `bash scripts/check.sh` verde (27 Rust + 9 Bun); commit `docs(f0): ...` local, sem push.
+- 02q/02p fechadas pelo juiz; cronômetro >300 ms e `frame_resize_sync.py` seguem como baseline-falha em §7.
+- Implementado em F0: placeholder sólido, âncora + related-view, pool de 2, canvas fixo + 9-slice.
+- Nested winit é a regressão; VM sem 3D não valida desempenho nem udev real.
+- Próximo passo imediato: abrir cartão F1a (render compartilhado) e obter aprovação antes de editar código.
+- Reproduzir o estado: `git log --oneline -1` (commit `docs(f0)`) + `bash scripts/check.sh`.
+- F1d (udev) exige aprovação SEPARADA de apt (libgbm-dev, libseat-dev, libdrm-dev, libinput-dev,
+  libudev-dev) e das features do Smithay no `Cargo.toml`; na VM só compile/revisão + "não validado em
+  hardware real". F1a deve parar para ok visual antes de F1b.
