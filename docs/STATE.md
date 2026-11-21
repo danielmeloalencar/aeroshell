@@ -14,7 +14,8 @@ lock, login) é TSX renderizado por WebKitGTK; runtime de política em Bun. Dev 
 **Fase atual: F1** (núcleo do compositor). F0/fatia vertical FECHADA pelo humano em 2026-11-21: `foot` com
 decoração HTML funcional e painel React/TSX; fechamento formal em `docs/f0-relatorio-go-no-go.md` (quadro
 S1–S5, ratificação registrada dos ADRs, S4→F2/F9 e S5→F5/F6 deferidos com justificativa).
-F1 autorizada, mas NÃO iniciada: exige cartões pequenos e aprovação por tarefa (próximo: F1a).
+F1 em andamento por cartões pequenos: F1a FECHADA (render compartilhado, juiz visual OK); próximo cartão F1b,
+somente após novo pedido/aprovação.
  
 ## 3. Feito (com onde está a prova)
 - [x] Compositor nested (winit) com socket próprio, xdg-shell, layer-shell — `scripts/check.sh` (S1 nested)
@@ -319,7 +320,7 @@ F1 autorizada, mas NÃO iniciada: exige cartões pequenos e aprovação por tare
 - [x] ADR 0001 (corpo): marcadores de ratificação desatualizados substituídos — "Recomendação proposta
   (NÃO ratificada)" → "Recomendação (ratificada pelo relatório F0)" e "Decisão do usuário (provisória)"
   → "Decisão do usuário (ratificada)". Só wording de estado; diff mostrado. Commit `4a2ccb2`.
-- [x] F1a (código, critério técnico; JUIZ VISUAL PENDENTE em §7): `render/mod.rs` + `render/elements.rs`
+- [x] F1a (CÓDIGO + JUIZ VISUAL, FECHADA): `render/mod.rs` + `render/elements.rs`
   passaram a abrigar `AeroRenderElements`, `FrameSlice`, `frame_target` e `push_frame_elements`
   (9-slice do canvas fixo + placeholder); `backend/winit.rs` só monta a entrada e consome o resultado
   (`winit.rs` perdeu 369 linhas de render). Nenhuma geometria, escala, ordem ou formato de log mudou.
@@ -333,9 +334,14 @@ F1 autorizada, mas NÃO iniciada: exige cartões pequenos e aprovação por tare
   diagnostics normal → OK antes e depois; `FRAME_PLACEHOLDER` 2 linhas antes/depois.
   Gate `bash scripts/check.sh` → `OK: scripts/check.sh passou`; clippy default e `--features bench`
   → EXIT=0; `cargo fmt --all -- --check` → EXIT=0.
+- [x] F1a — JUIZ VISUAL DO HUMANO (2026-11-21): nested aberto com 2 `foot` (compositor PID 17149, shell
+  17156, socket `wayland-aero-f1a-visual`, log `/tmp/opencode/f1a-visual.log`), deixado aberto para teste:
+  humano respondeu **"ok visual"** após olhar barras/bordas das duas janelas, clique na barra da frente
+  sobre o conteúdo da de trás, resize lento/rápido e botões maximizar/restaurar/fechar. Critério visual
+  PASSOU. A instância não está mais em `ps`; nenhum processo foi encerrado pelo agente. **F1a FECHADA.**
 ## 4. Em andamento
-- F1a: código, teste-primeiro, gate e harnesses de render prontos (§3). Falta **juiz visual** com
-  nested de 2 `foot`, aplicação deixada aberta, antes de F1b. Não avançar para F1b sem o "ok".
+- Nenhuma implementação em andamento: F1a FECHADA com juiz visual positivo (§3). F1b NÃO iniciada;
+  abrir cartão próprio e obter aprovação antes de qualquer código.
 - F1a (harnesses com corrida de parse, NÃO regressão de produto): `frame_buttons.py` falhou ANTES e
   DEPOIS (comandos `maximize`/`close` executados de fato no log cru do compositor, só o parse do harness
   perdeu linhas intercaladas); `frame_follows_resize.py` passou no baseline e falhou 2× depois
@@ -370,8 +376,8 @@ F1 autorizada, mas NÃO iniciada: exige cartões pequenos e aprovação por tare
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. `F1a` — CÓDIGO PRONTO (§3), aguardando só o juiz visual; **não iniciar F1b antes do "ok"**.
-   Próximo após F1a: `F1b` (headless com render/damage, caminho de validação na VM sem 3D).
+0. `F1b` — headless com render/damage (caminho de validação de protocolo/lógica na VM sem 3D).
+   F1a FECHADA (§3); abrir cartão próprio antes de executar, um por sessão.
    Não reabrir 02q pela divergência do cronômetro sem pedido explícito do humano.
 1. `02o` — SUBSTITUÍDA: a 02p criou sonda full-res que reproduziu o flicker (2×1.910 pixels) e depois
    comprovou canvas fixo sem transiente. A grade antiga não é mais critério; não reabrir sem novo pedido.
@@ -630,9 +636,6 @@ F1 autorizada, mas NÃO iniciada: exige cartões pequenos e aprovação por tare
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- F1a (JUIZ VISUAL PENDENTE): extração técnica provada por gate, teste-primeiro e harnesses de geometria;
-  **ainda não houve "ok" do humano olhando o nested com 2 `foot`**. Instância deixada aberta pelo agente;
-  quem fecha é o humano (AGENTS.md §0.9). Sem o "ok", F1a NÃO é concluída e F1b NÃO começa.
 - F1a (LACUNA DE MEDIÇÃO dos harnesses de parse): ver §6 — 3 harnesses tiveram falha de parse/ intermitência
   (dois já no baseline). O log cru do compositor mostra a ação executada, mas o parse do harness não a
   capturou; isso NÃO é evidência de que o comportamento mudou, e também NÃO autoriza dizer "todos verdes".
@@ -798,7 +801,8 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
   clippy default+bench EXIT=0, fmt OK. Cartão: `docs/tasks/F1a-render-compartilhado.md`.
 - Harnesses de render OK antes/depois (`/tmp/opencode/f1a/{baseline,after}_*.log`); 3 harnesses com
   corrida de parse/intermitência pré-existente — detalhe em §6, não chamar de "todos verdes".
-- **PENDENTE: juiz visual** com nested de 2 `foot`, aplicação deixada aberta; F1b NÃO começa sem o "ok".
+- F1a FECHADA: humano deu **"ok visual"** na instância com 2 `foot`; instância já não está em `ps`.
+- Próximo passo: abrir cartão F1b (headless com render/damage); um cartão por sessão, sem iniciar agora.
 - Reproduzir: `git log --oneline -1` (commit `refactor(render)`) + `bash scripts/check.sh` + harnesses §3.
 - VM sem 3D: sem conclusão de desempenho; udev real não validado aqui.
 - F1d (udev) exige aprovação SEPARADA de apt (libgbm-dev, libseat-dev, libdrm-dev, libinput-dev,
