@@ -7,6 +7,7 @@ use smithay::{
         renderer::{
             damage::OutputDamageTracker,
             element::{
+                solid::{SolidColorBuffer, SolidColorRenderElement},
                 surface::WaylandSurfaceRenderElement,
                 utils::{CropRenderElement, Relocate, RelocateRenderElement, RescaleRenderElement},
                 AsRenderElements, Element, Kind,
@@ -46,6 +47,7 @@ smithay::backend::renderer::element::render_elements! {
     Surface = WaylandSurfaceRenderElement<R>,
     Rescaled = RescaleRenderElement<WaylandSurfaceRenderElement<R>>,
     Slice = FrameSlice<R>,
+    Solid = SolidColorRenderElement,
 }
 
 pub struct WinitBackend;
@@ -237,16 +239,18 @@ pub fn init_winit(
                                                 Kind::Unspecified,
                                             )
                                         });
+                                        // Alvo = conteúdo JÁ COMMITADO + insets/shadow.
+                                        // Também define a geometria do placeholder enquanto o
+                                        // primeiro buffer WebKit ainda não existe.
+                                        let target = smithay::utils::Size::<i32, smithay::utils::Logical>::new(
+                                            geo.size.w + fgeo.extra_w(),
+                                            geo.size.h + fgeo.extra_h(),
+                                        );
                                         match element {
                                             Ok(Some(el)) => {
-                                                // Alvo = conteúdo JÁ COMMITADO + insets/shadow.
                                                 // O buffer da decoração é assíncrono (WebKit);
                                                 // enquanto ele não alcança o alvo, escalamos no
                                                 // render para manter a borda colada (ADR 0006).
-                                                let target = smithay::utils::Size::<i32, smithay::utils::Logical>::new(
-                                                    geo.size.w + fgeo.extra_w(),
-                                                    geo.size.h + fgeo.extra_h(),
-                                                );
                                                 let buffer = el.buffer_size();
                                                 // 02p: canvas fixo => TODO commit válido usa
                                                 // 9-slice, inclusive quando buffer == target.
@@ -499,7 +503,65 @@ pub fn init_winit(
                                                 placed_frames.push(frame_surface.clone());
                                                 render_order.push(format!("frame@{:?}", frame_surface.id()));
                                             }
-                                            Ok(None) => {}
+                                            Ok(None) => {
+                                                // 02q: sem buffer ainda, a decoração não fica
+                                                // ausente. Desenha apenas titlebar/bordas (o
+                                                // centro continua livre para o cliente), com a
+                                                // mesma cor do HTML e na geometria-alvo.
+                                                let dst: smithay::utils::Size<
+                                                    i32,
+                                                    smithay::utils::Physical,
+                                                > = target.to_physical_precise_round(output_scale);
+                                                let l = (fgeo.insets.0 as f64 * output_scale).round() as i32;
+                                                let t = (fgeo.insets.1 as f64 * output_scale).round() as i32;
+                                                let r = (fgeo.insets.2 as f64 * output_scale).round() as i32;
+                                                let b = (fgeo.insets.3 as f64 * output_scale).round() as i32;
+                                                let middle_h = (dst.h - t - b).max(0);
+                                                let rects = [
+                                                    (loc, dst.w, t),
+                                                    (SlicePoint::new(loc.x, loc.y + t), l, middle_h),
+                                                    (SlicePoint::new(loc.x + dst.w - r, loc.y + t), r, middle_h),
+                                                    (SlicePoint::new(loc.x, loc.y + dst.h - b), dst.w, b),
+                                                ];
+                                                for (origin, w, h) in rects {
+                                                    if w <= 0 || h <= 0 {
+                                                        continue;
+                                                    }
+                                                    let solid = SolidColorBuffer::new(
+                                                        (w, h),
+                                                        [43.0_f32 / 255.0, 43.0_f32 / 255.0, 43.0_f32 / 255.0, 1.0],
+                                                    );
+                                                    elements.push(AeroRenderElements::Solid(
+                                                        SolidColorRenderElement::from_buffer(
+                                                            &solid,
+                                                            origin,
+                                                            1.0,
+                                                            1.0,
+                                                            Kind::Unspecified,
+                                                        ),
+                                                    ));
+                                                }
+                                                placed_frames.push(frame_surface.clone());
+                                                render_order.push(format!(
+                                                    "placeholder@{:?}",
+                                                    frame_surface.id()
+                                                ));
+                                                #[cfg(feature = "bench")]
+                                                {
+                                                    let t_nanos = std::time::SystemTime::now()
+                                                        .duration_since(std::time::UNIX_EPOCH)
+                                                        .map(|d| d.as_nanos())
+                                                        .unwrap_or(0);
+                                                    eprintln!(
+                                                        "FRAME_PLACEHOLDER t={t_nanos} window_id={_window_id} \
+                                                         x={} y={} w={} h={}",
+                                                        geo.loc.x + fgeo.offset().0,
+                                                        geo.loc.y + fgeo.offset().1,
+                                                        target.w,
+                                                        target.h,
+                                                    );
+                                                }
+                                            }
                                             Err(err) => {
                                                 tracing::warn!(?err, "import do frame falhou")
                                             }

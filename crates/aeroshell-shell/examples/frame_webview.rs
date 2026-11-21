@@ -12,6 +12,7 @@ use gtk4::glib;
 use gtk4::prelude::*;
 use gtk4_layer_shell::LayerShell;
 use std::cell::{Cell, RefCell};
+use std::collections::VecDeque;
 use std::io::{BufRead, Write};
 use std::os::unix::net::UnixStream;
 use std::rc::Rc;
@@ -48,6 +49,7 @@ const BORDER: i32 = 6;
 const RIGHT_CONTROLS: i32 = 96;
 /// 02l: largura fixa da zona do título, declarada ao compositor.
 const TITLE_TEXT_W: i32 = 120;
+const POOL_TARGET: usize = 2;
 
 struct FrameEntry {
     frame: AeroFrameV1,
@@ -61,6 +63,14 @@ struct FrameEntry {
     canvas: (i32, i32),
     presented: bool,
     window_id: u32,
+}
+
+struct PoolItem {
+    id: usize,
+    window: gtk4::ApplicationWindow,
+    webview: WebView,
+    window_id: Rc<Cell<Option<u32>>>,
+    ready: bool,
 }
 
 #[derive(Default)]
@@ -255,7 +265,7 @@ impl Dispatch<AeroFrameManagerV1, ()> for SpikeState {
         // Cria na próxima idle: este handler roda dentro do borrow do RUNTIME
         // (dispatch) e não pode reassumir o RUNTIME para associar a superfície.
         glib::idle_add_local(move || {
-            open_frame_window(window_id, initial_canvas.0, initial_canvas.1);
+            request_frame(window_id, initial_canvas.0, initial_canvas.1);
             glib::ControlFlow::Break
         });
     }
@@ -323,6 +333,11 @@ thread_local! {
     static RUNTIME: RefCell<Option<Runtime>> = const { RefCell::new(None) };
     static APP: RefCell<Option<Rc<gtk4::Application>>> = const { RefCell::new(None) };
     static ACTIVATED: Cell<bool> = const { Cell::new(false) };
+    static ANCHOR: RefCell<Option<(gtk4::ApplicationWindow, WebView)>> = const { RefCell::new(None) };
+    static POOL: RefCell<Vec<PoolItem>> = const { RefCell::new(Vec::new()) };
+    static PENDING_FRAMES: RefCell<VecDeque<(u32, i32, i32)>> = const { RefCell::new(VecDeque::new()) };
+    static NEXT_POOL_ID: Cell<usize> = const { Cell::new(0) };
+    static POOL_FILL_SCHEDULED: Cell<bool> = const { Cell::new(false) };
 }
 
 struct Runtime {
@@ -394,6 +409,28 @@ const TITLEBAR_HTML: &str = r#"<!doctype html>
   </script>
 </body></html>"#;
 
+/// View-âncora construct-only do WebKitGTK (ADR 0001): nunca é apresentada e
+/// permanece viva para que TODAS as views de frame compartilhem um WebProcess.
+fn create_anchor() {
+    let app = APP
+        .with(|cell| cell.borrow().clone())
+        .expect("APP não inicializado");
+    let window = gtk4::ApplicationWindow::builder()
+        .application(&*app)
+        .title("aero frame anchor (hidden)")
+        .default_width(1)
+        .default_height(1)
+        .build();
+    let webview = WebView::builder().build();
+    webview.load_html(TITLEBAR_HTML, Some("aero://frame-anchor/"));
+    window.set_child(Some(&webview));
+    // Realize cria o GdkSurface/wl_surface, mas sem present não há janela visível
+    // nem associate: a âncora não entra no LayerMap nem recebe window_id.
+    gtk4::prelude::WidgetExt::realize(&window);
+    ANCHOR.with(|cell| *cell.borrow_mut() = Some((window, webview)));
+    eprintln!("FRAMEWEB: anchor viva (oculta, related_view em todos os frames)");
+}
+
 fn associate_frame(
     wl_surface: aero::wl_surface::WlSurface,
     window: gtk4::ApplicationWindow,
@@ -426,26 +463,106 @@ fn associate_frame(
     });
 }
 
-/// Uma WebView por janela. O associate ocorre no realize, mas o present espera
-/// o frame_requested do output para fixar o canvas antes do primeiro buffer.
-fn open_frame_window(window_id: u32, canvas_w: i32, canvas_h: i32) {
+fn take_ready_frame() -> Option<(PoolItem, usize)> {
+    POOL.with(|cell| {
+        let mut pool = cell.borrow_mut();
+        let position = pool.iter().position(|item| item.ready)?;
+        let item = pool.remove(position);
+        let available = pool.iter().filter(|item| item.ready).count();
+        Some((item, available))
+    })
+}
+
+/// Cria no máximo uma view por idle. O carregamento é assíncrono; a reposição
+/// não bloqueia o take que acabou de consumir uma view pronta.
+fn ensure_pool_fill() {
+    if POOL_FILL_SCHEDULED.with(|flag| flag.replace(true)) {
+        return;
+    }
+    glib::idle_add_local(|| {
+        POOL_FILL_SCHEDULED.with(|flag| flag.set(false));
+        if POOL.with(|cell| cell.borrow().len()) < POOL_TARGET {
+            prewarm_frame();
+        }
+        if POOL.with(|cell| cell.borrow().len()) < POOL_TARGET {
+            ensure_pool_fill();
+        }
+        glib::ControlFlow::Break
+    });
+}
+
+fn request_frame(window_id: u32, canvas_w: i32, canvas_h: i32) {
+    if let Some((item, available)) = take_ready_frame() {
+        eprintln!("FRAMEWEB: pool_take window_id={window_id} available={available}");
+        open_frame_window(window_id, canvas_w, canvas_h, item);
+    } else {
+        eprintln!("FRAMEWEB: pool_vazio window_id={window_id}; request enfileirado");
+        PENDING_FRAMES.with(|cell| {
+            cell.borrow_mut().push_back((window_id, canvas_w, canvas_h));
+        });
+    }
+    ensure_pool_fill();
+}
+
+fn drain_pending_frames() {
+    loop {
+        let request = PENDING_FRAMES.with(|cell| cell.borrow_mut().pop_front());
+        let Some((window_id, canvas_w, canvas_h)) = request else {
+            break;
+        };
+        if let Some((item, available)) = take_ready_frame() {
+            eprintln!("FRAMEWEB: pool_take window_id={window_id} available={available}");
+            open_frame_window(window_id, canvas_w, canvas_h, item);
+        } else {
+            PENDING_FRAMES.with(|cell| {
+                cell.borrow_mut()
+                    .push_front((window_id, canvas_w, canvas_h));
+            });
+            break;
+        }
+    }
+    ensure_pool_fill();
+}
+
+fn pool_mark_ready(pool_id: usize) {
+    let available = POOL.with(|cell| {
+        let mut pool = cell.borrow_mut();
+        let item = pool.iter_mut().find(|item| item.id == pool_id)?;
+        if item.ready {
+            return None;
+        }
+        item.ready = true;
+        Some(pool.iter().filter(|item| item.ready).count())
+    });
+    if let Some(available) = available {
+        eprintln!("FRAMEWEB: pool_ready available={available}");
+        drain_pending_frames();
+    }
+}
+
+/// Pré-aquece window + WebView relacionada sem realizá-la nem associá-la.
+/// A autorização da via A define ready = HTML carregado; o placeholder cobre
+/// o paint que acontece depois do take, quando a surface é apresentada.
+fn prewarm_frame() {
+    let pool_id = NEXT_POOL_ID.with(|cell| {
+        let id = cell.get();
+        cell.set(id + 1);
+        id
+    });
     let app = APP
         .with(|cell| cell.borrow().clone())
         .expect("APP não inicializado");
     let window = gtk4::ApplicationWindow::builder()
         .application(&*app)
-        .title(format!("frame webview {window_id}"))
+        .title(format!("frame webview pool {pool_id}"))
         .build();
-    if canvas_w > 0 && canvas_h > 0 {
-        window.set_default_size(canvas_w, canvas_h);
-    }
     window.add_css_class("aero-frame");
     window.init_layer_shell();
     window.set_namespace(Some("aeroshell-frame-webview"));
-    // Teclado NUNCA no frame: interatividade none (só ponteiro na decoração).
     window.set_keyboard_mode(gtk4_layer_shell::KeyboardMode::None);
 
-    // WebView transparente com a barra de título HTML.
+    let window_id = Rc::new(Cell::new(None));
+    let callback_window_id = Rc::clone(&window_id);
     let manager = UserContentManager::new();
     manager.register_script_message_handler("aero", None);
     manager.connect_script_message_received(Some("aero"), move |_, value| {
@@ -457,8 +574,16 @@ fn open_frame_window(window_id: u32, canvas_w: i32, canvas_h: i32) {
             .and_then(|a| a.as_str())
             .map(str::to_owned);
         match action.as_deref() {
-            Some("close") => window_ipc(&format!("close {window_id}")),
-            Some("maximize") => window_ipc(&format!("maximize {window_id}")),
+            Some("close") => {
+                if let Some(window_id) = callback_window_id.get() {
+                    window_ipc(&format!("close {window_id}"));
+                }
+            }
+            Some("maximize") => {
+                if let Some(window_id) = callback_window_id.get() {
+                    window_ipc(&format!("maximize {window_id}"));
+                }
+            }
             Some("frame_painted") => {
                 let Some(serial) = parsed
                     .get("serial")
@@ -466,6 +591,9 @@ fn open_frame_window(window_id: u32, canvas_w: i32, canvas_h: i32) {
                     .and_then(|serial| u32::try_from(serial).ok())
                 else {
                     eprintln!("FRAMEWEB: frame_painted com serial inválido: {json}");
+                    return;
+                };
+                let Some(window_id) = callback_window_id.get() else {
                     return;
                 };
                 RUNTIME.with(|cell| {
@@ -489,11 +617,45 @@ fn open_frame_window(window_id: u32, canvas_w: i32, canvas_h: i32) {
             _ => eprintln!("FRAMEWEB: mensagem da WebView: {json}"),
         }
     });
-    let webview = WebView::builder().user_content_manager(&manager).build();
+    let anchor = ANCHOR
+        .with(|cell| cell.borrow().as_ref().map(|(_, view)| view.clone()))
+        .expect("WebView-âncora ausente");
+    let webview = WebView::builder()
+        .related_view(&anchor)
+        .user_content_manager(&manager)
+        .build();
     webview.set_background_color(&gtk4::gdk::RGBA::new(0.0, 0.0, 0.0, 0.0));
-    webview.load_html(TITLEBAR_HTML, Some("aero://frame/"));
     window.set_child(Some(&webview));
+    webview.connect_load_changed(move |_, event| {
+        if event == webkit6::LoadEvent::Finished {
+            pool_mark_ready(pool_id);
+        }
+    });
+    POOL.with(|cell| {
+        cell.borrow_mut().push(PoolItem {
+            id: pool_id,
+            window,
+            webview: webview.clone(),
+            window_id,
+            ready: false,
+        });
+    });
+    webview.load_html(TITLEBAR_HTML, Some("aero://frame/"));
+}
 
+/// Consome uma view já carregada. O associate ocorre no realize e o present
+/// espera o frame_requested do output para fixar o canvas inicial.
+fn open_frame_window(window_id: u32, canvas_w: i32, canvas_h: i32, item: PoolItem) {
+    let PoolItem {
+        window,
+        webview,
+        window_id: assigned_window_id,
+        ..
+    } = item;
+    assigned_window_id.set(Some(window_id));
+    if canvas_w > 0 && canvas_h > 0 {
+        window.set_default_size(canvas_w, canvas_h);
+    }
     window.connect_realize(move |w| {
         let gdk_surface = w.surface().expect("janela sem GdkSurface");
         let ws = gdk_surface
@@ -516,7 +678,6 @@ fn open_frame_window(window_id: u32, canvas_w: i32, canvas_h: i32) {
             );
         }
     });
-
     window.connect_map(move |_| eprintln!("FRAMEWEB map: layer surface criada (id={window_id})"));
     gtk4::prelude::WidgetExt::realize(&window);
 }
@@ -568,10 +729,10 @@ fn main() {
             gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );
 
-        // Janela 0 também é a âncora: associa window_id=0 e libera o cliente
-        // inicial adiado (cold-start temporário). Sem tamanho do frame_requested
-        // (é criada direto no activate): o Configure define o default depois.
-        open_frame_window(0, 0, 0);
+        // A âncora é separada e oculta; a janela 0 continua sendo o primeiro
+        // frame associado e libera o cliente inicial adiado.
+        create_anchor();
+        request_frame(0, 0, 0);
 
         glib::timeout_add_local(std::time::Duration::from_millis(20), || {
             dispatch_nonblocking();
