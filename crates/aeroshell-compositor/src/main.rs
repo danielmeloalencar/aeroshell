@@ -17,6 +17,7 @@ mod frame_titlebar_probe;
 mod grab;
 mod input;
 mod protocols;
+mod render;
 mod state;
 mod supervisor;
 mod window_ipc;
@@ -184,6 +185,23 @@ fn main() -> Result<(), Box<dyn Error>> {
     data.state.log_frame_summary();
 
     Ok(())
+}
+
+#[cfg(test)]
+mod render_compartilhado {
+    //! F1a: o render do frame deve viver em `render/elements.rs`, agnóstico de backend.
+    #[test]
+    fn frame_target_soma_insets_e_shadow() {
+        let fgeo = crate::state::FrameGeometry {
+            insets: (6, 30, 6, 30),
+            shadow: (2, 2, 2, 2),
+            ..Default::default()
+        };
+        let content = smithay::utils::Size::<i32, smithay::utils::Logical>::new(700, 500);
+        let target = crate::render::elements::frame_target(content, &fgeo);
+        // conteúdo + insets (12/60) + shadow (4/4) = 716x564.
+        assert_eq!((target.w, target.h), (716, 564));
+    }
 }
 
 #[cfg(test)]
