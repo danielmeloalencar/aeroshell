@@ -219,7 +219,11 @@ Ajustes só com justificativa em ADR.
 
 ---
 
-## 7. F0 — detalhamento (fase atual)
+## 7. F0 — detalhamento (FECHADA em 2026-11-21)
+
+> Encerramento aprovado explicitamente pelo humano: "Com isso fechamos a fase 0 f0 do plano master e ja
+> poderemos ir para o f1". A 02q foi o último cartão; sua sentença visual final e as divergências de medição
+> preservadas estão em `docs/STATE.md`. **F1 está autorizada, mas cada implementação exige cartão próprio.**
 
 ### 7.1 Verificação preliminar já feita (somente-leitura)
 

@@ -4,15 +4,15 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-20 · tarefa `02p` FECHADA (canvas fixo + 9-slice permanente, pixels e juiz visual OK) · modo: SPIKE
+Última atualização: 2026-11-21 · tarefa `02q` FECHADA por decisão do juiz humano (visual perfeito; harness de 300 ms diverge e permanece registrado) · modo: SPIKE
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
 lock, login) é TSX renderizado por WebKitGTK; runtime de política em Bun. Dev em nested (winit).
  
-## 2. Objetivo atual (marco da "fatia vertical")
-`foot` abre no AeroShell nested com barra de título em HTML que se arrasta/redimensiona/fecha/maximiza,
-e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funcionar, decidir sobre o modo produto.
+## 2. Objetivo atual (F1 autorizada)
+F0/fatia vertical FECHADA pelo humano em 2026-11-21: `foot` com decoração HTML funcional e painel React/TSX.
+A F1 (núcleo do compositor) está autorizada, mas NÃO iniciada: exige cartões pequenos e aprovação por tarefa.
  
 ## 3. Feito (com onde está a prova)
 - [x] Compositor nested (winit) com socket próprio, xdg-shell, layer-shell — `scripts/check.sh` (S1 nested)
@@ -288,8 +288,29 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
 - [x] 02p — JUIZ VISUAL DO HUMANO (2026-11-20): após testar a instância v2 com 2 `foot`, o humano
   respondeu **"teste visual ok. Passou"**. Instância encerrada pelo próprio humano (notificações dos
   processos); nenhum encerramento foi feito pelo agente. Tarefa FECHADA.
+- [x] 02q (FECHADA POR DECISÃO DO JUIZ HUMANO): `tests/integration/frame_cold_start.py` foi escrito antes e visto
+  FALHANDO no baseline (`02q_cold_baseline2.log`): janelas 1/2 = **469,320/543,026 ms**, 0 placeholders e
+  **3 WebKitWebProcess** (a baseline de 1–2 s NÃO reproduziu). Implementado: placeholder sólido em `winit.rs`;
+  âncora oculta + `related_view`; pool de 2 views com HTML carregado, consumo por request e reposição em idle.
+  Mesmo teste na via A (`02q_pool_loaded_reverted.log`): takes 0/1/2, pool final=2, placeholders e **1 processo**,
+  mas **374,387/415,202 ms** (>300); outra amostra da mesma implementação: 363,121/412,006 ms. O harness de
+  tempo NÃO passa e nenhuma amostra foi editada/descartada; o humano decidiu explicitamente que sua verdade
+  visual prevalece ("Visualmente está perfeito e bem otimizado") e FECHOU a tarefa. Vizinhos finais
+  initial_buffer/fixed_canvas/repeated_activate/buttons/window_id → 5× OK
+  (`02q_final2_*.log`). Gate `02q_check_final.log` EXIT=0 (27 Rust + 9 Bun); clippy bench `02q_clippy_final.log`
+  EXIT=0. Nenhuma conclusão de desempenho (VM sem 3D).
+- [x] 02q — JUIZ VISUAL DO HUMANO (2026-11-21): instância manual com 3 `foot`, decoração imediata e instrução
+  de abrir outra janela; humano respondeu **"ok. aprovado"**. Antes, também relatou que no harness as janelas
+  abriram rápido e a decoração carregou instantaneamente. Instância encerrada pelo humano, não pelo agente.
+  O critério VISUAL passou. Depois, o humano afirmou explicitamente que sua verdade prevalece sobre o harness,
+  que está "visualmente perfeito e bem otimizado" e FECHOU a 02q; a falha do cronômetro fica como lacuna de
+  medição em §7, não como reabertura automática.
+- [x] F0 FECHADA e F1 AUTORIZADA pelo humano em 2026-11-21: "Com isso fechamos a fase 0 f0 do plano master
+  e ja poderemos ir para o f1". Registro no `docs/plano-mestre.md` §7; F1 NÃO iniciada nesta sessão.
 ## 4. Em andamento
-- Nenhuma nesta sessão. A 02p foi concluída com pixels, vizinhos, gate/clippy e juiz visual positivos (§3).
+- Nenhuma implementação: F0/02q fechadas pelo humano. F1 autorizada, aguardando cartão próprio; não avançar
+  automaticamente para código, protocolo ou arquitetura novos.
+- A 02p foi concluída com pixels, vizinhos, gate/clippy e juiz visual positivos (§3).
 - 02o SUBSTITUÍDA pela medição/correção 02p; não ajustar sua grade antiga nem reabrir sem novo pedido.
 - 02n: **JUIZ VISUAL NEGOU (2026-11-20)** — humano: "problema ainda ocorre". Técnica/gate/clippy provados 3× (§3),
   mas o dado visual prevalece; 0 frames inconsistentes no teste NÃO mede o que o humano viu (lacuna registrada em §7).
@@ -317,19 +338,39 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. `02o` — SUBSTITUÍDA: a 02p criou sonda full-res que reproduziu o flicker (2×1.910 pixels) e depois
+0. `F1` — autorizada pelo humano, mas NÃO iniciada: abrir cartão pequeno antes de qualquer implementação.
+   Não reabrir 02q pela divergência do cronômetro sem pedido explícito do humano.
+1. `02o` — SUBSTITUÍDA: a 02p criou sonda full-res que reproduziu o flicker (2×1.910 pixels) e depois
    comprovou canvas fixo sem transiente. A grade antiga não é mais critério; não reabrir sem novo pedido.
-1. `02n` — JUIZ NEGOU ("problema ainda ocorre"); instância já não existe. NÃO abrir 5ª correção sem decisão.
-2. `02j` — CONCLUÍDA; os 3 modos nomeados (`FRAME_NEVER_ACKED`, `FRAME_NEVER_DREW_AT_SIZE`,
+2. `02n` — JUIZ NEGOU ("problema ainda ocorre"); instância já não existe. NÃO abrir 5ª correção sem decisão.
+3. `02j` — CONCLUÍDA; os 3 modos nomeados (`FRAME_NEVER_ACKED`, `FRAME_NEVER_DREW_AT_SIZE`,
    `FRAME_STRETCH_ACTIVE`) estão no log bench. Próximo passo natural (NÃO executado): correlacionar esses modos
    com um novo arrasto REAL e só então decidir a causa da queixa visual de 02e/02f.
-3. `02f` — NÃO CONCLUÍDA: juiz visual negou ("moldura ainda chega atrasada"). NÃO reabrir sem novo pedido.
-4. `02g` — shell: fonte de fd GLib no `wl_display` mantendo timer de segurança de 50 ms; limite 1 h, reverter se piorar.
-5. `02h` — medições de ambiente VM (sem mudança de código): baseline / Skia CPU / GSK cairo / b+c, 3 repetições.
-6. `02i` — correções de documentação (somente docs): presentation-time, background_effect, WPE, cartões 02c/02d, F1.
-7. `05-compatibilidade-protocolos.md` — RASCUNHO; 7 mensagens do `foot` registradas em §6. NÃO executar sem ok.
+4. `02f` — NÃO CONCLUÍDA: juiz visual negou ("moldura ainda chega atrasada"). NÃO reabrir sem novo pedido.
+5. `02g` — shell: fonte de fd GLib no `wl_display` mantendo timer de segurança de 50 ms; limite 1 h, reverter se piorar.
+6. `02h` — medições de ambiente VM (sem mudança de código): baseline / Skia CPU / GSK cairo / b+c, 3 repetições.
+7. `02i` — correções de documentação (somente docs): presentation-time, background_effect, WPE, cartões 02c/02d, F1.
+8. `05-compatibilidade-protocolos.md` — RASCUNHO; 7 mensagens do `foot` registradas em §6. NÃO executar sem ok.
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- 02q (POOL, 2 tentativas preservadas): a 1ª marcou ready por double-rAF sem realizar/apresentar as views;
+  `02q-cold-comp-36184.log` só contém `pool_vazio`, nenhum ready, e o teste deu timeout (`02q_after_pool1.log`).
+  A 2ª esperou `LoadEvent::Finished` + `get_snapshot`; `02q-cold-comp-36843.log` mostra
+  `pool_snapshot_falhou pool_id=0/1: Ocorreu um erro ao criar a captura instantânea` e o mesmo timeout
+  (`02q_after_pool2.log`). Ambas foram revertidas; o humano então autorizou explicitamente a via A
+  (HTML carregado + placeholder), implementada no estado final.
+- 02q (HARNESS, amostra NÃO descartada): `02q_cold_baseline1.log` contou wrappers `bwrap` como WebProcesses
+  (9 linhas). Corrigi somente o filtro para o argv0 `WebKitWebProcess`; a repetição crua `02q_cold_baseline2.log`
+  mediu os 3 processos reais. O placeholder também teve 1 erro de compilação por tipo de `dst` ausente;
+  corrigido com `Size<i32, Physical>`, sem desligar checagem (`02q_after_placeholder1.log`).
+- 02q (VIA A, tentativas preservadas): antecipar `realize` piorou para 480,071/518,650 ms e foi revertido
+  (`02q_pool_prerealize2.log`); `queue_draw` após present não impediu timeout e foi removido
+  (`02q_queue_draw_initial1.log`). Nenhuma delas permanece no código final.
+- 02q (INTERMITÊNCIA, causa NÃO identificada — não chamar de flake): `frame_initial_buffer.py` falhou 2× por
+  20 s com 2.221/2.235 placeholders e 0 `RESIZE_GLUE` (`/tmp/ibuf-comp-42805.log`, `43155.log`). Sem qualquer
+  mudança adicional de produto, depois passou (`02q_final2_frame_initial_buffer.log`). Remover/adicionar
+  `AERO_TEST_INPUT_SOCK` em memória não provou causalidade; allocation 0×0 no present também ocorreu num caso
+  bem-sucedido. Amostras preservadas; nenhuma correção foi declarada para essa intermitência.
 - 02p (MEDIÇÃO, amostras preservadas): a 1ª sonda usou retângulo sem transform e foi INVALIDADA por
   `sanity_titlebar=0` (`02p_pixel_baseline1.log`); não foi usada como evidência. A 2ª falha foi compilação
   da sonda. O baseline válido só foi aceito com `sanity_titlebar=205` e os transientes crus.
@@ -547,6 +588,12 @@ e um painel em React/TSX lista as janelas e foca a clicada. Quando isso funciona
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- 02q (LACUNA DE MEDIÇÃO, tarefa FECHADA pelo humano): o cronômetro map→`RESIZE_GLUE` continua >300 ms
+  (363–415 ms nas amostras da via A), enquanto o humano viu decoração instantânea e declarou "visualmente
+  perfeito e bem otimizado". Por `AGENTS.md` §0.4/§0.9, o relato visual prevalece e fecha a tarefa; o harness
+  provavelmente mede um intervalo que não corresponde ao gap percebido. NÃO alterar o teste nem descartar
+  números. Baseline de 1–2 s não reproduziu (469–543 ms). VM sem 3D: nenhuma conclusão de FPS/GPU real.
+  A intermitência do primeiro buffer segue sem causa identificada (§6) e não foi "corrigida".
 - 02p: desempenho/PSS/latência em GPU real NÃO medidos (VM sem 3D). Readback síncrono altera cadência;
   os testes provam pixels/geometria/funcionamento, não fps. Multi-output e crescimentos repetidos além
   de um salto não foram medidos. O critério visual nested com 2 `foot` foi APROVADO pelo humano (§3).
@@ -693,15 +740,13 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- 02p FECHADA: canvas fixo + 9-slice permanente, `frame_painted`, ReleaseSwap/timers removidos; ADR 0007.
-- Gate final: `bash scripts/check.sh` → EXIT=0 (`/tmp/opencode/02p_check_final.log`);
-  `cargo clippy --workspace --all-targets --features bench -- -D warnings` → EXIT=0
-  (`/tmp/opencode/02p_clippy_final.log`). Bun 9 pass/0 fail; testes Rust incluem as 2 regressões novas.
-- Reproduzir: `python3 tests/integration/frame_fixed_canvas_release_pixels.py` → OK; baseline preservado
-  em `02p_pixel_baseline3.log`; 3 finais em `02p_pixel_after{2,3,4}.log`; `...py growth` → growth real OK.
-- Regressões: `cargo test -p aeroshell-compositor canvas_tracks_insets_from_initial_associate` e
-  `python3 tests/integration/frame_repeated_activate.py` (ativação repetida não derruba mais os frames).
-- Juiz visual: humano disse "teste visual ok. Passou" na instância v2 com 2 `foot` e a encerrou; nenhuma
-  instância aberta agora. O agente não encerrou a aplicação.
-- Encerramento: o humano autorizou o commit local da 02p; sem push e sem iniciar outra fase/tarefa.
-  Não medir desempenho nesta VM; GPU real continua pendente.
+- F0/02q FECHADAS pelo humano; F1 autorizada, NÃO iniciada. Abrir cartão antes de qualquer código F1.
+- Implementado: placeholder sólido, âncora + related-view, pool de 2 com HTML carregado e reposição idle.
+- Baseline `02q_cold_baseline2.log`: 469/543 ms, 0 placeholders, 3 processos; via A: 374/415 ms, 1 processo.
+- Juiz final: humano disse "visualmente perfeito e bem otimizado"; sua verdade prevalece sobre o cronômetro.
+- Divergência map→RESIZE_GLUE >300 ms preservada em §7; não editar o teste para passar nem reabrir sem pedido.
+- Vizinhos finais initial_buffer/fixed_canvas/repeated_activate/buttons/window_id → 5× OK (`02q_final2_*.log`).
+- Gate `02q_check_final.log` EXIT=0 (27 Rust + 9 Bun); clippy bench `02q_clippy_final.log` EXIT=0.
+- Intermitência initial_buffer: 2 timeouts sem causa; amostras e investigação em §6, não declarada corrigida.
+- Instância visual fechada pelo humano. Próximo passo: criar cartão F1 somente após pedido do usuário.
+- Árvore tinha remoção PRÉ-EXISTENTE `D docs/prior-art/domicile.md`; não tocar. Commit/push não autorizados.
