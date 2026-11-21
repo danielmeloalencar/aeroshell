@@ -83,6 +83,9 @@ pub struct FrameRenderInput<'a> {
 
 pub struct FrameRenderResult {
     pub kind: FrameRenderKind,
+    /// Retângulo do frame em coordenadas físicas (para sondas de pixel dos backends).
+    #[cfg(feature = "bench")]
+    pub rect: Rectangle<i32, Physical>,
     #[cfg(feature = "bench")]
     pub titlebar_probe: Option<TitlebarFrame>,
 }
@@ -124,6 +127,8 @@ where
     // Também define a geometria do placeholder enquanto o primeiro buffer
     // WebKit ainda não existe.
     let target = frame_target(committed, &fgeo);
+    #[cfg(feature = "bench")]
+    let rect = Rectangle::new(loc, target.to_physical_precise_round(output_scale));
 
     #[cfg(feature = "bench")]
     let mut titlebar_probe = None;
@@ -457,6 +462,8 @@ where
             return Some(FrameRenderResult {
                 kind: FrameRenderKind::Placeholder,
                 #[cfg(feature = "bench")]
+                rect,
+                #[cfg(feature = "bench")]
                 titlebar_probe,
             });
         }
@@ -468,6 +475,8 @@ where
 
     Some(FrameRenderResult {
         kind: FrameRenderKind::Frame,
+        #[cfg(feature = "bench")]
+        rect,
         #[cfg(feature = "bench")]
         titlebar_probe,
     })
