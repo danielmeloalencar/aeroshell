@@ -667,8 +667,11 @@ somente após novo pedido/aprovação.
   tela** (headless renderiza offscreen), então não há "confirmação visual" possível — peço o ok do humano
   para FECHAR F1b. F1c NÃO começa sem ele.
 - F1b (NÃO MEDIDO): redução de repaint por damage (age=0 no alvo offscreen, ver §6); desempenho/FPS em
-  GPU real (VM sem 3D); pixels do 9-slice amostrados no headless (a sonda capturou o clear color, não o
-  conteúdo WebKit — o `RENDER_SHARED` prova que o módulo compartilhado foi chamado, não a fidelidade visual).
+  GPU real (VM sem 3D); fidelidade visual do 9-slice no headless. Nas 3 execuções, **todas** as 15 linhas
+  `RENDER_SHARED` foram `kind=placeholder` — o branch 9-slice do `push_frame_elements` NÃO foi exercitado
+  no 2º backend (o shell não chegou a commitar o primeiro buffer WebKit antes do teste terminar). A sonda
+  02o capturou o clear color (grid não-nulo), não pixels do frame. A prova de F1b é: o mesmo módulo foi
+  chamado no headless; **não** é prova de que o 9-slice renderiza igual nos dois backends.
 - F1a (LACUNA DE MEDIÇÃO dos harnesses de parse): ver §6 — 3 harnesses tiveram falha de parse/ intermitência
   (dois já no baseline). O log cru do compositor mostra a ação executada, mas o parse do harness não a
   capturou; isso NÃO é evidência de que o comportamento mudou, e também NÃO autoriza dizer "todos verdes".
