@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-22 · **Fase atual: F1** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · **F1i+ FECHADA PELO JUIZ VISUAL (digitação normal; só aviso de toplevel-icon, fora de escopo)** · cursor invisível no udev segue em cartão separado · 02q REABERTA E FECHADA PELO JUIZ em 2026-11-22 (sem adiamento, spike 12×36 eliminado; harness de 300 ms segue como limitação de VM registrada) · **02r FECHADA PELO JUIZ (nested + tty3) e 02s FECHADA PELO JUIZ (duas instâncias no mesmo D-Bus, "ok aprovado")**
+Última atualização: 2026-11-22 · **Fase atual: F1** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · **F1i+ FECHADA PELO JUIZ VISUAL (digitação normal; só aviso de toplevel-icon, fora de escopo)** · **título real na titlebar: código/teste/gate verdes, juiz visual PENDENTE (§3/§7)** · cursor invisível no udev segue em cartão separado · 02q REABERTA E FECHADA PELO JUIZ em 2026-11-22 (sem adiamento, spike 12×36 eliminado; harness de 300 ms segue como limitação de VM registrada) · **02r FECHADA PELO JUIZ (nested + tty3) e 02s FECHADA PELO JUIZ (duas instâncias no mesmo D-Bus, "ok aprovado")**
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -21,6 +21,22 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [~] **Título real na titlebar (2026-11-22) — código/teste/gate verdes; juiz visual PENDENTE (§7).**
+      Cartão `docs/tasks/F1-titlebar-real-title.md`. O compositor JÁ expunha o título no IPC
+      (`window_ipc.rs:30-41,80-102`); a lacuna era só no shell. `frame_webview.rs` ganhou `ipc_title()`
+      (lê `list` até `.`, igual ao padrão de `bridge.rs:15-35`), `refresh_titles()` (só reenvia JS quando o título
+      muda), `last_title` em `FrameEntry`, chamada no associate + polling de 1 s (`glib::timeout_add_local`,
+      `glib-0.22.11/src/source.rs:455`) e `window.aeroSetTitle` no HTML, que grava `#title.textContent` e devolve
+      **o valor lido do DOM** por `postMessage` → log `FRAMEWEB: title_applied ...`. Sem protocolo/ADR/dep nova.
+      **Teste-first:** `tests/integration/frame_title.py` escrito antes; baseline `/tmp/opencode/f1-title/baseline3.log`
+      → `VEREDITO: FALHA` (só `janela`; IPC com `aero-title-probe` e `aero-title-segundo`). Depois 3× `VEREDITO: OK`
+      (`final{2,3,4}.log`): `title_applied window_id=0 titulo=aero-title-probe` e `window_id=1 titulo=aero-title-segundo`.
+      Uma amostra intermediária (`final1.log`) falhou só por regex defasada do harness (`$` sem `re.M`); preservada.
+      Gate `check.sh` EXIT=0 (`gate-final.log`). Vizinhos: `frame_window_id`, `frame_reopen`, `frame_resize_glue`,
+      `headless_render_damage` OK; `frame_buttons` falhou 1× (maximize não aplicado a tempo, `alvo_max=810x634`)
+      e passou 2× seguidas sem mudança de código (`reg-frame_buttons.log` vs `-2/-3`) — amostra falha preservada em §6.
+      **Evento de mudança de título NÃO foi implementado: IPC é request/response, polling cobre o critério; registrar
+      streaming como melhoria F2 (§6). Nenhuma fase/cartão novo aberto.**
 - [x] **F1i+ — text_input/input_method (F1) + xdg_activation (F7) FECHADA PELO JUIZ VISUAL (2026-11-22).**
       Cartão `docs/tasks/F1i-text-input-im-xdg-activation.md`, rascunho aprovado pelo humano ("ok"). **Decisão registrada:**
       `text_input/input_method` = F1i; `xdg_activation` **puxado da F7 por decisão do humano**.
@@ -949,6 +965,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
+- **Título real na titlebar (2026-11-22): código, teste-first, 3× harness verde, regressões e gate prontos (§3). Falta
+  só o juiz visual (título real visível na barra do `foot`/`gedit`). Não abrir o próximo cartão sem ok/autorização.**
 - **F1i+ FECHADA PELO JUIZ (2026-11-22) — ver §3.** Humano confirmou digitação normal e que só restou o aviso de
   `xdg toplevel icon` (fora de escopo); compositor seguiu vivo. Nenhuma instância encerrada pelo agente. Não reabrir
   sem novo pedido. **Não abrir o próximo cartão sem cartão próprio e "ok" do humano.**
@@ -997,7 +1015,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. **NENHUMA AUTORIZADA — PARAR.** F1i+ FECHADA PELO JUIZ (§3/§4); o próximo cartão SÓ com autorização explícita.
+0. **NENHUMA AUTORIZADA — PARAR.** Título real aguarda o juiz visual (§4/§7); F1i+ FECHADA PELO JUIZ (§3).
+   O próximo cartão SÓ com autorização explícita.
    02s FECHADA pelo juiz (§3), 02r FECHADA pelo juiz (§3),
    F1d3 FECHADA pelo juiz (§3).
    02r FECHADA pelo juiz (§3); F1d3 FECHADA pelo juiz (§3).
@@ -1029,6 +1048,12 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **Título real (2026-11-22): melhoria F2 (streaming de títulos).** O IPC de janelas é request/response; esta tarefa
+  usa polling de 1 s no shell. Um evento de mudança de título (push do compositor → shell) evitaria a consulta
+  periódica e reduziria a latência abaixo de 1 s. Não é bloqueante para este cartão; não implementar aqui.
+- **Título real (2026-11-22): amostra falha de `frame_buttons` preservada** em `/tmp/opencode/f1-title/reg-frame_buttons.log`
+  (`alvo_max=(810,634)` — maximize não aplicado a tempo; caiu dentro da tolerância só na 2ª/3ª execução, sem mudança de
+  código). Não foi diagnosticada a fundo (pré-existente ao cartão, fora do escopo); não foi descartada.
 - **F1i+ (2026-11-22): decisão do humano** — `xdg_activation` foi puxado da F7 para o cartão F1i; `text_input/
   input_method` pertence à F1. `xdg_toplevel_icon` e `slave exited… hangup` NÃO foram tocados, por decisão explícita.
 - **F1i+ (2026-11-22): filtro do global `zwp_input_method_manager_v2` usa `|_| true`** (padrão do Smithay fixado,
@@ -1478,6 +1503,11 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- **Título real na titlebar — JUIZ VISUAL PENDENTE (2026-11-22):** o harness mede o valor lido de volta do DOM via
+  `postMessage` (`title_applied`), mas **não** prova o que aparece na tela. Falta o humano confirmar, com a nested
+  aberta, que o título real do `foot`/`gedit` aparece na barra. Sem o "ok", o cartão NÃO fecha.
+  **Não medido:** latência do polling em GPU real (VM sem 3D); títulos com UTF-8/emoji (o path usa `serde_json`,
+  mas não há medição visual).
 - **F1i+ — JUIZ VISUAL OBTIDO (2026-11-22): humano confirmou digitação normal no `foot` e que, ao abrir outro
   `foot` no socket, restou apenas o aviso de `xdg toplevel icon` (fora de escopo).** Compositor seguiu vivo após a
   ativação (PID 243367). O pré-filtro automatizado mediu globals, serial/token/ativação e a ausência dos 2 avisos;
@@ -1821,6 +1851,11 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
+- **Sessão atual: título real na titlebar (2026-11-22) — código/teste/gate verdes (§3); JUIZ VISUAL PENDENTE (§7).**
+  Pré-requisito do harness: `cargo build -p aeroshell-compositor && cargo build -p aeroshell-shell --example frame_webview`.
+- **Reproduzir:** `python3 tests/integration/frame_title.py` → `VEREDITO: OK` 3× (`/tmp/opencode/f1-title/final{2,3,4}.log`);
+  baseline FALHA em `baseline3.log`. Gate `gate-final.log` EXIT=0. Próximo passo: obter o "ok" visual do humano;
+  só depois fechar o cartão. Não avançar de fase nem implementar streaming F2 sem autorização.
 - **Sessão atual: F1i+ FECHADA PELO JUIZ VISUAL (2026-11-22) — ver §3.** Instância nested deixada aberta para o
   julgamento: compositor PID 243367, `foot` 243376, shell 243372, socket
   `wayland-aero-f1i-1795386555`, IPC `/tmp/opencode/f1i/visual-ipc-1795386555.sock`, log

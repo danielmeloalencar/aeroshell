@@ -13,7 +13,8 @@ use gtk4::prelude::*;
 use gtk4_layer_shell::LayerShell;
 use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
-use std::io::{BufRead, Write};
+use std::io::{BufRead, BufReader, Write};
+use std::net::Shutdown;
 use std::os::unix::net::UnixStream;
 use std::rc::Rc;
 use wayland_client::{protocol::wl_registry, Dispatch, Proxy, QueueHandle};
@@ -73,6 +74,8 @@ struct FrameEntry {
     canvas: (i32, i32),
     presented: bool,
     window_id: u32,
+    /// Último título aplicado ao HTML; evita reenviar JS a cada poll do IPC.
+    last_title: Option<String>,
 }
 
 struct PoolItem {
@@ -421,6 +424,95 @@ fn window_ipc(cmd: &str) {
     }
 }
 
+/// Lê `list` até o `.` (o `window_ipc` acima lê só a primeira linha) e devolve
+/// o título do window_id pedido. O IPC já expõe o título real do toplevel
+/// (`window_ipc.rs:30-41,80-102`); este é só o cliente do shell.
+fn ipc_title(window_id: u32) -> Option<String> {
+    let path = std::env::var_os("AERO_WINDOW_IPC_SOCK")?;
+    let mut stream = UnixStream::connect(path).ok()?;
+    writeln!(stream, "list").ok()?;
+    stream.flush().ok()?;
+    // Sem shutdown da escrita o compositor espera outro comando e o read bloqueia.
+    stream.shutdown(Shutdown::Write).ok()?;
+    for line in BufReader::new(stream).lines().map_while(Result::ok) {
+        if line == "." {
+            break;
+        }
+        // "W id x y w h <titulo-json>" — splitn(7) mantém o JSON (com espaços) inteiro.
+        let mut parts = line.splitn(7, ' ');
+        if parts.next() != Some("W") {
+            continue;
+        }
+        let Some(id) = parts.next().and_then(|v| v.parse::<u32>().ok()) else {
+            continue;
+        };
+        if id == window_id {
+            return parts.nth(4).and_then(|raw| serde_json::from_str(raw).ok());
+        }
+    }
+    None
+}
+
+/// Aplica ao DOM o título vindo do IPC. Chamado no associate e a cada 1 s.
+fn refresh_titles() {
+    if std::env::var_os("AERO_WINDOW_IPC_SOCK").is_none() {
+        return;
+    }
+    let targets: Vec<(u32, WebView)> = RUNTIME.with(|cell| {
+        cell.borrow()
+            .as_ref()
+            .map(|rt| {
+                rt.state
+                    .entries
+                    .iter()
+                    .map(|entry| (entry.window_id, entry.webview.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    });
+    for (window_id, webview) in targets {
+        let Some(title) = ipc_title(window_id) else {
+            continue;
+        };
+        let changed = RUNTIME.with(|cell| {
+            let mut borrow = cell.borrow_mut();
+            let Some(rt) = borrow.as_mut() else {
+                return false;
+            };
+            let Some(entry) = rt
+                .state
+                .entries
+                .iter_mut()
+                .find(|e| e.window_id == window_id)
+            else {
+                return false;
+            };
+            if entry.last_title.as_deref() == Some(title.as_str()) {
+                return false;
+            }
+            entry.last_title = Some(title.clone());
+            true
+        });
+        if !changed {
+            continue;
+        }
+        let quoted = serde_json::to_string(&title).unwrap_or_else(|_| "\"\"".to_owned());
+        let script = format!("window.aeroSetTitle && window.aeroSetTitle({quoted});");
+        webview.evaluate_javascript(
+            &script,
+            None,
+            None,
+            None::<&webkit6::gio::Cancellable>,
+            |result| {
+                if let Err(err) = result {
+                    eprintln!("FRAMEWEB: aeroSetTitle falhou: {err}");
+                }
+            },
+        );
+        eprintln!("FRAMEWEB: title_set window_id={window_id} titulo={title}");
+    }
+}
+
 const TITLEBAR_HTML: &str = r#"<!doctype html>
 <html><head><meta charset="utf-8"><style>
   html,body{margin:0;height:100%;background:transparent;overflow:hidden;
@@ -448,6 +540,16 @@ const TITLEBAR_HTML: &str = r#"<!doctype html>
   </div>
   <script>
     const send = (action) => window.webkit.messageHandlers.aero.postMessage({ action });
+    // O host chama com o título vindo do IPC; devolvemos o valor LIDO DO DOM
+    // para a sonda provar que o #title foi realmente atualizado.
+    window.aeroSetTitle = (title) => {
+      const el = document.getElementById('title');
+      el.textContent = title;
+      el.title = title;
+      window.webkit.messageHandlers.aero.postMessage({
+        action: 'title_applied', title: el.textContent
+      });
+    };
     window.aeroFramePainted = (serial) => {
       requestAnimationFrame(() => requestAnimationFrame(() => {
         window.webkit.messageHandlers.aero.postMessage({ action: 'frame_painted', serial });
@@ -540,9 +642,15 @@ fn associate_frame(
             canvas,
             presented: false,
             window_id,
+            last_title: None,
         });
         eprintln!("FRAMEWEB: associate(window_id={window_id}) + set_insets({BORDER},{TITLEBAR_H},{BORDER},{BORDER}) \
                    + set_titlebar_slices({TITLE_TEXT_W},{RIGHT_CONTROLS}) t={}", bench_t());
+    });
+    // Fora do borrow do RUNTIME: o refresh consulta o estado de novo.
+    glib::idle_add_local(|| {
+        refresh_titles();
+        glib::ControlFlow::Break
     });
 }
 
@@ -666,6 +774,13 @@ fn prewarm_frame() {
                 if let Some(window_id) = callback_window_id.get() {
                     window_ipc(&format!("maximize {window_id}"));
                 }
+            }
+            Some("title_applied") => {
+                let title = parsed.get("title").and_then(|v| v.as_str()).unwrap_or("");
+                let Some(window_id) = callback_window_id.get() else {
+                    return;
+                };
+                eprintln!("FRAMEWEB: title_applied window_id={window_id} titulo={title}");
             }
             Some("frame_painted") => {
                 let Some(serial) = parsed
@@ -844,6 +959,12 @@ fn main() {
 
         glib::timeout_add_local(std::time::Duration::from_millis(20), || {
             dispatch_nonblocking();
+            glib::ControlFlow::Continue
+        });
+        // O IPC de janelas é request/response; o título muda é descoberto por
+        // polling curto. Evento de mudança de título é melhoria F2 (streaming).
+        glib::timeout_add_local(std::time::Duration::from_secs(1), || {
+            refresh_titles();
             glib::ControlFlow::Continue
         });
     });

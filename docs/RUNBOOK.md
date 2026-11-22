@@ -166,6 +166,7 @@ python3 tests/integration/frame_cold_start.py     # 02q: placeholder/pool/relate
 python3 tests/integration/headless_render_damage.py # F1b/c: age>0, damage parcial e pixels do 9-slice
 python3 tests/integration/multi_output_damage.py  # F1c: 2 outputs, damage incremental e conteúdo nos 2 tiles
 python3 tests/integration/frame_window_id.py      # 2 janelas, cada frame com o próprio window_id
+python3 tests/integration/frame_title.py          # titulo real do toplevel no #title do frame (foot -T, 2 janelas)
 python3 tests/integration/sdk_cli.py              # 03: --list/--focus/--close do runtime Bun
 python3 tests/integration/supervisor_lifecycle.py # kill -9 do compositor derruba os filhos
 python3 tests/integration/supervisor_real.py      # fluxo real shell privilegiado
