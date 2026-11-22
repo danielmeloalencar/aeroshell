@@ -1818,7 +1818,9 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
 - **Sessão atual: F1i+ (2026-11-22) — código/teste/gates verdes (§3); JUIZ VISUAL PENDENTE (§7).** Instância nested
-  deixada aberta para o humano (PID/socket no relatório da sessão). Quem fecha é o humano; o agente não encerrou app.
+  deixada aberta de propósito: compositor PID 243367, `foot` 243376, shell 243372, socket
+  `wayland-aero-f1i-1795386555`, IPC `/tmp/opencode/f1i/visual-ipc-1795386555.sock`, log
+  `/tmp/opencode/f1i/visual.log`. Quem fecha é o humano; o agente não encerrou app.
 - **Reproduzir:** `cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-compositor --example f1i_client && cargo build -p aeroshell-shell --example frame_webview && python3 tests/integration/f1i_protocols.py`
   → `VEREDITO: OK` (4× em `/tmp/opencode/f1i/final{3,4,5,6}.log`); baseline FALHA em `baseline1.log`.
   Gate `gate-final2.log` EXIT=0; clippy bench `clippy-bench.log` 0; `--no-default-features` `nodefault.log` 0.
