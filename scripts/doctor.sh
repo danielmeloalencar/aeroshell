@@ -62,9 +62,11 @@ check_pc wayland-server libwayland-dev 1.20
 check_pc xkbcommon libxkbcommon-dev 1.0
 check_pc libudev libudev-dev 249
 check_pc libinput libinput-dev 1.19
-check_optional_pc libdrm libdrm-dev
-check_optional_pc gbm libgbm-dev
-check_optional_pc libseat libseat-dev
+# Obrigatórias desde F1d1: o backend de sessão real (udev/DRM/GBM/libseat) é feature padrão
+# do `aeroshell-compositor` (crates/aeroshell-compositor/Cargo.toml:[features]).
+check_pc libdrm libdrm-dev 2.4.111
+check_pc gbm libgbm-dev 10.7
+check_pc libseat libseat-dev 0.7
 check_optional_pc dbus-1 libdbus-1-dev
 check_optional_pc pam pam
 

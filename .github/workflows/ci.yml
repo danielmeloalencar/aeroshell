@@ -14,9 +14,18 @@ jobs:
       - name: Dependências do sistema
         run: |
           sudo apt-get update
+          # Mesma lista de scripts/setup-deps.sh:13-19. As libs de DRM/GBM/libinput/udev/libseat
+          # são obrigatórias desde F1d1: o backend de sessão real é feature padrão do compositor.
           sudo apt-get install -y build-essential pkg-config \
             libgtk-4-dev libwebkitgtk-6.0-dev libgtk4-layer-shell-dev \
-            libwayland-dev wayland-protocols libxkbcommon-dev
+            libwayland-dev wayland-protocols libxkbcommon-dev \
+            libdrm-dev libgbm-dev libinput-dev libudev-dev libsystemd-dev
+
+      # libseat-dev com o mesmo fallback de scripts/setup-deps.sh:17-19: se o nome não
+      # existir na imagem do runner, usa libelogind-dev (provedor logind alternativo).
+      # Fica fora da linha acima para o `apt-get` principal não falhar por nome inexistente.
+      - name: libseat (fallback libelogind)
+        run: sudo apt-get install -y libseat-dev || sudo apt-get install -y libelogind-dev
 
       - name: Ferramentas
         uses: dtolnay/rust-toolchain@stable
