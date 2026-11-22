@@ -21,6 +21,24 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **GAP ANALYSIS F1 (2026-11-22) — mapa dos 15 itens de `docs/plano-mestre.md:176`, SOMENTE LEITURA.**
+      Classificação: **6 ✅ · 2 ~ · 7 ❌**. Os ✅, com prova no código:
+      **DRM** (`backend/udev.rs:87-221` libseat→DRM→GBM→`DrmOutputManager` + conectores/CRTC; `udev.rs:579-705`
+      sonda GBM; juiz F1d3 nesta seção);
+      **multi-monitor** (`cli.rs:37,110-116` `--outputs N`, `winit.rs:125-160`, `render/scene.rs:32-45`,
+      `multi_output_damage.py`; F1c fechada pelo juiz);
+      **damage** (`winit.rs:138-160,217-264`, `headless.rs:83-160`, `render/scene.rs`,
+      `headless_render_damage.py` — ressalva: incremental só nas texturas por output, host N=1 usa `age=0`, §6);
+      **xdg-shell** (`state.rs:218-219`, `protocols/xdg_shell.rs:26-120`, `delegate_xdg_shell!`);
+      **decoration** (`state.rs:220`, `xdg_shell.rs:125-146`, sempre `ServerSide`);
+      **layer-shell** (`state.rs:221`, `protocols/layer_shell.rs`, painel `aeroshell-panel` no tty3);
+      **subsurfaces** (`protocols/compositor.rs:204-216` `is_sync_subsurface`/`get_parent`/commit no root;
+      render pela árvore de superfícies em `render/scene.rs:60-114` — sem teste dedicado de cliente).
+      Método: `grep` nos crates e em `protocols/` (só `aero_frame_v1.xml` existe) + leitura do Smithay 0.7.0
+      fixado em `~/.cargo/registry/src/.../smithay-0.7.0/src/wayland/`. Nenhum ✅ exige feature ou dependência
+      nova: todos os módulos estão sob `wayland_frontend`, já ativo (`Cargo.toml:21-26`). Os ~ e ❌ estão em §7.
+      Gate `bash scripts/check.sh` → `OK: scripts/check.sh passou`, `CHECK_EXIT=0` (29 Rust + 9 Bun).
+      **Nenhuma implementação, protocolo XML, ADR ou dependência alterada.**
 - [x] **F1d3 FECHADA PELO JUIZ VISUAL (2026-11-22).** Humano, após rodar `~/u` no tty3 com as três
       correções (frame callbacks no udev, painel lançado, IPC do painel), respondeu **"ok. Aprovado"**.
       Isso cobre o critério visual do cartão `F1d3-diagnostico-visual.md`: painel/`foot`/arrasto/VT no
@@ -579,6 +597,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
+- **GAP ANALYSIS F1 (2026-11-22) CONCLUÍDA, SOMENTE LEITURA** — mapa em §3 (✅) e §7 (~/❌). Nenhum
+  protocolo implementado; ordem de cartões proposta em §5/§7, aguardando decisão do humano.
 - **F1d3 FECHADA (2026-11-22) — ver §3.** Não há trabalho em andamento na F1d3. Cursor invisível no udev
   é dívida de cartão separado (§6); não reabrir sem pedido. Push WIP falhou por credencial
   (`could not read Username`); commits locais até `a90c534` prontos para o humano empurrar.
@@ -627,6 +647,14 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
 6. `02h` — medições de ambiente VM (sem mudança de código): baseline / Skia CPU / GSK cairo / b+c, 3 repetições.
 7. `02i` — correções de documentação (somente docs): presentation-time, background_effect, WPE, cartões 02c/02d, F1.
 8. `05-compatibilidade-protocolos.md` — RASCUNHO; 7 mensagens do `foot` registradas em §6. NÃO executar sem ok.
+9. **GAP ANALYSIS F1 → ordem proposta de cartões (NÃO AUTORIZADA — abrir cartão e obter ok antes de executar).**
+   Mapa completo em §7. Ordem: cursor-shape → primary-selection → popups-render → fractional-scale →
+   viewporter → text-input/IM → presentation-time → dmabuf (maior risco; VM sem 3D valida funcionamento,
+   não desempenho). Critério da ordem: nenhum desses módulos depende de outro no Smithay 0.7.0
+   (confirmado: `fractional_scale/mod.rs` não referencia viewporter); priorizar baixo risco + visibilidade
+   no `foot`. Recomendação: usar o rascunho `05-compatibilidade-protocolos.md` como cartão-mãe; alternativa:
+   cartão novo `F1-gap-protocolos`. Itens do cartão 05 fora da lista F1 §5 (activation/toplevel-icon/
+   urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
 - F1d3 (GATE, AMOSTRA FALHA PRESERVADA, 2026-11-22): `bash scripts/check.sh` após a mudança do `~/u`
@@ -1010,6 +1038,35 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- **GAP ANALYSIS F1 (2026-11-22) — nesta seção, "~ parcial" e "❌ faltando" significam AUSÊNCIA DE CÓDIGO
+  no item do plano-mestre §5, não falha de teste. Nada disso foi implementado.** Fonte: `grep` nos crates +
+  código do Smithay 0.7.0 fixado (todos os módulos citados existem sob `wayland_frontend`, já ativo).
+  - **~ popups** — `xdg_shell.rs:85-102,149-209` faz track/unconstrain/reposition/configure e `state.rs:179,309`
+    tem `PopupManager` (cleanup nos 3 backends), mas **nenhum elemento de popup entra na cena**
+    (`render/scene.rs` só `space.elements()` + layers) e `grab()` é no-op (`xdg_shell.rs:117`).
+  - **~ data-device ✅ / primary-selection ❌** — data-device em `state.rs:230` + `seat.rs:53-66`;
+    **0** `PrimarySelectionState` (Smithay `wayland/selection/primary_selection/mod.rs:98,395`). Aviso 1 do foot.
+  - **❌ viewporter** — 0 `ViewporterState`/`delegate_viewporter!`; Smithay `wayland/viewporter/mod.rs:70,81,433`.
+  - **❌ fractional-scale** — 0 `FractionalScaleManagerState`; `scene.rs:40`/`winit.rs:415` medem
+    `output.current_scale().fractional_scale()` (escala do output, **não** o global `wp_fractional_scale_v1`).
+    Smithay `wayland/fractional_scale/mod.rs:76,82,268`. Aviso 4 do foot.
+  - **❌ dmabuf (protocolo `linux-dmabuf-v1`)** — 0 `DmabufState`/`delegate_dmabuf!`; `udev.rs:130,655-686`
+    é GBM/dmabuf **interno do backend**. Smithay `wayland/dmabuf/mod.rs:580,588,1037`.
+  - **❌ presentation-time** — 0 `PresentationState`; `udev.rs:401-413` usa `queue_frame(())` sem feedback
+    (dívida já em §6). Smithay `wayland/presentation/mod.rs:88,97,351`.
+  - **❌ cursor-shape** — 0 `CursorShapeManagerState`; Smithay `wayland/cursor_shape.rs:124,130,362`.
+    **Pré-requisitos:** `delegate_cursor_shape!` exige `D: SeatHandler + TabletSeatHandler`
+    (`cursor_shape.rs:243`) e `AeroState` **não** implementa `TabletSeatHandler` (método default em
+    `tablet_manager/tablet_seat.rs:42-44` → impl vazia basta); `SeatHandler::cursor_image` é no-op
+    (`seat.rs:30-35`), então a forma pedida é descartada; cursor invisível no udev (§6) é dívida separada
+    e **não bloqueia o protocolo**. Aviso 5 do foot.
+  - **❌ text-input / input-method** — 0 `TextInputManagerState`/`InputMethodManagerState`; Smithay
+    `wayland/text_input/mod.rs:87,93,177` e `wayland/input_method/mod.rs:136,142,242`. Aviso 7 do foot.
+  - **Fora da lista F1 §5 (cartão 05, rascunho):** xdg-activation, xdg-toplevel-icon e urgência de toplevel
+    também faltam; não entram neste mapa.
+  - **Ordem proposta (NÃO autorizada):** 1 cursor-shape (baixo risco/alto valor; pré-req acima) →
+    2 primary-selection → 3 popups-render → 4 fractional-scale → 5 viewporter → 6 text-input/IM →
+    7 presentation-time → 8 dmabuf. Detalhes e justificativa em §5. **Nenhum cartão criado nesta sessão.**
 - F1d3 (**RESOLVIDO — antes era JUIZ VISUAL PARCIAL, 2026-11-22**): o conteúdo do `foot` apareceu, depois
   o painel (faltava `AERO_WINDOW_IPC_SOCK` no `~/u`), e o humano deu **"ok. Aprovado"** cobrindo o teste
   visual completo. Item histórico preservado; F1d3 está FECHADA (§3). Nenhum processo foi encerrado pelo
@@ -1257,9 +1314,11 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **Fase atual: F1 — TODOS OS CARTÕES AUTORIZADOS FECHADOS.** F1a/F1b/F1c/F1d1/F1d2 (§3) e **F1d3 FECHADA pelo juiz em 2026-11-22: "ok. Aprovado"** (§3). Árvore limpa; commits locais até `a90c534`. Sem push (credencial ausente). **PARAR: não avançar de fase sem aprovação (AGENTS.md §3.1).**
-- **O que fechou a F1d3:** (1) `udev.rs` passou a chamar `send_frame` como o headless — o `foot` parava após 2 commits porque nunca recebia o `wl_surface.frame` done (log `052249`: `pending=1` em 15/15); (2) `~/u` passou a lançar o `aeroshell-shell` (painel); (3) `~/u` passou a definir `AERO_WINDOW_IPC_SOCK` — sem ele o bridge reportava `lista=` vazia (log `053838`) e a barra ficava transparente. Gui do domicile: quem detém ack/present responde o callback; UI/conteúdo na mesma árvore vs. IPC explícito aqui.
-- **Provas objetivas:** log `052933`: 68 `FOOT_COMMIT` (antes 2), `pending=0` nas amostras CB; log `053838`: layer surface `1920×48` e WebView carregada; gate final `bash scripts/check.sh` → `OK`, `CHECK_EXIT=0` (`gate-panel-ipc.log`). Amostra do S1 falha por `zenity Failed to open display` preservada em §6. Nada mexido em `is_empty`/input/VT/vblank/cursor/protocolo/ADR/deps.
-- **Dívidas em cartão separado (NÃO executar sem pedido):** cursor invisível no udev, hotplug, multi-GPU, presentation-time, Plano B, 02f/02n/02q. Plano mestre segue em `docs/plano-mestre.md`.
-- **Próximo passo: nenhum — aguardar decisão do humano.** Se quiser empurrar, os commits locais estão prontos (`git push` falhou por credencial). Se quiser nova fase, abrir cartão antes (AGENTS.md §0.2). Aplicação foi operada e fechada pelo humano; agente não encerrou processos nem trocou VT.
+- **Fase atual: F1 — TODOS OS CARTÕES AUTORIZADOS FECHADOS.** F1a/F1b/F1c/F1d1/F1d2 (§3) e **F1d3 FECHADA pelo juiz em 2026-11-22: "ok. Aprovado"**. Sem push (credencial ausente). **PARAR: não avançar de fase sem aprovação (AGENTS.md §3.1).**
+- **Nesta sessão (2026-11-22): GAP ANALYSIS F1, SOMENTE LEITURA** — 15 itens de `plano-mestre.md:176` mapeados: 6 ✅ (§3), 2 ~ e 7 ❌ (§7). Nenhuma implementação, protocolo XML, ADR, dependência ou cartão alterado.
+- **Como reproduzir o estado:** `git log --oneline -1` (commit `docs(state): mapa de gaps da F1`); `grep -rnE 'ViewporterState|FractionalScaleManagerState|DmabufState|PresentationState|CursorShapeManagerState|TextInputManagerState|InputMethodManagerState|PrimarySelectionState' crates/aeroshell-compositor/src` → 0 ocorrências; `grep -n 'GAP ANALYSIS F1' docs/STATE.md` → §3/§4/§5/§7/§9.
+- **Gate:** `bash scripts/check.sh` → `OK: scripts/check.sh passou`, `CHECK_EXIT=0` (29 Rust + 9 Bun) nesta sessão; fmt/clippy/doctor verdes na mesma execução.
+- **Próximo passo proposto (NÃO executado):** decisão do humano sobre a ordem em §7 e sobre usar `05-compatibilidade-protocolos.md` como cartão-mãe; só então abrir o 1º cartão (`cursor-shape`; pré-req: `impl TabletSeatHandler for AeroState {}` + destino de `cursor_image`, hoje no-op).
+- **Dívidas em cartão separado (NÃO executar sem pedido):** cursor invisível no udev, hotplug, multi-GPU, presentation-time, Plano B, 02f/02n/02q. Plano mestre em `docs/plano-mestre.md`.
+- **Contexto F1d3 preservado:** (1) `udev.rs` passou a chamar `send_frame` — o `foot` parava após 2 commits sem o `wl_surface.frame` done; (2) `~/u` lança o `aeroshell-shell`; (3) `~/u` define `AERO_WINDOW_IPC_SOCK`, sem o qual o painel fica transparente. Aplicação foi operada e fechada pelo humano; agente não encerrou processos nem trocou VT.
 
