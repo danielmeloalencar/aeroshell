@@ -19,6 +19,7 @@ use smithay::{
         compositor::{with_states, CompositorClientState, CompositorState},
         cursor_shape::CursorShapeManagerState,
         fractional_scale::{with_fractional_scale, FractionalScaleManagerState},
+        input_method::InputMethodManagerState,
         output::OutputManagerState,
         selection::{data_device::DataDeviceState, primary_selection::PrimarySelectionState},
         shell::{
@@ -27,7 +28,9 @@ use smithay::{
         },
         shm::ShmState,
         socket::ListeningSocketSource,
+        text_input::TextInputManagerState,
         viewporter::ViewporterState,
+        xdg_activation::XdgActivationState,
     },
 };
 
@@ -206,6 +209,12 @@ pub struct AeroState {
     pub viewporter_state: ViewporterState,
     /// F1-cursor-shape: global `wp_cursor_shape_v1` e última forma pedida pelo cliente.
     pub cursor_shape_state: CursorShapeManagerState,
+    /// F1i: global `zwp_text_input_manager_v3` (foco acompanha o teclado).
+    pub text_input_state: TextInputManagerState,
+    /// F1i: global `zwp_input_method_manager_v2`.
+    pub input_method_state: InputMethodManagerState,
+    /// F1i/F7: global `xdg_activation_v1` (token + pedido de ativação).
+    pub xdg_activation_state: XdgActivationState,
     pub cursor_image: CursorImageStatus,
     /// Imagens do tema XCursor por nome de forma, com o hotspot lido do arquivo.
     pub cursor_images: HashMap<String, Option<CursorImage>>,
@@ -319,6 +328,13 @@ impl AeroState {
         let fractional_scale_state = FractionalScaleManagerState::new::<Self>(&dh);
         let viewporter_state = ViewporterState::new::<Self>(&dh);
         let cursor_shape_state = CursorShapeManagerState::new::<Self>(&dh);
+        // F1i: o filtro de input-method segue o exemplo do Smithay 0.7.0 fixado
+        // (`wayland/input_method/mod.rs:62`): qualquer cliente pode visualizar o
+        // global. Não há processo de IME dedicado nesta fase (somente presença do
+        // protocolo + digitação normal), então não há uma identidade para filtrar.
+        let input_method_state = InputMethodManagerState::new::<Self, _>(&dh, |_client| true);
+        let text_input_state = TextInputManagerState::new::<Self>(&dh);
+        let xdg_activation_state = XdgActivationState::new::<Self>(&dh);
 
         let mut seat: Seat<Self> = seat_state.new_wl_seat(&dh, "aeroshell");
         seat.add_keyboard(Default::default(), 200, 25)?;
@@ -404,6 +420,9 @@ impl AeroState {
             fractional_scale_state,
             viewporter_state,
             cursor_shape_state,
+            text_input_state,
+            input_method_state,
+            xdg_activation_state,
             cursor_image: CursorImageStatus::default_named(),
             cursor_images: HashMap::new(),
             popups: PopupManager::default(),

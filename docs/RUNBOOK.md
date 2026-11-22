@@ -161,6 +161,7 @@ python3 tests/integration/frame_fixed_canvas_release_pixels.py growth  # 02p: ta
 python3 tests/integration/frame_fixed_canvas_hygiene.py                # 02p: sem ReleaseSwap
 python3 tests/integration/frame_repeated_activate.py                   # 02p: activate idempotente
 python3 tests/integration/popup_client.py         # F1-popups-render: xdg_popup real + grab (exige build --features bench)
+python3 tests/integration/f1i_protocols.py        # F1i+: globals text_input/input_method/xdg_activation + ativação real (exige build --features bench)
 python3 tests/integration/frame_cold_start.py     # 02q: placeholder/pool/related-view + cronômetro map→1º render
 python3 tests/integration/headless_render_damage.py # F1b/c: age>0, damage parcial e pixels do 9-slice
 python3 tests/integration/multi_output_damage.py  # F1c: 2 outputs, damage incremental e conteúdo nos 2 tiles
@@ -173,6 +174,12 @@ python3 tests/bench/run_frame_bench.py            # benchmark de protocolo (VM r
 Para o harness de popup (`popup_client.py`), compile antes com
 `cargo build -p aeroshell-compositor --features bench` e
 `cargo build -p aeroshell-compositor --example popup_client` — as sondas `POPUP_*` só existem com `bench`.
+Para o harness F1i (`f1i_protocols.py`), compile com
+`cargo build -p aeroshell-compositor --features bench`,
+`cargo build -p aeroshell-compositor --example f1i_client` e
+`cargo build -p aeroshell-shell --example frame_webview`. Ele sobe o headless com
+`AERO_TEST_INPUT_SOCK`, lista os globals, usa o serial de um `button` sintético num token de
+`xdg_activation` real e captura o `foot` à parte; as sondas `TI_FOCUS`/`XDG_ACTIVATE` só existem com `bench`.
 Testes de protocolo headless (CI): `cargo test -p aeroshell-compositor`.
  
 ## Armadilhas conhecidas

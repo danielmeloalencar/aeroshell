@@ -38,7 +38,7 @@ OUTPUT_SIZE = (640, 480)
 CLEAR_RGB = (20, 20, 25)
 OUTPUTS = ("aero-0", "aero-1")
 FRAME_RE = re.compile(
-    r"OUTPUT_FRAME output=(\S+) seq=(\d+) age=(\d+) damage=(none|[0-9x@,;-]+)"
+    r"OUTPUT_FRAME (?:t=\d+ )?output=(\S+) seq=(\d+) age=(\d+) damage=(none|[0-9x@,;-]+)"
 )
 
 for orphan in (f"/run/user/1000/{SOCK}", INPUT_SOCK):
@@ -200,7 +200,9 @@ def partial_damage_after(seq, output="aero-0"):
 
 # Teste-primeiro: no baseline esta é a primeira condição que falha.
 if not wait_until(
-    lambda: "OUTPUT_FRAME output=aero-1 " in log(),
+    lambda: FRAME_RE.search(log()) is not None and any(
+        frame["output"] == "aero-1" for frame in frames()[0]
+    ),
     12.0,
     "OUTPUT_FRAME output=aero-1 (render do segundo output)",
 ):
