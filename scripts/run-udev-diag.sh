@@ -10,6 +10,7 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 BIN="$REPO/target/debug/aeroshell-compositor"
 SHELL_BIN="$REPO/target/debug/examples/frame_webview"
+PANEL_BIN="$REPO/target/debug/aeroshell-shell"   # painel React/TSX (layer surface)
 SOCKET="wayland-aero-tty3"
 
 cd "$REPO"
@@ -27,10 +28,12 @@ echo "[1/3] Compilando (com --features bench: sondas FOOT_COMMIT/UDEV_FRAME_CB).
 # o log fica sem evidência — isso aconteceu em 2026-11-22 (log 051134).
 cargo build --workspace --features bench
 cargo build -p aeroshell-shell --example frame_webview
+cargo build -p aeroshell-shell   # painel TSX (separado do frame_webview)
 
 echo "[2/3] Verificando ambiente..."
 [ -x "$BIN" ] || { echo "ERRO: $BIN ausente"; exit 1; }
 [ -x "$SHELL_BIN" ] || { echo "ERRO: $SHELL_BIN ausente"; exit 1; }
+[ -x "$PANEL_BIN" ] || { echo "ERRO: $PANEL_BIN ausente"; exit 1; }
 [ -e /dev/dri/card0 ] || { echo "ERRO: /dev/dri/card0 ausente"; exit 1; }
 [ -e /dev/dri/renderD128 ] || { echo "ERRO: /dev/dri/renderD128 ausente"; exit 1; }
 if [ -z "${XDG_RUNTIME_DIR:-}" ]; then
@@ -38,6 +41,12 @@ if [ -z "${XDG_RUNTIME_DIR:-}" ]; then
   exit 1
 fi
 unset WAYLAND_DISPLAY DISPLAY
+
+# O painel React lista janelas via IPC; sem esta variável o compositor não cria
+# o socket e o bridge devolve `lista=` vazia (log 053838). PID evita colisão
+# com instâncias anteriores; o cleanup abaixo remove o arquivo.
+IPC_SOCK="$XDG_RUNTIME_DIR/wayland-aero-tty3-ipc-$$"
+rm -f "$IPC_SOCK" 2>/dev/null || true
 
 echo "[3/3] Subindo o compositor (RUST_LOG=debug)..."
 echo "  socket: $SOCKET"
@@ -62,13 +71,52 @@ env \
   RUST_LOG=debug \
   XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
   LIBGL_ALWAYS_SOFTWARE=1 \
+  AERO_WINDOW_IPC_SOCK="$IPC_SOCK" \
   "$BIN" \
     --backend udev \
     --socket "$SOCKET" \
     --shell "$SHELL_BIN" \
     --shell-env LD_PRELOAD=libgtk4-layer-shell.so.0 \
-    --command foot
+    --command foot &
+comp_pid=$!
+
+# O painel TSX e um cliente PUBLICO (nao o --shell do compositor): espera o
+# socket e conecta por WAYLAND_DISPLAY, como em tests/integration/react_panel.py.
+SOCK_PATH="$XDG_RUNTIME_DIR/$SOCKET"
+for _ in $(seq 1 100); do
+  if [ -S "$SOCK_PATH" ]; then break; fi
+  sleep 0.1
+done
+panel_pid=""
+if [ -S "$SOCK_PATH" ]; then
+  env \
+    WAYLAND_DISPLAY="$SOCKET" \
+    XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
+    GDK_BACKEND=wayland \
+    GTK4_LAYER_SHELL_LIB=libgtk4-layer-shell.so.0 \
+    AERO_WINDOW_IPC_SOCK="$IPC_SOCK" \
+    RUST_LOG=debug \
+    "$PANEL_BIN" &
+  panel_pid=$!
+  echo "painel TSX iniciado pid=$panel_pid"
+else
+  echo "ERRO: socket $SOCK_PATH nao apareceu; painel nao iniciado"
+fi
+
+# Encerra SOMENTE os PIDs que este script iniciou (AGENTS.md 0.5).
+cleanup_children() {
+  if [ -n "$panel_pid" ] && kill -0 "$panel_pid" 2>/dev/null; then
+    kill "$panel_pid" 2>/dev/null || true
+    wait "$panel_pid" 2>/dev/null || true
+  fi
+  rm -f "$IPC_SOCK" 2>/dev/null || true
+}
+trap cleanup_children EXIT
+
+wait "$comp_pid"
 status=$?
+cleanup_children
+trap - EXIT
 set -e
 
 echo

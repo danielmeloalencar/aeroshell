@@ -21,6 +21,20 @@ import do cliente funcionam no headless; o elo que falta é a apresentação GBM
 F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **F1d3 — PAINEL INVISÍVEL: CAUSA ENCONTRADA (8º log `053838`, 2026-11-22).** O painel FOI lançado
+      (`painel TSX iniciado pid=30256`), conectou (`cliente Wayland conectado`), criou a layer surface
+      `namespace=aeroshell-panel` (`Top`, `BOTTOM|LEFT|RIGHT`, `exclusive_zone=48`), teve geometria final
+      correta `{x:0,y:907,w:1920,h:48}` e WebView com `clientWidth=1920/clientHeight=48`. Mas o bridge
+      repetiu **`painel React command="list" lista=` vazia** a cada segundo. Causa: `~/u` não definia
+      `AERO_WINDOW_IPC_SOCK`; `main.rs:167` só cria o socket IPC se a variável existe e o bridge
+      (`bridge.rs:12-22`) também a lê — sem lista, o React não renderiza nenhuma `.aero-row` e a barra
+      fica transparente (fundo `transparent` + CSS), daí "não abriu painel". **Gui do domicile (reforçado
+      pelo humano):** no domicile a UI e o conteúdo vivem na MESMA árvore de layers da página — o estado
+      é intrínseco; no AeroShell a coerência painel↔janelas depende de um canal IPC explícito, e sem ele
+      a superfície existe mas está vazia. Correção no `~/u`: define `AERO_WINDOW_IPC_SOCK=
+      $XDG_RUNTIME_DIR/wayland-aero-tty3-ipc-$$` para compositor E painel, remove socket stale no início
+      e no cleanup. Validação nesta VM (`ipc-script-vm.log`): `bash -n` OK, painel iniciou, nenhum socket
+      ou processo residual. **Falta o juiz no tty3.**
 - [x] **F1d3 — JUIZ VISUAL: CONTEÚDO DO `foot` APARECEU (2026-11-22).** Humano, após a correção de
       `send_frame` no udev: *"Agora abriu o conteudo do foot na janela"*. Prova objetiva no 6º log
       `/home/daniel/aeroshell-udev-20261122-052933.log`: **68 `FOOT_COMMIT`** (contra 2 antes),
@@ -31,6 +45,16 @@ F1 anterior revertida em `4307cc4`.
       (as commits do cliente mantêm 1 callback em voo, o que gerava `PENDENTE_ACUMULANDO` falso).
       **Ainda NÃO há ok visual completo**: falta painel (ver §4/§7), arrasto e retorno de VT; a F1d3
       NÃO fecha com este veredito parcial.
+- [x] **F1d3 — `~/u` agora lança o painel também (2026-11-22, autorização do humano).**
+      `scripts/run-udev-diag.sh` compila `target/debug/aeroshell-shell` e o inicia como cliente público
+      (`WAYLAND_DISPLAY=wayland-aero-tty3`, `GDK_BACKEND=wayland`, `GTK4_LAYER_SHELL_LIB=…`), mantendo o
+      `frame_webview` como `--shell` privilegiado. O compositor roda em background; o script espera o
+      socket (`-S`) antes de lançar o painel, faz `wait` no compositor e encerra **somente** os PIDs que
+      iniciou (`trap cleanup_children EXIT`) — sem `pkill`. Validação nesta VM sem VT
+      (`/tmp/opencode/f1d3-4exec/panel-script-vm.log`): `painel TSX iniciado pid=28126`, compositor falha
+      em `session.open()` com `EAGAIN` (esperado), `SCRIPT_EXIT=1`, `ps … → NENHUM` processo residual.
+      `bash -n` OK e `cargo build -p aeroshell-shell` OK. RUNBOOK atualizado. **Não é evidência de que o
+      painel aparece na tela** — isso depende do juiz no tty3.
 - [x] **F1d3 — PAINEL no udev: não é Renderização, é escopo do `~/u` (2026-11-22).** O painel React TSX
       é o binário **`aeroshell-shell`**, criado em `crates/aeroshell-shell/src/main.rs:96,145` via
       `host::panel_window` (`host.rs:8`, namespace `aeroshell-panel`) e servido por `aero://panel/index.html`
@@ -606,6 +630,20 @@ F1 anterior revertida em `4307cc4`.
 8. `05-compatibilidade-protocolos.md` — RASCUNHO; 7 mensagens do `foot` registradas em §6. NÃO executar sem ok.
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- F1d3 (GATE, AMOSTRA FALHA PRESERVADA, 2026-11-22): `bash scripts/check.sh` após a mudança do `~/u`
+      (painel) falhou **só** no S1, fase visual: `bun test` → `8 pass / 1 fail`,
+      `(zenity:28441): Gtk-WARNING **: 05:36:59.858: Failed to open display`,
+      `FALHA: cliente não mapeou toplevel dentro do compositor`, `CHECK_EXIT=1`
+      (`/tmp/opencode/f1d3-4exec/gate-panel-script.log`). Causa lida em `tests/integration/s1_nested.sh:60-73`:
+      a 2ª fase roda `zenity` com `DISPLAY=:0` do host, inacessível nesta VM — flake de ambiente já
+      registrado (tarefa 00), **não** regressão do script/do painel (o gate passou 2× antes nesta sessão
+      com o mesmo código Rust). **`NÃO reexecutei até passar`** (AGENTS.md §0.5). Arvore de trabalho com
+      `~/u`+docs+analisador permanece **NÃO commitada** enquanto o gate não estiver verde; o humano
+      decidirá: aceitar a ressalva ou abrir cartão do S1. **2ª amostra (após novas mudanças no `~/u`):
+      `bash scripts/check.sh` → `OK: scripts/check.sh passou`, `CHECK_EXIT=0`, `9 pass / 0 fail`
+      (`/tmp/opencode/f1d3-4exec/gate-panel-ipc.log`).** Não foi "reexecutar até passar": houve mudança
+      de código (IPC no script) entre as duas execuções. Ambas as amostras preservadas; causa do S1
+      continua sendo ambiente (`DISPLAY=:0` inacessível na fase visual do zenity).
 - F1d3 (GUI DO DOMICILE — usado como guia, NÃO copiado): `/home/daniel/Projetos/domicile-engine` confirma
   que quem detém o ack/present é quem deve responder `wl_surface.frame`; responder no commit só porque
   "deu ok" não sincroniza o cliente. `queued=ok`/`submitted=ok` medem **enqueue**, não apresentação — no
@@ -1221,10 +1259,10 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **Fase atual: F1.** F1a/F1b/F1c FECHADAS pelo juiz; F1d1/F1d2 FECHADAS no técnico. **F1d3 NÃO FECHADA — juiz confirmou o `foot` na tela (2026-11-22), mas faltam painel/arrasto/VT e o ok completo.** Push WIP falhou por credencial; commits locais `f0da56a`/`a56b85a`/`9b5db36`/`e7bad99`/`35b173b` + o novo commit prontos. Sem push de conclusão.
+- **Fase atual: F1.** F1a/F1b/F1c FECHADAS pelo juiz; F1d1/F1d2 FECHADAS no técnico. **F1d3 NÃO FECHADA — juiz confirmou o `foot` na tela (2026-11-22), mas faltam painel/arrasto/VT e o ok completo.** Push WIP falhou por credencial; commits locais até `b1982df`. **`~/u`+RUNBOOK+STATE+analisador estão NA ÁRVORE, NÃO commitados**: o gate falhou no S1 por flake de display (§6) e reexecutar até passar é proibido. Sem push de conclusão.
 - **Causa + correção (commit `35b173b`):** o udev não enviava `wl_surface.frame`, o cliente parava após 2 commits. `udev.rs` agora chama `send_frame` como o headless. Gui do domicile: quem detém ack/present responde o callback. `is_empty=true` é idle normal (fato do humano), intocável.
 - **Veredito visual POSITIVO PARCIAL:** humano: *"Agora abriu o conteudo do foot na janela"*. Prova objetiva no 7º log `052933`: 68 `FOOT_COMMIT` (antes 2), `UDEV_FRAME_CB pending=0` na 1ª/última amostra, 124,32 s; `--require-circulating` → `SEM_DAMAGE_FORA_DA_CENA`, EXIT=0 (no 6º log → `CALLBACK_NAO_CHEGA`, EXIT=1). Classificador corrigido para usar as amostras CB.
-- **Painel NÃO é bug do udev:** é o binário `aeroshell-shell` (`main.rs:96,145`), que o `~/u` não lança (só `frame_webview`). Incluí-lo no script é decisão do humano (§3).
-- **Provas:** gate `check.sh` EXIT=0 (`gate-callback-fix.log`), clippy bench 0, `--no-default-features` 0, fmt 0. Nada mexido em `is_empty`/input/VT/vblank/cursor/protocolo.
-- **Próximo passo (NÃO executado):** humano decide se quer painel no `~/u` (lançar `aeroshell-shell`) e faz o teste visual completo: painel, arrastar barra, Ctrl+Alt+F2/F3 e voltar. Com o "ok" olhando a tela, fechar F1d3; sem ele, item fica em §7. Agente não encerrou nem trocou VT.
+- **Painel: 8º log achou a causa real** — o binário `aeroshell-shell` foi lançado e mapeado (1920x48), mas `lista=` vazia porque faltava `AERO_WINDOW_IPC_SOCK`; `~/u` agora passa a variável ao compositor e ao painel (§3). Gui do domicile: UI e conteúdo na mesma árvore de layers vs. canal IPC explícito aqui.
+- **Provas:** gate final `bash scripts/check.sh` → `OK`, `CHECK_EXIT=0` (`gate-panel-ipc.log`); amostra anterior falhou só no S1 por `zenity Failed to open display` (§6), preservada. clippy bench 0, `--no-default-features` 0, fmt 0. Nada mexido em `is_empty`/input/VT/vblank/cursor/protocolo.
+- **Próximo passo (NÃO executado):** rode `~/u` **de novo** no tty3 e confirme: painel TSX visível na barra inferior, `foot` dentro da janela, arrastar a barra move só a janela dona, Ctrl+Alt+F2/F3 e voltar com imagem. Com o "ok" olhando a tela, fechar F1d3; sem ele, item fica em §7. Cursor invisível é cartão separado. Agente não encerrou nem trocou VT.
 

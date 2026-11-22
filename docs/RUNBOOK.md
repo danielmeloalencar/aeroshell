@@ -113,7 +113,12 @@ cd ~/Projetos/aeroshell
 O script compila o compositor com **`--features bench`** (desde 2026-11-22): é assim que existem as
 sondas `FOOT_COMMIT` (commit do cliente + callbacks pendentes) e `UDEV_FRAME_CB` (callbacks pendentes
 no loop udev). Sem `bench` o log fica sem essas linhas — foi o que aconteceu em
-`/home/daniel/aeroshell-udev-20261122-051134.log`.
+`/home/daniel/aeroshell-udev-20261122-051134.log`. Desde 2026-11-22 o script também compila e lança
+**`aeroshell-shell`** (o painel React/TSX, layer surface `aeroshell-panel`) como cliente público via
+`WAYLAND_DISPLAY=wayland-aero-tty3`; o `frame_webview` continua sendo o decorador privilegiado
+(`--shell`). O painel é um PID iniciado pelo script e é encerrado por ele quando o compositor sai.
+O script também define `AERO_WINDOW_IPC_SOCK` para o compositor **e** o painel: sem essa variável o
+compositor não cria o IPC de janelas e o painel fica com `lista=` vazia (barra transparente, invisível).
 
 No log, procurar `UDEV_SESSION`, `UDEV_OUTPUT`, `UDEV_FRAME`, `UDEV_VBLANK`, `UDEV_SESSION_EVENT`,
 `UDEV_VT`, `CLIENT_ELEMENT_PROBE`, `FOOT_COMMIT` e `UDEV_FRAME_CB`. O analisador roda em qualquer máquina com o arquivo de log:
