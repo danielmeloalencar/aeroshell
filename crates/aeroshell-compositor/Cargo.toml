@@ -9,6 +9,23 @@ license.workspace = true
 # nenhuma variável AERO_FRAME_* é lida sem esta feature.
 bench = []
 
+# Backend de sessão real (F1d). São aliases das features do Smithay 0.7.0 fixado
+# (~/.cargo/registry/src/*/smithay-0.7.0/Cargo.toml:59-76). `backend_gbm` já implica
+# `backend_drm` no Smithay, por isso backend_drm não é listado à mão.
+# São o PADRÃO: o build normal (dev, CI, nested) também as compila, para a rota udev
+# nunca ficar sem build. Opt-out leve: `cargo check --workspace --no-default-features`
+# (nested + headless apenas) — provado por `cargo tree -p aeroshell-compositor --no-default-features`.
+backend_udev = ["smithay/backend_udev"]
+backend_gbm = ["smithay/backend_gbm"]
+backend_libinput = ["smithay/backend_libinput"]
+backend_session_libseat = ["smithay/backend_session_libseat"]
+default = [
+  "backend_udev",
+  "backend_gbm",
+  "backend_libinput",
+  "backend_session_libseat",
+]
+
 [dependencies]
 smithay.workspace = true
 calloop.workspace = true
