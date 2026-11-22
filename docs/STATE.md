@@ -947,7 +947,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. **NENHUMA AUTORIZADA — PARAR.** 02r FECHADA pelo juiz (§3); F1d3 FECHADA pelo juiz (§3).
+0. **RASCUNHO `02s-frame-application-id.md` (duas instâncias no mesmo D-Bus) — aguardando o "ok" do humano
+   para executar.** Não começar sem confirmação. Fora isso, NENHUMA AUTORIZADA — PARAR.
+   02r FECHADA pelo juiz (§3); F1d3 FECHADA pelo juiz (§3).
    Cursor invisível no udev, hotplug, multi-GPU, presentation-time e
    Plano B são dívidas/cartões separados — abrir só com decisão explícita. Não avançar de fase sem
    aprovação (AGENTS.md §3.1). Não reabrir 02q/02f/02n sem pedido.
