@@ -53,6 +53,16 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
       parte; latch→presented 4–18 ms. Vizinhos 6× OK (3× resize_glue após robustez contra
       interleaving de log); gate `gate-hybrid.log` EXIT=0, clippy bench 0, `--no-default-features` 0.
       **ADR 0007 NÃO reaberto; limite de 300 ms NÃO alterado; nenhuma amostra descartada.**
+- [x] **02q — JUIZ VISUAL (2026-11-22): humano respondeu "está ok"** na instância `visual4` (3 `foot`):
+      barra no primeiro instante, sem spike 12×36, sem flash/gap. Ele relatou também que "não funcionou
+      o clique no fechar nem no maximizar". Causa lida no log: `FRAMEWEB: AERO_WINDOW_IPC_SOCK ausente;
+      comando 'close 4' ignorado` — os cliques chegaram ao JS (`FRAMEWEB: button local=...`), mas o
+      comando foi descartado porque **meu comando de demonstração não definia `AERO_WINDOW_IPC_SOCK`**.
+      Não é regressão: `frame_buttons.py` define a variável e passa. Corrigido o RUNBOOK (comando nested
+      agora exporta o IPC) e aberta a instância `wayland-aero-02q-visual5` (PID 197095, foots
+      197105/197106, IPC `/tmp/opencode/02q-reopen/visual-ipc-5.sock`, log `visual-final5.log`) para o
+      humano confirmar os botões. **A decisão visual da 02q está dada; falta só essa confirmação dos
+      botões na instância com IPC.**
 - [x] **Correção F1 FECHADA PELO HUMANO (2026-11-22).** Veredito cru: *"funcionou, abri e fechei duas
       vezes, todas exibiu a decoração"*. Humano operou e julgou no tty3; agente não abriu/fechou app de
       julgamento nem trocou VT. Cobre o critério visual que faltava no item abaixo. Os avisos relatados
@@ -867,11 +877,11 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
 - **02q reaberta — decisão híbrida executada; só falta o juiz visual (nested e tty3).** Não há mais
   decisão de ADR pendente: humano decidiu NÃO reabrir ADR 0007 e aceitar os números de paint como
   limitação de VM. `map → 1º HTML` quente 448–572 ms e frio 1,2–1,4 s ficam documentados em §7, sem
-  alterar o limite do teste. Instância FINAL deixada aberta: `wayland-aero-02q-visual4`, compositor PID
-  196715, foots 196720/196721, log `/tmp/opencode/02q-reopen/visual-final4.log`. Instâncias antigas
-  (`...-visual`, `...-02q-final`, `...-visual3`) seguem abertas ou foram fechadas pelo humano, mas estão
-  desatualizadas: **usar a visual4**.
-  Quem fecha é o humano.
+  alterar o limite do teste. Juiz visual **"está ok"** dado na visual4; resta confirmar os botões na
+  instância com IPC: `wayland-aero-02q-visual5`, compositor PID 197095, foots 197105/197106,
+  IPC `/tmp/opencode/02q-reopen/visual-ipc-5.sock`, log `/tmp/opencode/02q-reopen/visual-final5.log`.
+  Instâncias anteriores (`...-visual`, `...-02q-final`, `...-visual3`, `...-visual4`) foram fechadas
+  pelo humano ou estão desatualizadas: **usar a visual5**. Quem fecha é o humano.
 - **GAP ANALYSIS F1 (2026-11-22) CONCLUÍDA, SOMENTE LEITURA** — mapa em §3 (✅) e §7 (~/❌). Nenhum
   protocolo implementado; ordem de cartões proposta em §5/§7, aguardando decisão do humano.
 - **F1d3 FECHADA (2026-11-22) — ver §3.** Não há trabalho em andamento na F1d3. Cursor invisível no udev
@@ -936,6 +946,10 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **Maximizar não reposiciona a janela (2026-11-22, descoberta do juiz; FORA da 02q):** `window_ipc.rs:128-151`
+  só troca `state.size` para o tamanho do output e envia configure; não há `space.map_element`/update_location
+  nem work area. A janela cresce a partir da cascata (60,80) e vaza pelo canto. Comportamento pré-existente
+  (código não tocado na 02q). Corrigir exige cartão próprio: definir origem do output e descontar o painel.
 - **02q (RESOLVIDO em 2026-11-22, decisão híbrida): spike 12×36.** Era placeholder com `geo.size=0`;
   corrigido com configure inicial (800×600 sugerido) + `suggested_window_size` no render. Amostra crua
   antes/depois em `/tmp/opencode/02q-reopen/spike-baseline.log` e `spike-after-full.log`. Não reabrir.
@@ -1356,12 +1370,11 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- **02q reaberta (NÃO VALIDADO VISUALMENTE):** instância FINAL aberta (`wayland-aero-02q-visual4`,
-  PID 196715, 3 `foot`, log `visual-final4.log`); a instância visual3 foi fechada pelo humano e as
-  anteriores estão desatualizadas.
-  O humano precisa olhar: barra no primeiro instante, sem moldura 12×36, sem flash/gap, e conferir se
-  o `foot` abrindo em ~800×600 (por causa do configure sugerido) é aceitável. tty3 (`~/u`) não foi
-  julgado — agente não troca VT. Sem o "ok", 02q NÃO fecha.
+- **02q reaberta (JUIZ VISUAL: "está ok" na visual4):** barra no primeiro instante, sem spike 12×36,
+  sem flash/gap, `foot` em ~800×600 aceito. Falta SÓ o humano testar max/✕ na instância com IPC
+  (`wayland-aero-02q-visual5`, PID 197095, 3 `foot`, IPC `/tmp/opencode/02q-reopen/visual-ipc-5.sock`,
+  log `visual-final5.log`) — na visual4 os cliques chegaram ao JS mas foram descartados por falta de
+  `AERO_WINDOW_IPC_SOCK` no comando de demonstração (RUNBOOK corrigido). tty3 (`~/u`) não foi julgado.
 - **02q: `map → 1º HTML` quente ≤300 ms NÃO BATIDO NESTA VM** (448–572 ms em 3 execuções finais) e frio
   1,2–1,4 s = cold-start do WebProcess. Decisão do humano: aceitar como limitação de VM, **não alterar
   o limite do teste, não descartar amostras e não reabrir ADR 0007 agora**. Nenhuma conclusão de GPU real.
@@ -1691,10 +1704,12 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
 - **Reproduzir (final):** `python3 tests/integration/frame_cold_start_stages.py` → `VEREDITO: FALHA` só
   no latch quente; `stages-final-{1,2,3}.log`; `spike-baseline.log` vs `spike-after-full.log`;
   gate `gate-hybrid.log` EXIT=0.
-- **Juiz visual:** usar SOMENTE a instância `wayland-aero-02q-visual4` (PID 196715, 3 foot,
-  `visual-final3.log`); as outras duas (`...-visual`, `...-02q-final`) estão desatualizadas. Pedir "ok"
-  e deixar o humano fechar. tty3 exige o próprio humano rodar `~/u`.
-- **Pergunta para o juiz:** o `foot` abrindo em ~800×600 por causa do configure sugerido é aceitável?
+- **Juiz visual:** "está ok" dado na visual4. Instância para testar max/✕: `wayland-aero-02q-visual5`
+  (PID 197095, 3 foot, IPC `/tmp/opencode/02q-reopen/visual-ipc-5.sock`, `visual-final5.log`); as
+  anteriores estão desatualizadas. Deixar o humano fechar. tty3 exige o próprio humano rodar `~/u`.
+- **Descoberta lateral (fora da 02q):** maximizar só aumenta o tamanho e **não reposiciona** a janela
+  (`window_ipc.rs:128-151`); a janela maximizada começa em (60,80) e vaza para fora do output. É
+  comportamento pré-existente, não regressão da 02q — registrar cartão próprio se quiser corrigir.
 - **F1 FECHADAS pelo juiz:** F1a/b/c/d*, cursor-shape, primary-selection, popups-render, **F1f (ok visual em 1.5 e 2 no tty3)** e **correção F1 (reabertura: humano abriu/fechou 2×, todas com decoração)**. Sem push. **PARAR: não abrir F1g/subsurfaces sem aprovação (AGENTS.md §3.1).**
 - **Correção F1 entregue:** `next_window_id` monotônico (nunca reutiliza), `window_count` = water mark + testes, shell aposenta `FrameEntry` no `Closed` (move para `retired`, limpa PENDING_FRAMES) e preserva o log `FRAMEWEB: closed recebido`. Cartão `F1-correcao-reabertura-frame.md`.
 - **Prova:** `python3 tests/integration/frame_reopen.py` → 3× `VEREDITO: OK` (id 0 → 1, `frame_painted` no novo); baseline falhou antes. Regressões `frame_window_id`, `frame_follows_resize`, `frame_buttons`, `frame_resize_glue` → OK. `frame_cold_start` segue baseline-falha (02q). Gate `check.sh` EXIT=0, clippy bench 0, `--no-default-features` 0.

@@ -40,7 +40,11 @@ reportado como número separado, sem ser fingido dentro do limite.
 - Finais 3× (`stages-final-{1,2,3}.log`): `VEREDITO: FALHA` somente no latch quente 448–572 ms; frio
   1,2–1,4 s reportado à parte; spawn 2–6 ms; placeholder <100 ms; latch→presented 4–18 ms.
   Vizinhos 6× OK; gate `gate-hybrid.log` EXIT=0; clippy bench 0; `--no-default-features` 0.
-- Juiz visual pendente na instância final `wayland-aero-02q-visual4` (PID 196715, 3 `foot`).
+- Juiz visual: humano respondeu **"está ok"** na visual4 (barra imediata, sem spike/flash). Falta testar
+  max/✕ na `wayland-aero-02q-visual5` (PID 197095, IPC `/tmp/opencode/02q-reopen/visual-ipc-5.sock`) —
+  na visual4 os cliques chegaram ao JS mas foram ignorados por falta de `AERO_WINDOW_IPC_SOCK` no comando
+  de demonstração (RUNBOOK corrigido). Maximizar não reposicionar a janela é dívida pré-existente (§6),
+  fora desta tarefa.
   Pergunta extra ao juiz: o `foot` abrindo em ~800×600 (por causa do configure sugerido) é aceitável?
 
 ## Critério de aceite (comandos exatos + resultado esperado)

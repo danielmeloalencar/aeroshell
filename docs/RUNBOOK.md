@@ -26,6 +26,10 @@ aplicação é o humano, nunca o agente (AGENTS.md §0.9). Sem o "ok", o item fi
 ## Rodar o desktop nested (janela dentro do seu desktop)
 ```
 cargo build --workspace --examples
+# Sem AERO_WINDOW_IPC_SOCK o JS dos botões max/✕ envia o comando, mas o shell o
+# descarta ("AERO_WINDOW_IPC_SOCK ausente; comando ... ignorado") — os botões
+# parecem mortos mesmo com o clique chegando à WebView.
+export AERO_WINDOW_IPC_SOCK=/tmp/wayland-aero-demo-ipc-$$
 LD_PRELOAD=libgtk4-layer-shell.so.0 target/debug/aeroshell-compositor \
   --backend winit --socket wayland-aero-demo \
   --shell target/debug/examples/frame_webview \
