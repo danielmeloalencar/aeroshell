@@ -32,7 +32,12 @@ F1 anterior revertida em `4307cc4`.
       (`/tmp/opencode/f1d3-rediag/gate-final.log`); `cargo check -p aeroshell-compositor` 0, fmt 0.
       Regressões (`/tmp/opencode/f1d3-rediag/regressions.log`): `s1_nested.sh` EXIT=0,
       `headless_render_damage.py` VEREDITO OK, `multi_output_damage.py` EXIT=0.
-      RUNBOOK documenta `RUST_LOG=debug` + o analisador; nenhuma imagem foi julgada por mim.
+      Script versionado `scripts/run-udev-diag.sh` + atalho curto `~/u` (o humano não consegue copiar/colar no tty):
+      fixa `RUST_LOG=debug`, grava log e faz build/pré-checagens; `~/run-aeroshell-udev.sh` agora só repassa.
+      Teste do script **nesta VM sem VT** (`/tmp/opencode/f1d3-rediag/script-run.log`): `EXIT=1` em
+      `session.open()` com `EAGAIN`, mas o log `~/aeroshell-udev-20261122-032319.log` contém
+      `UDEV_SESSION active=false seat=seat0` e o analisador o lê (`session=1`, `VEREDITO: FALHA`) — prova de que
+      o debug chega ao instrumento. **Nenhuma imagem foi julgada por mim.**
 - [ ] **F1d3 — backend udev completo + cena compartilhada (código pronto, juiz visual NEGOU)**, 2026-11-22.
       `render/scene.rs` novo: `collect_output_elements` (antes em `winit.rs`) agora é usado por headless, winit
       N>1 e udev — mesma ordem, offsets por `output_geometry`, filtro `frame_has_mapped_client` e log. O log
@@ -1061,5 +1066,5 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
 - F1d3: `render/scene.rs` unifica a cena; `backend/udev.rs` faz libseat → udev → DRM/GBM → EGL → `DrmOutputManager` → libinput → vblank → render por timer. Diagnóstico: `UDEV_SESSION`/`UDEV_OUTPUT`/`UDEV_FRAME`/`UDEV_VBLANK`/`UDEV_SESSION_EVENT`/`UDEV_VT` + `Ctrl+Alt+F1..F4` via `change_vt`. Cursor invisível/hotplug logado são dívidas (§6).
 - Prova desta sessão: `check.sh` CHECK=0, clippy bench 0, `--no-default-features` 0, sonda 0, fmt 0; s1_nested=0, headless OK, multi=0 (`/tmp/opencode/f1d3-rediag/{gate-final,regressions}.log`). Analisador: baseline FALHA (0 linhas), self-test OK (fixture sintética). Nenhum pixel/juiz executado pelo agente: sem VT aqui, `--backend udev` falha com `EAGAIN`.
 - F1d2 (fechada): sonda GBM em `renderD128` medida (4 formats RENDERING|SCANOUT, dmabuf, 8 conectores/35 modos); `libgbm.so.1` em `DT_NEEDED`.
-- **Próximo passo (DO HUMANO):** no tty3, `cd ~/Projetos/aeroshell && RUST_LOG=debug ~/run-aeroshell-udev.sh`; usar `Ctrl+Alt+F2` (sair) e `F3` (voltar); enviar o log novo. Agente roda `python3 tests/integration/udev_frame_probe.py <log>` e só então escolhe UMA hipótese. Plano B (dumb+legacy+pixman) exige aprovação explícita.
+- **Próximo passo (DO HUMANO):** no tty3 digitar só **`~/u`** e Enter (script já fixa `RUST_LOG=debug` e grava log); usar `Ctrl+Alt+F2` (sair) e `F3` (voltar); enviar o log novo. Agente roda `python3 tests/integration/udev_frame_probe.py <log>` e só então escolhe UMA hipótese. Plano B (dumb+legacy+pixman) exige aprovação explícita.
 

@@ -69,10 +69,13 @@ F1d2 já havia provado `libgbm.so.1` em `DT_NEEDED`. Nesta VM (sem VT ativo) a i
 `EAGAIN` — **esperado**: sem VT ativo a seat não concede o device. Isso NÃO é regressão; é o limite do
 ambiente. A renderização real só pode ser julgada no tty3, pelo humano.
 
-Script pronto em **`~/run-aeroshell-udev.sh`** (fora do repo, criado a pedido do humano): faz build
-incremental, pré-checagens (binários, `/dev/dri/*`, `XDG_RUNTIME_DIR`), limpa `DISPLAY`/`WAYLAND_DISPLAY`,
-roda com as flags abaixo e imprime o que observar. Basta `Ctrl+Alt+F3`, login e `~/run-aeroshell-udev.sh`;
-`Ctrl+C` encerra. Testado nesta VM: passa nas pré-checagens e para em `session.open()` com `EAGAIN` (sem VT).
+Script versionado: **`scripts/run-udev-diag.sh`**. Para quem não consegue copiar/colar no tty, existe o
+atalho **`~/u`** (uma linha, fora do repo): no tty3 basta digitar `~/u` e Enter. O `~/run-aeroshell-udev.sh`
+antigo agora só repassa para o script versionado. O script faz build incremental, pré-checagens (binários,
+`/dev/dri/*`, `XDG_RUNTIME_DIR`), limpa `DISPLAY`/`WAYLAND_DISPLAY`, fixa `RUST_LOG=debug` e
+`LIBGL_ALWAYS_SOFTWARE=1`, grava `~/aeroshell-udev-YYYYMMDD-HHMMSS.log` via `tee` e imprime o que observar.
+`Ctrl+C` encerra. Testado nesta VM sem VT: `EXIT=1` em `session.open()` com `EAGAIN`, e o log contém
+`UDEV_SESSION active=false seat=seat0` — prova de que o `RUST_LOG=debug` chegou ao instrumento.
 
 Comando exato a partir do **tty3** (executado, olhado e **fechado pelo humano**):
 ```
@@ -101,10 +104,11 @@ XDG_RUNTIME_DIR=/run/user/$(id -u) MESA_DEBUG=1 LIBGL_ALWAYS_SOFTWARE=1 \
   valem como desempenho (GPU real pendente, STATE.md §7).
 
 ### Diagnóstico da tela sem imagem (cartão `F1d3-diagnostico-visual.md`)
-Se o tty3 ligar mas não mostrar imagem, reexecutar com logging de debug (o script do humano já grava log):
+Se o tty3 ligar mas não mostrar imagem, digitar **apenas `~/u`** no tty (o script já fixa `RUST_LOG=debug`
+e grava o log). Equivalente, se quiser ver o comando:
 ```
 cd ~/Projetos/aeroshell
-RUST_LOG=debug ~/run-aeroshell-udev.sh
+./scripts/run-udev-diag.sh
 ```
 No log, procurar `UDEV_SESSION`, `UDEV_OUTPUT`, `UDEV_FRAME`, `UDEV_VBLANK`, `UDEV_SESSION_EVENT` e
 `UDEV_VT`. O analisador roda em qualquer máquina com o arquivo de log:
