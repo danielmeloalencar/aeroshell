@@ -427,11 +427,16 @@ pub fn init_udev(
                 ) {
                     elements.insert(0, cursor);
                 }
+                // F1f: o FSCALE_FRAME do DRM é IDÊNTICO ao do nested (mesma
+                // escala/dst), mas o DrmCompositor com DEFAULT pode fazer scanout
+                // direto de planos e reapresentar o cliente com outra escala —
+                // daí a margem preta só no tty3. Forçar composição no framebuffer
+                // primário mantém o 9-slice e o cliente no MESMO caminho do nested.
                 match slot.drm_output.render_frame(
                     &mut renderer,
                     &elements,
                     [0.08, 0.08, 0.10, 1.0],
-                    FrameFlags::DEFAULT,
+                    FrameFlags::empty(),
                 ) {
                     Ok(result) => {
                         let is_empty = result.is_empty;
@@ -460,6 +465,7 @@ pub fn init_udev(
                                 is_empty,
                                 needs_sync,
                                 queued,
+                                scanout = false,
                                 "UDEV_FRAME"
                             );
                         }

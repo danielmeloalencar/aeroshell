@@ -21,6 +21,21 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **F1f — diagnóstico comparativo DRM↔nested e composição forçada no udev (2026-11-22).** Log do
+      humano `/home/daniel/aeroshell-udev-20261122-155045.log` analisado por palavras-chave: (1) `UDEV_OUTPUT
+      … scale=1.5` — `--scale` chega ao output DRM; (2) `FSCALE_SURFACE … scale=1.5` (várias superfícies) —
+      preferred_scale enviado/honrado no DRM; (3) `FSCALE_FRAME backend=scene output=Virtual-1 output_scale=1.5
+      client_scale=1.5 frame_pref=1.5 foot_buffer_scale=2 foot_dst=1044x741 frame_dst=1062x795 frame_loc=(81,75)`
+      — **idêntico** ao nested 1.5. Logo a divergência não está na escala nem no caminho de cena (o udev já
+      consome `render/scene.rs`, `udev.rs:76,418`; não há `FrameRenderInput` próprio). Causa restante: o
+      `DrmCompositor` com `FrameFlags::DEFAULT` fazia scanout direto de planos, reapresentando o cliente com
+      apresentação diferente do 9-slice. Correção: `render_frame(..., FrameFlags::empty())` no udev —
+      força composição no framebuffer primário, mesmo caminho do nested — e log `UDEV_FRAME … scanout=false`.
+      Instrumentação `FSCALE_FRAME` adicionada à cena compartilhada e ao caminho N=1 do winit
+      (`b344098`). Depois: `fractional_scale.py` → `VEREDITO: OK` (1.0/1.25/1.5, 15 checagens, colagem sem
+      gap); nested 1.5 com `FSCALE_SURFACE` e 0 erros; `check.sh` EXIT=0, clippy bench `-D warnings` 0,
+      `--no-default-features` 0. **Hipótese de scanout, não medição de pixel no DRM** — o humano precisa
+      repetir `~/u --scale 1.5`/`2` e confirmar que a margem preta sumiu. F1f segue sem ok visual no DRM.
 - [x] **F1f — escala do 9-slice trocada para a do CLIENTE (2026-11-22).** Humano diagnosticou a margem preta
       no udev: frame renderizado com escala do frame/output (1.0) e cliente em `preferred_scale` 1.5 ⇒
       `geo.loc + fgeo.offset()` ancorado em física diferente do `WaylandSurfaceRenderElement` do cliente.
@@ -1245,7 +1260,7 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   script e o backend udev foram corrigidos nesta sessão (§3); antes, o argumento era descartado no script
   e, depois disso, ignorado pelo udev — a tela seguia em 1.0. Confirmar no log `UDEV_OUTPUT … scale=1.5`
   e que frame/conteúdo/painel estão nítidos e alinhados, sem margem preta entre a decoração e o conteúdo
-  (causa corrigida acima: 9-slice com a escala do cliente).
+  (causa corrigida acima: 9-slice com a escala do cliente e composição forçada no DRM, sem scanout).
   **Tarefa NÃO fechada e F1g NÃO aberto sem o "ok"** (AGENTS.md §0.9 / §3.1). Não medido: udev/DRM,
   desempenho em GPU real (VM sem 3D).
 - **F1-popups-render — RESOLVIDO PELO JUIZ VISUAL (2026-11-22).** Humano abriu `gedit` no tty3 e, com
