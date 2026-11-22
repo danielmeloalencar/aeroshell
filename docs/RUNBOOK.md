@@ -30,6 +30,19 @@ LD_PRELOAD=libgtk4-layer-shell.so.0 target/debug/aeroshell-compositor \
 Teste manual: arraste a barra (move), as bordas de 6 px (resize), botões max/✕.
 Para encerrar: feche a janela do compositor. Confirme com
 `ps -eo pid,etime,args | grep -E "aeroshell|frame_webview|WebKit" | grep -v grep` que nada sobrou.
+
+### Validação visual F1c (dois outputs, dois `foot`)
+```
+cargo build --workspace --examples
+dbus-run-session -- target/debug/aeroshell-compositor \
+  --backend winit --socket wayland-aero-demo2 --size 640x480 --outputs 2 \
+  --shell target/debug/examples/frame_webview \
+  --shell-env LD_PRELOAD=libgtk4-layer-shell.so.0 \
+  --command "foot -w 400x300"
+```
+Em outro terminal, com o mesmo D-Bus privado: `WAYLAND_DISPLAY=wayland-aero-demo2 foot -w 320x240`.
+Arraste a titlebar do `foot` da direita para o segundo tile e de volta: o ponteiro cobre a janela host
+inteira (1280×480), cada output desenha só o seu cliente e nenhum frame aparece ocupando a metade da tela.
  
 ## Runtime Bun / SDK (tarefa 03)
 Tipos TS gerados do Rust (não editar à mão):
