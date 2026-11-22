@@ -21,6 +21,19 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **Tarefa 00 (extensão infra S1) — gate determinístico verde (2026-11-22).** Humano decidiu **não**
+      aceitar o S1 como flake permanente e autorizou escopo limitado (infra, ~1 sessão). Causa adotada:
+      spawn do `bun test` herdava `DISPLAY=:0`; o supervisor já isolava o cliente em
+      `spawn_public_client` (`supervisor.rs:141-150`), mas o harness não tornava isso explícito. Correção
+      **só no harness**: `tests/integration/s1_nested.sh` passa ao `--command`
+      `env -u DISPLAY -u WAYLAND_SOCKET GDK_BACKEND=wayland WAYLAND_DISPLAY=<socket nested> zenity …`;
+      `tests/integration/s1_nested.test.ts` usa `Bun.spawn` com `env` sem `DISPLAY` e
+      `GDK_BACKEND=wayland`, preservando o `WAYLAND_DISPLAY` do host para a janela winit do compositor.
+      Cartão `00-gate-confiavel.md` estendido. **Verificação pós-fix, UMA execução:**
+      `bash scripts/check.sh` → `OK: scripts/check.sh passou`, `GATE_EXIT=0`, `bun test → 9 pass / 0 fail`,
+      S1 incluído (`/tmp/opencode/f1-gate/gate-postfix.log`). Não houve re-run "até passar".
+      `git diff --stat`: só cartão + 2 arquivos do harness — **nenhum feature/protocolo/geometria/
+      `scripts/check.sh` alterado**. Próxima hipótese (não necessária): race de startup.
 - [x] **F1-popups-render FECHADO PELO JUIZ VISUAL (2026-11-22).** Humano, no tty3 com `~/u`: abriu o
       **`gedit`**, clicou com **botão direito** e relatou: *"apareceu sim um popup funcional, com borda
       arredondada e largura da borda de 1px mais ou menos"*. Isso cobre o critério visual pendente (§7):
@@ -787,6 +800,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   inacessível nesta VM — **não é regressão das edições de docs**. **NÃO reexecutei até passar**
   (AGENTS.md §0.5); o commit `d0c501a` foi feito com mensagem "gate OK" **incorreta** — corrigida por
   commit de correção explícito. Nenhuma checagem foi desligada nem amostra descartada.
+  **RESOLVIDO em seguida pela tarefa 00 (extensão infra): harness S1 com env explícito, gate verde numa
+  execução pós-fix (`gate-postfix.log`, `GATE_EXIT=0`) — ver §3.** Amostra do NO-GO preservada como
+  histórico; não é mais um flake aceito.
 - **Descoberta lateral do juiz (2026-11-22, FORA DE ESCOPO):** ao tentar `nautilus` dentro do compositor,
   o console mostrou só `** Message: 14:11:22.123: Connecting to org.freedesktop.Tracker3.Miner.Files` e a
   aplicação não abriu. Hipótese: serviço GTK/Tracker fora do escopo do compositor. **Não investigado** — o
@@ -1477,8 +1493,8 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
 - **Fase atual: F1; F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS pelo juiz; F1-cursor-shape, F1-primary-selection e F1-popups-render FECHADAS em 2026-11-22.** Sem push. **PARAR: não avançar de fase nem abrir o próximo cartão sem aprovação (AGENTS.md §3.1).**
 - **Fechamento do popup:** humano abriu `gedit` no tty3 com `~/u`, clicou com botão direito e viu popup funcional com borda arredondada e ~1 px. Grab provado por cliente real (`POPUP_GRAB … estado=ok`, zero erros de protocolo). Humano operou e julgou; agente não abriu/fechou app nem trocou VT.
 - **Entrega técnica:** `PopupManager::grab_popup`, sondas `POPUP_*` sob bench, cliente `examples/popup_client.rs` + harness `tests/integration/popup_client.py` (RUNBOOK). Mapa corrigido: popups já renderizam via Smithay; nada foi mexido na cena.
-- **Gates:** execução do gate **antes** das edições de fechamento → `OK`, `CHECK_EXIT=0`; clippy default/bench `-D warnings` → 0; `--no-default-features` → 0; harness de popup + 4 vizinhos OK. **Execução final após as edições → NO-GO só no S1** (`zenity Failed to open display`, §6) — não reexecutada até passar. Amostras preservadas em `/tmp/opencode/f1-popup/`. Commits até `d0c501a` + correção.
-- **Próximo passo proposto (NÃO executado):** se autorizado, abrir `fractional-scale` (cartão-mãe); depois viewporter → text-input/IM → presentation-time → dmabuf. Só com cartão e autorização.
+- **Gate determinístico RESTAURADO (tarefa 00 extensão):** o NO-GO do S1 não foi aceito como flake. Harness corrigido (env explícito no `s1_nested.sh` e no `Bun.spawn`, sem tocar em `scripts/check.sh`/feature/protocolo); **uma** execução pós-fix → `bash scripts/check.sh` → `OK: scripts/check.sh passou`, `GATE_EXIT=0`, `bun test → 9 pass / 0 fail` (`/tmp/opencode/f1-gate/gate-postfix.log`). Amostra do NO-GO preservada em §6.
+- **Próximo passo proposto (NÃO executado):** com o gate verde, se autorizado, abrir **`fractional-scale` (F1f)** — um cartão por sessão; depois viewporter → text-input/IM → presentation-time → dmabuf. Só com cartão e autorização.
 - **Não medido / descoberta lateral:** dismiss por clique fora não exercitado no juiz; cursor planes/vmwgfx; desempenho em GPU real; `nautilus` não abriu (Tracker3 — §6, fora de escopo).
 - **Contexto preservado:** `udev.rs` chama `send_frame`; `~/u` lança o painel e define `AERO_WINDOW_IPC_SOCK`. Conteúdo, cursor, seleção primária e popups seguem aprovados pelo humano; nada disso foi alterado.
 

@@ -2,7 +2,16 @@ import { expect, test } from "bun:test";
 
 test("S1: socket próprio e isolamento do WAYLAND_DISPLAY do host", async () => {
   const hostDisplay = process.env.WAYLAND_DISPLAY ?? "";
+  // Tarefa 00 (infra): nao herdar DISPLAY do host no spawn do bun test. O
+  // compositor winit AINDA precisa do WAYLAND_DISPLAY do host para abrir a
+  // janela; o CLIENTE GUI e forçado ao socket nested dentro de s1_nested.sh.
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value !== undefined && key !== "DISPLAY") env[key] = value;
+  }
+  env.GDK_BACKEND = "wayland";
   const proc = Bun.spawn(["bash", "tests/integration/s1_nested.sh"], {
+    env,
     stdout: "pipe",
     stderr: "pipe",
   });

@@ -19,6 +19,27 @@
 3. `grep -rn "pkill -x" tests/` → nenhum nome > 15 caracteres; harnesses rastreiam PIDs próprios.
 4. Nenhuma amostra de teste descartada em silêncio; falhas registradas em `docs/STATE.md` §6.
 
+## Extensão de 2026-11-22 — S1 GUI client (escopo LIMITADO, ~1 sessão)
+Determinação do humano: **não aceitar o S1 como flake permanente.** A falha do gate de fechamento do
+F1-popups-render (`zenity: Gtk-WARNING: Failed to open display`, `FALHA: cliente não mapeou toplevel`,
+`bun test → 1 fail`) é **infra do harness**, não regressão de feature.
+
+- **Causa raiz adotada:** o spawn do `bun test` herdava `DISPLAY=:0` do host; o cliente GUI do S1 podia
+  cair para X11 em vez do socket Wayland nested. O supervisor **já** isola o cliente em
+  `spawn_public_client` (`supervisor.rs:141-150`: `WAYLAND_DISPLAY=<socket>`, `env_remove("DISPLAY")`,
+  `GDK_BACKEND=wayland`), mas o harness não tornava isso explícito — reutilizar essa lógica Rust no
+  shell não é trivial, então o env é repetido explicitamente no harness.
+- **Escopo exato:** (a) `tests/integration/s1_nested.sh` — `--command` do cliente com
+  `env -u DISPLAY -u WAYLAND_SOCKET GDK_BACKEND=wayland WAYLAND_DISPLAY=<socket nested> zenity …`;
+  (b) `tests/integration/s1_nested.test.ts` — `Bun.spawn` com `env` sem `DISPLAY` e
+  `GDK_BACKEND=wayland`, **mantendo** o `WAYLAND_DISPLAY` do host para a janela winit do compositor;
+  (c) este cartão + `docs/STATE.md`. **Nada mais.**
+- **Verificação:** `bash scripts/check.sh` **UMA única vez** após o fix. Se o S1 falhar de novo,
+  **PARAR e reportar** — não reexecutar até passar (AGENTS.md §0.5); próxima hipótese a investigar em
+  sessão separada: **race de startup** (wait-for-socket do compositor antes do `zenity`).
+- **Fora deste escopo:** `scripts/check.sh`, modificação de feature/protocolo/geometria, `nautilus`/
+  Tracker3 (§6), abertura de `fractional-scale` (F1f) — só depois do gate determinístico verde.
+
 ## Fora de escopo (NÃO faça, mesmo que pareça relacionado)
 - window_id, decoração por janela, resize do frame, fundo branco no gap
 - latência do resize, pool de WebViews, painel React, SDK

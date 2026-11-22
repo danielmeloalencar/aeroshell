@@ -44,8 +44,14 @@ wait "$pid" 2>/dev/null || true
 if command -v zenity >/dev/null 2>&1; then
   nested_socket="wayland-aero-s1-visual-$$"
   nested_log="${TMPDIR:-/tmp}/aeroshell-s1-visual.log"
+  # Tarefa 00 (escopo infra): forcar o cliente GUI ao socket nested de forma
+  # explicita no harness. O supervisor ja aplica esse isolamento em
+  # spawn_public_client (supervisor.rs:141-150), mas o caminho do bun test ja
+  # falhou uma vez com `zenity: Gtk-WARNING: Failed to open display` — repetir
+  # aqui torna o S1 independente do env do chamador (STATE.md §6).
   RUST_LOG=info "$bin" --backend winit --socket "$nested_socket" \
-    --command "zenity --info --text=AeroShell-S1" >"$nested_log" 2>&1 &
+    --command "env -u DISPLAY -u WAYLAND_SOCKET GDK_BACKEND=wayland WAYLAND_DISPLAY=$nested_socket zenity --info --text=AeroShell-S1" \
+    >"$nested_log" 2>&1 &
   pid=$!
   cleanup() { kill "$pid" 2>/dev/null || true; }
   trap cleanup EXIT
