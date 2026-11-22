@@ -21,6 +21,24 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **F1-primary-selection (2026-11-22) — código + gate verdes; critério textual passou no pré-filtro.**
+      Cartão `docs/tasks/F1-primary-selection.md` aprovado e commitado (`1cd8478`). Premissas lidas no Smithay
+      0.7.0 fixado antes de editar: `PrimarySelectionHandler` com um método obrigatório
+      (`primary_selection/mod.rs:92-95`), `PrimarySelectionState::new::<D>` (`:113-119`),
+      `delegate_primary_selection!` (`:395-410`), `set_primary_focus` (`:154-168`) e recusa de seleção de
+      cliente sem foco de teclado (`device.rs:56-77`). **Domicile usado como guia de invariantes, não receita**
+      (determinação do humano): nada de Chromium/Ozone/CEF copiado; fonte executável = Smithay fixado.
+      Código: campo + global em `state.rs`; `seat.rs` ganha handler, delegate e chamada de `set_primary_focus`
+      ao lado do `set_data_device_focus` existente; log `PRIMARY_FOCUS t=… client=…` **só sob `bench`**.
+      **Teste-first:** baseline `/tmp/opencode/f1-cursor/foot-baseline.log:1` =
+      `warn: wayland.c:1777: compositor does not implement the primary selection interface`; depois
+      `/tmp/opencode/f1-cursor/foot-primary.log` → aviso **AUSENTE** (restam 4, fora de escopo).
+      Sonda bench: `PRIMARY_FOCUS t=1795364400136535787 client=InnerClientId { id: 1, serial: 2 }`
+      (`/tmp/opencode/f1-cursor/comp-primary-head2.log`, 1 linha após `button press` sintético);
+      `strings` do binário sem bench → 0 ocorrências do prefixo. Gate `check.sh` EXIT=0; clippy default/bench
+      `-D warnings` 0; `--no-default-features` 0; 4 harnesses vizinhos OK. **Clipboard comum NÃO medido
+      (§7): `wl-copy`/`wl-paste` deram timeout tanto sem quanto com foco sintético — amostras preservadas,
+      sem concluir regressão nem sucesso.** Nenhum critério visual neste cartão (critério é textual).
 - [x] **F1-cursor-shape FECHADA PELO JUIZ VISUAL (2026-11-22): humano respondeu "Aprovado".**
       Isso cobre o 2º veredito, após a correção do 1º (negado). O humano operou `~/u` no tty3, moveu o mouse
       e confirmou a seta do tema XCursor **acima** do `foot` e do painel; o agente não abriu/fechou aplicação
@@ -714,8 +732,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
 7. `02i` — correções de documentação (somente docs): presentation-time, background_effect, WPE, cartões 02c/02d, F1.
 8. `05-compatibilidade-protocolos.md` — RASCUNHO; 7 mensagens do `foot` registradas em §6. NÃO executar sem ok.
 9. **GAP ANALYSIS F1 → ordem proposta de cartões (NÃO AUTORIZADA — abrir cartão e obter ok antes de executar).**
-   Mapa completo em §7. **cursor-shape FECHADA (§3); próximo da fila: primary-selection.** Ordem restante:
-   primary-selection → popups-render → fractional-scale →
+   Mapa completo em §7. **cursor-shape FECHADA e primary-selection COM CÓDIGO/GATE VERDES (§3); próximo da
+   fila: popups-render.** Ordem restante:
+   popups-render → fractional-scale →
    viewporter → text-input/IM → presentation-time → dmabuf (maior risco; VM sem 3D valida funcionamento,
    não desempenho). Critério da ordem: nenhum desses módulos depende de outro no Smithay 0.7.0
    (confirmado: `fractional_scale/mod.rs` não referencia viewporter); priorizar baixo risco + visibilidade
@@ -1105,6 +1124,15 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- **F1-primary-selection (2026-11-22) — round-trip de clipboard NÃO MEDIDO.** O critério textual (aviso do
+  `foot`) passou no pré-filtro, mas `wl-copy | wl-paste` (clipboard comum) e `wl-copy --primary |
+  wl-paste --primary` não foram provados: no nested sem foco (`/tmp/opencode/f1-primary/clipboard.sh`) e no
+  headless com `button press` sintético (`clipboard-focus.sh`), ambos deram `WLCOPY_EXIT=124` /
+  `WLPASTE_EXIT=124` com saída vazia. **Não foi possível separar limitação do harness (nenhum cliente com
+  foco de teclado aceitável para `wl-clipboard`) de regressão real**; nenhuma amostra foi descartada e
+  nenhuma conclusão de regressão foi afirmada. Para medir de verdade, falta um cliente real com foco que
+  detenha a seleção (ex.: seleção de texto no próprio `foot`) ou implementar o teste no harness headless com
+  foco explícito. Também não houve juiz visual — o cartão não tem critério visual.
 - **F1-cursor-shape — RESOLVIDO (era 1º JUIZ VISUAL NEGOU, 2026-11-22).** Humano: *"apareceu uma seta mal
   feita e que passa por trás das janelas e do painel"*. Corrigido com seta do tema XCursor (24×24, hotspot
   3,1 medido) e `insert(0, …)` na cena frente→trás (§3). **2º juiz: "Aprovado"** — item FECHADO. Histórico
@@ -1388,12 +1416,11 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **Fase atual: F1; F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS pelo juiz + F1-cursor-shape FECHADA PELO JUIZ EM 2026-11-22 ("Aprovado").** Sem push. **PARAR: não avançar de fase nem abrir o próximo cartão sem aprovação (AGENTS.md §3.1).**
-- **O que a tarefa entregou:** protocolo `wp_cursor_shape_v1`, `CursorImageStatus` armazenado, cursor `Kind::Cursor` no plane do udev, seta do tema XCursor com hotspot real, z-order na frente da cena. Após o 1º veredito negativo: `insert(0, …)` + `xcursor 0.3.11` (MIT, aprovada e documentada em §3/Cargo.toml).
-- **Provas:** `cargo test -p aeroshell-compositor cursor::tests -- --nocapture` → 3 passed (`TEMA_XCURSO size=24x24 hotspot=(3,1)`); aviso do `foot` ausente em `foot-after2.log`/`foot-bench.log`/`foot-head.log`.
-- **Gate final:** `bash scripts/check.sh` → `OK`, `CHECK_EXIT=0`; clippy default/bench `-D warnings` → 0; `--no-default-features` → 0; 4 harnesses vizinhos OK. Amostras falhas preservadas em `/tmp/opencode/f1-cursor2/`. Commits locais até `a1828be`; árvore limpa.
-- **Para reproduzir à mão:** `~/u` no tty3, mover o mouse — seta do tema acima do `foot` e do painel, ponta sob o ponteiro. Log bench: `CURSOR_RENDER … source=theme size=24x24 hotspot=(3,1)` e `UDEV_CURSOR_PLANE …`.
-- **Próximo passo proposto (NÃO executado):** se o humano autorizar, abrir o próximo subcartão do cartão-mãe `F1-gap-protocolos.md` (ordem: primary-selection → popups-render → fractional-scale → viewporter → text-input/IM → presentation-time → dmabuf). Só com cartão e "ok".
-- **Não medido:** número de cursor planes/`cursor_size` do vmwgfx (o log ficou instrumentado, mas o veredito foi visual); desempenho em GPU real (VM sem 3D).
-- **Contexto F1d3 preservado:** `udev.rs` chama `send_frame`; `~/u` lança o painel e define `AERO_WINDOW_IPC_SOCK`. Conteúdo do `foot` segue aprovado; nada disso foi alterado.
+- **Fase atual: F1; F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS pelo juiz + F1-cursor-shape FECHADA ("Aprovado").** `F1-primary-selection` tem código/gate verdes, mas **round-trip de clipboard NÃO medido (§7)** — não fechar sem decidir isso. Sem push. **PARAR: não avançar de fase nem abrir o próximo cartão sem aprovação (AGENTS.md §3.1).**
+- **Nesta sessão (2026-11-22):** humano determinou que o domicile é guia de invariantes, não receita; registrado no cartão `F1-primary-selection.md`. Implementado: global `wp-primary-selection-v1`, `PrimarySelectionHandler` + delegate, `set_primary_focus` no `focus_changed` e log `PRIMARY_FOCUS` sob bench.
+- **Provas:** aviso do `foot` presente no baseline (`foot-baseline.log:1`) e AUSENTE depois (`foot-primary.log`); `PRIMARY_FOCUS t=… client=InnerClientId { id: 1, serial: 2 }` (`comp-primary-head2.log`, 1 linha com `button press`); `strings` sem bench → 0.
+- **Gate final:** `bash scripts/check.sh` → `OK`, `CHECK_EXIT=0`; clippy default/bench `-D warnings` → 0; `--no-default-features` → 0; 4 harnesses vizinhos OK. Amostras de clipboard com timeout preservadas em `/tmp/opencode/f1-primary/`.
+- **Próximo passo proposto (NÃO executado):** decidir como medir o clipboard com cliente focado de verdade; depois, se autorizado, abrir `popups-render` (cartão-mãe `F1-gap-protocolos.md`), depois fractional-scale → viewporter → text-input/IM → presentation-time → dmabuf.
+- **Não medido:** clipboard/primary round-trip (`wl-copy`/`wl-paste` deram timeout, §7); cursor planes/vmwgfx; desempenho em GPU real (VM sem 3D).
+- **Contexto preservado:** `udev.rs` chama `send_frame`; `~/u` lança o painel e define `AERO_WINDOW_IPC_SOCK`. Conteúdo do `foot` e cursor seguem aprovados pelo juiz; nada disso foi alterado.
 

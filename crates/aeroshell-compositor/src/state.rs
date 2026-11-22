@@ -19,7 +19,7 @@ use smithay::{
         compositor::{CompositorClientState, CompositorState},
         cursor_shape::CursorShapeManagerState,
         output::OutputManagerState,
-        selection::data_device::DataDeviceState,
+        selection::{data_device::DataDeviceState, primary_selection::PrimarySelectionState},
         shell::{
             wlr_layer::WlrLayerShellState,
             xdg::{decoration::XdgDecorationState, XdgShellState},
@@ -177,6 +177,8 @@ pub struct AeroState {
     pub output_manager_state: OutputManagerState,
     pub seat_state: SeatState<AeroState>,
     pub data_device_state: DataDeviceState,
+    /// F1-primary-selection: global `wp-primary-selection-v1`.
+    pub primary_selection_state: PrimarySelectionState,
     /// F1-cursor-shape: global `wp_cursor_shape_v1` e última forma pedida pelo cliente.
     pub cursor_shape_state: CursorShapeManagerState,
     pub cursor_image: CursorImageStatus,
@@ -234,6 +236,7 @@ impl AeroState {
         let output_manager_state = OutputManagerState::new_with_xdg_output::<Self>(&dh);
         let mut seat_state = SeatState::new();
         let data_device_state = DataDeviceState::new::<Self>(&dh);
+        let primary_selection_state = PrimarySelectionState::new::<Self>(&dh);
         let cursor_shape_state = CursorShapeManagerState::new::<Self>(&dh);
 
         let mut seat: Seat<Self> = seat_state.new_wl_seat(&dh, "aeroshell");
@@ -313,6 +316,7 @@ impl AeroState {
             output_manager_state,
             seat_state,
             data_device_state,
+            primary_selection_state,
             cursor_shape_state,
             cursor_image: CursorImageStatus::default_named(),
             cursor_images: HashMap::new(),

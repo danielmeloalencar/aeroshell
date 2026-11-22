@@ -1,7 +1,8 @@
 //! Seat, data-device (clipboard/DnD) e output.
 
 use smithay::{
-    delegate_cursor_shape, delegate_data_device, delegate_output, delegate_seat,
+    delegate_cursor_shape, delegate_data_device, delegate_output, delegate_primary_selection,
+    delegate_seat,
     input::{pointer::CursorImageStatus, Seat, SeatHandler, SeatState},
     reexports::wayland_server::{protocol::wl_surface::WlSurface, Resource},
     wayland::{
@@ -10,6 +11,9 @@ use smithay::{
             data_device::{
                 set_data_device_focus, ClientDndGrabHandler, DataDeviceHandler, DataDeviceState,
                 ServerDndGrabHandler,
+            },
+            primary_selection::{
+                set_primary_focus, PrimarySelectionHandler, PrimarySelectionState,
             },
             SelectionHandler,
         },
@@ -58,7 +62,19 @@ impl SeatHandler for AeroState {
             "TESTE foco de teclado alterado"
         );
         let client = focused.and_then(|s| self.display_handle.get_client(s.id()).ok());
-        set_data_device_focus(&self.display_handle, seat, client);
+        set_data_device_focus(&self.display_handle, seat, client.clone());
+        // F1-primary-selection: a primária segue o mesmo foco de teclado; o Smithay
+        // recusa set_selection de cliente sem foco (device.rs:56-77).
+        #[cfg(feature = "bench")]
+        {
+            let t = crate::frame_diagnostics::now_ns();
+            let id = client
+                .as_ref()
+                .map(|c| format!("{:?}", c.id()))
+                .unwrap_or_else(|| "none".to_owned());
+            eprintln!("PRIMARY_FOCUS t={t} client={id}");
+        }
+        set_primary_focus(&self.display_handle, seat, client);
     }
 }
 
@@ -78,6 +94,14 @@ impl DataDeviceHandler for AeroState {
         &self.data_device_state
     }
 }
+
+// F1-primary-selection: um único método obrigatório (mod.rs:92-95).
+impl PrimarySelectionHandler for AeroState {
+    fn primary_selection_state(&self) -> &PrimarySelectionState {
+        &self.primary_selection_state
+    }
+}
+delegate_primary_selection!(AeroState);
 
 impl ClientDndGrabHandler for AeroState {}
 impl ServerDndGrabHandler for AeroState {}
