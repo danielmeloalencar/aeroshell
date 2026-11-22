@@ -1416,6 +1416,11 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   Para o juiz do tty3, o humano deve fechar qualquer instância AeroShell/frame_webview ativa antes de rodar
   `~/u` (ou usar D-Bus privado). Até lá a 02r NÃO está concluída. Instância nested aprovada, deixada aberta;
   quem fecha é o humano.
+  **RETESTE DO HUMANO (18:44) NÃO RESOLVEU:** `~/aeroshell-udev-20261122-184400.log` tem a mesma assinatura
+  (`FRAMEWEB=0`, `conexão privilegiada do shell caiu`, 0 `painel React`), e a instância nested (PIDs
+  211541/211563/211566) **continua aberta** — a condição do workaround não foi aplicada. Hipótese do D-Bus
+  **NÃO CONFIRMADA como causa do tty3** (só reproduzi a colisão em nested, com a instância viva). Pela regra
+  das duas tentativas, **PAREI**: sem nova investigação e sem 3ª abordagem sem decisão do humano.
 - **02r — JUIZ VISUAL PENDENTE (2026-11-22).** A prova automatizada mede geometria (`zone` do LayerMap,
   `frame configure` e IPC `list`), **não o que aparece na tela**. Instância nested aberta (§4) com painel
   (`exclusive_zone=48`); o humano deve: (1) ver a `foot` maximizada começar no topo da área útil, com a
@@ -1753,9 +1758,10 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
   (`/tmp/opencode/02r/final-{1,2,3}.log`); baseline FALHA em `baseline-final-harness.log`.
   Cliente `(60,80,798,598) → (6,30,788,516)`, frame `(800,552) == zona`, origem `(0,0)`, volta exato.
   Gate `check.sh` EXIT=0 (`gate-final.log`), clippy bench 0, `--no-default-features` 0.
-- **Próximo passo imediato (NÃO executado):** obter o "ok" visual do humano na instância aberta e no
-  tty3; só então marcar 02r FECHADA em §3/§4 e commitar. Se o juiz negar, **parar e perguntar** — não
-  tentar 3ª abordagem sozinho (AGENTS.md §3.12).
+- **Próximo passo imediato (NÃO executado):** DECISÃO DO HUMANO: (a) autorizar o agente a fechar a instância
+  nested (PIDs 211541/211563/211566) para repetir `~/u` sem concorrência, ou (b) abrir cartão próprio para
+  a decoração no tty3 (fora da 02r), ou (c) encerrar a 02r como parcial com o nested aprovado. Só então
+  marcar FECHADA em §3/§4. Sem 3ª abordagem sozinho (AGENTS.md §3.12, regra das duas tentativas).
 - **Histórico 02q (FECHADA pelo juiz):** cliente nasce no startup, placeholder do compositor para
   qualquer janela e `set_default_insets` no protocolo; `pending_initial_command`/sleep removidos.
 - **Reproduzir:** `python3 tests/integration/frame_cold_start_stages.py` → 3× `VEREDITO: FALHA` só pelo
