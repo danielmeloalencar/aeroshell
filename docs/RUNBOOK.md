@@ -69,6 +69,11 @@ F1d2 já havia provado `libgbm.so.1` em `DT_NEEDED`. Nesta VM (sem VT ativo) a i
 `EAGAIN` — **esperado**: sem VT ativo a seat não concede o device. Isso NÃO é regressão; é o limite do
 ambiente. A renderização real só pode ser julgada no tty3, pelo humano.
 
+Script pronto em **`~/run-aeroshell-udev.sh`** (fora do repo, criado a pedido do humano): faz build
+incremental, pré-checagens (binários, `/dev/dri/*`, `XDG_RUNTIME_DIR`), limpa `DISPLAY`/`WAYLAND_DISPLAY`,
+roda com as flags abaixo e imprime o que observar. Basta `Ctrl+Alt+F3`, login e `~/run-aeroshell-udev.sh`;
+`Ctrl+C` encerra. Testado nesta VM: passa nas pré-checagens e para em `session.open()` com `EAGAIN` (sem VT).
+
 Comando exato a partir do **tty3** (executado, olhado e **fechado pelo humano**):
 ```
 # tty3, logado como o usuário da sessão (líder de sessão do logind; sem sudo no host de dev)

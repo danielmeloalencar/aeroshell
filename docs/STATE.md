@@ -1013,4 +1013,8 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
 - F1d2 (fechada): `--probe-gbm[=NO]` em `cli.rs` → `backend/udev.rs::probe_gbm`; sonda medida: `backend_name=drm`, 4 formats RENDERING|SCANOUT, 64×64 Linear stride 256 com dmabuf, card0 com 8 conectores (`Virtual-1`, 35 modos). `DT_NEEDED` tem `libgbm.so.1`.
 - Winit N>1 (F1c): textura/tracker por output (`age=1`), arrasto por união das geometrias; JUIZ F1c aprovou. Refactor F1d3 preservou os harnesses (RENDER_SHARED=22, `{0:20,1:0}`).
 - Reproduzir: `bash scripts/check.sh` · `python3 tests/integration/udev_drm_probe.py` · `bash tests/integration/s1_nested.sh` · `dbus-run-session -- python3 tests/integration/multi_output_damage.py`.
-- **Próximo passo (DO HUMANO, não executado):** no tty3, rodar o comando do RUNBOOK, trocar/voltar VT, olhar painel/`foot`/arrasto/sem piscar, dar o ok e fechar. Só então marcar F1d3 FECHADA no cartão/§3/§9. Se negar: registrar §7 e parar (plano B dumb+legacy exige aprovação). Sem 3D: desempenho não medido.
+- **Próximo passo (DO HUMANO, não executado):** `Ctrl+Alt+F3`, login e **`~/run-aeroshell-udev.sh`** (script em
+  `$HOME`, fora do repo, documentado no RUNBOOK). Faz build/pré-checagens/flags e imprime o que observar; `Ctrl+C`
+  encerra. Testado aqui: passa nas pré-checagens e para em `session.open()` com `EAGAIN` (sem VT), sem socket
+  órfão nem processo deixado. No tty3: trocar/voltar VT, olhar painel/`foot`/arrasto/sem piscar, dar o ok e fechar.
+  Só então marcar F1d3 FECHADA no cartão/§3/§9. Se negar: registrar §7 e parar (plano B exige aprovação).
