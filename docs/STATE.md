@@ -21,7 +21,14 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
-- [x] **F1-cursor-shape — CORREÇÃO APÓS VEREDITO NEGATIVO DO JUIZ (2026-11-22, novo teste pendente).**
+- [x] **F1-cursor-shape FECHADA PELO JUIZ VISUAL (2026-11-22): humano respondeu "Aprovado".**
+      Isso cobre o 2º veredito, após a correção do 1º (negado). O humano operou `~/u` no tty3, moveu o mouse
+      e confirmou a seta do tema XCursor **acima** do `foot` e do painel; o agente não abriu/fechou aplicação
+      nem trocou VT. Escopo entregue e validado: `wp_cursor_shape_v1` anunciado, aviso "server-side cursors"
+      ausente no `foot` (pré-filtro no nested), `CursorImageStatus` armazenado, cursor no cursor plane do udev
+      com `Kind::Cursor`, seta do tema com hotspot real e z-order na frente da cena. Provas e gates abaixo;
+      técnicas e os gates abaixo; `xcursor 0.3.11` (MIT) aprovado e documentado. **Nenhuma fase nova iniciada.**
+- [x] **F1-cursor-shape — CORREÇÃO APÓS VEREDITO NEGATIVO DO JUIZ (2026-11-22; FECHADA acima).**
       Humano: *"apareceu uma seta mal feita e que passa por trás das janelas e do painel"*. **Dado visual
       prevalece** (AGENTS.md §0.4); a implementação anterior NÃO foi aceita. Causas:
       (1) `udev.rs` fazia `elements.push(cursor)` numa cena **frente→trás** (`render/scene.rs:50-245`) — sem
@@ -45,7 +52,7 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
       clippy default/bench `-D warnings` 0; `--no-default-features` 0; 4 harnesses vizinhos OK.
       Amostras falhas preservadas em `/tmp/opencode/f1-cursor2/` (clippy `chunks_exact`→`array_chunks`
       indisponível na toolchain 1.86 → loop manual; `xcursor_name(&_icon)` no log bench).
-      **Ainda NÃO há ok visual do novo cursor no tty3 (§7): tarefa NÃO fechada.**
+      **2º juiz APROVOU ("Aprovado") — ver primeiro bullet desta seção; item fechado.**
 - [x] **F1-cursor-shape, etapa 2 (d) — elemento `Kind::Cursor` no udev (2026-11-22, juiz visual PENDENTE).**
       **Correção de premissa confirmada na fonte:** o cursor plane JÁ está habilitado — `backend/udev.rs:146-153`
       passa `Some(gbm)` ao `DrmOutputManager`, e `smithay/backend/drm/output.rs:258-271` passa `cursor_size`
@@ -707,7 +714,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
 7. `02i` — correções de documentação (somente docs): presentation-time, background_effect, WPE, cartões 02c/02d, F1.
 8. `05-compatibilidade-protocolos.md` — RASCUNHO; 7 mensagens do `foot` registradas em §6. NÃO executar sem ok.
 9. **GAP ANALYSIS F1 → ordem proposta de cartões (NÃO AUTORIZADA — abrir cartão e obter ok antes de executar).**
-   Mapa completo em §7. Ordem: cursor-shape → primary-selection → popups-render → fractional-scale →
+   Mapa completo em §7. **cursor-shape FECHADA (§3); próximo da fila: primary-selection.** Ordem restante:
+   primary-selection → popups-render → fractional-scale →
    viewporter → text-input/IM → presentation-time → dmabuf (maior risco; VM sem 3D valida funcionamento,
    não desempenho). Critério da ordem: nenhum desses módulos depende de outro no Smithay 0.7.0
    (confirmado: `fractional_scale/mod.rs` não referencia viewporter); priorizar baixo risco + visibilidade
@@ -790,7 +798,7 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   na ordem da macro (confirmado em `/home/daniel/aeroshell-udev-20261122-023701.log`:
   `iniciando AeroShell backend="udev" seat=...`). As macros `UDEV_*` seguem essa ordem; se o próximo log
   mostrar outra ordem, o analisador deve ser ajustado (não o produto).
-- F1d3 (CURSOR, confirmado no código): `init_udev` não adiciona elemento de cursor — o ponteiro **anda e clica**
+- F1d3 (CURSOR, confirmado no código; **RESOLVIDO em 2026-11-22 pela F1-cursor-shape, ver §3**): `init_udev` não adicionava elemento de cursor — o ponteiro **anda e clica**
   (movimento relativo implementado em `input.rs`), mas é **invisível** no DRM. Caminho: `cursor-icon` 1.2 +
   `MemoryRenderBufferRenderElement` (`element/memory.rs:463`). Exige cartão próprio; o juiz visual foi avisado.
 - F1d3 (HOTPLUG): eventos `UdevEvent::Added/Changed/Removed` só são **logados** ("reinicie para usar"); não há
@@ -1097,16 +1105,13 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- **F1-cursor-shape — 1º JUIZ VISUAL NEGOU (2026-11-22, dado do humano, prevalece):** *"apareceu uma seta
-  mal feita e que passa por trás das janelas e do painel"*. Causas e correções em §3. Corrigido: seta do
-  tema XCursor (24×24, hotspot 3,1 medido no teste) e `insert(0, …)` na cena frente→trás.
-  **2º JUIZ VISUAL PENDENTE:** nenhum pixel do cursor corrigido foi medido por mim (VM sem VT,
-  `session.open()` → `EAGAIN`); o agente não abriu/fechou aplicação nem trocou VT. No tty3, `~/u`, mover o
-  mouse e confirmar que a seta do tema aparece **acima** do `foot` e do painel, acompanha o ponteiro e a
-  ponta fica sob ele. O log (bench) deve conter `CURSOR_RENDER … source=theme shape=… size=24x24
-  hotspot=(3,1)` e `UDEV_CURSOR_PLANE … cursor_planes=<n> cursor_size=<w>x<h>` — este último diz se o
-  hardware cursor plane existe (se `cursor_planes=0`, o z-order `insert(0,…)` é o que garante o "acima").
-  **Tarefa NÃO concluída sem o novo "ok" do humano** (AGENTS.md §0.9).
+- **F1-cursor-shape — RESOLVIDO (era 1º JUIZ VISUAL NEGOU, 2026-11-22).** Humano: *"apareceu uma seta mal
+  feita e que passa por trás das janelas e do painel"*. Corrigido com seta do tema XCursor (24×24, hotspot
+  3,1 medido) e `insert(0, …)` na cena frente→trás (§3). **2º juiz: "Aprovado"** — item FECHADO. Histórico
+  preservado: nenhum pixel foi medido pelo agente (VM sem VT, `session.open()` → `EAGAIN`); o humano operou
+  e julgou no tty3, e o agente não abriu/fechou aplicação nem trocou VT. Não foi medido nesta sessão se o
+  vmwgfx expõe cursor plane (`UDEV_CURSOR_PLANE` ficou disponível para o log, mas o veredito final foi
+  visual); esse número segue como **não medido**, não como fato sobre hardware.
 - **GAP ANALYSIS F1 (2026-11-22) — nesta seção, "~ parcial" e "❌ faltando" significam AUSÊNCIA DE CÓDIGO
   no item do plano-mestre §5, não falha de teste. Nada disso foi implementado.** Fonte: `grep` nos crates +
   código do Smithay 0.7.0 fixado (todos os módulos citados existem sob `wayland_frontend`, já ativo).
@@ -1383,11 +1388,12 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **Fase atual: F1; F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS pelo juiz.** **F1-cursor-shape NÃO FECHADA: 1º juiz negou; 2º juiz pendente (§7).** Sem push. **PARAR: não avançar de fase sem aprovação (AGENTS.md §3.1).**
-- **Nesta sessão (2026-11-22):** humano negou a 1ª implementação ("seta mal feita e passando por trás das janelas e do painel"). Corrigido: `insert(0, cursor)` na cena frente→trás + log `UDEV_CURSOR_PLANE`; seta do **tema XCursor** com hotspot real, mapeada dos nomes CSS, cache por forma, dependência `xcursor =0.3.11` (MIT) aprovada e documentada em §3.
-- **Prova:** `cargo test -p aeroshell-compositor cursor::tests -- --nocapture` → 3 passed, `TEMA_XCURSO size=24x24 hotspot=(3,1)`. Avanço do protocolo preservado: aviso do `foot` ausente em `foot-after2.log`/`foot-bench.log`/`foot-head.log`, `CURSOR_SHAPE … shape=text` em `comp-head.log`.
-- **Como reproduzir:** `git log --oneline -5`; `bash scripts/check.sh` → `OK`, `CHECK_EXIT=0`; clippy default/bench `-D warnings` → 0; `--no-default-features` → 0; 4 harnesses vizinhos OK. Amostras falhas (clippy `chunks_exact`/`array_chunks`, `xcursor_name(&_icon)`) preservadas em `/tmp/opencode/f1-cursor2/`, não descartadas.
-- **Próximo passo imediato (NÃO executado): o HUMANO roda `~/u` no tty3, move o mouse e confirma que a seta do tema aparece ACIMA do `foot` e do painel e que a ponta fica sob o ponteiro; só com o "ok" a tarefa fecha.** Log (bench): `CURSOR_RENDER … source=theme size=24x24 hotspot=(3,1)` e `UDEV_CURSOR_PLANE … cursor_planes=<n>`. Agente não trocou VT, não usou sudo e não encerrou aplicação.
-- **Dívidas seguintes:** outros 6 avisos do foot, hotplug, multi-GPU, presentation-time, Plano B, 02f/02n/02q. Plano em `docs/plano-mestre.md`.
-- **Contexto F1d3 preservado:** `udev.rs` chama `send_frame`; `~/u` lança o painel e define `AERO_WINDOW_IPC_SOCK`. Conteúdo do `foot` segue aprovado pelo juiz; nada disso foi alterado.
+- **Fase atual: F1; F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS pelo juiz + F1-cursor-shape FECHADA PELO JUIZ EM 2026-11-22 ("Aprovado").** Sem push. **PARAR: não avançar de fase nem abrir o próximo cartão sem aprovação (AGENTS.md §3.1).**
+- **O que a tarefa entregou:** protocolo `wp_cursor_shape_v1`, `CursorImageStatus` armazenado, cursor `Kind::Cursor` no plane do udev, seta do tema XCursor com hotspot real, z-order na frente da cena. Após o 1º veredito negativo: `insert(0, …)` + `xcursor 0.3.11` (MIT, aprovada e documentada em §3/Cargo.toml).
+- **Provas:** `cargo test -p aeroshell-compositor cursor::tests -- --nocapture` → 3 passed (`TEMA_XCURSO size=24x24 hotspot=(3,1)`); aviso do `foot` ausente em `foot-after2.log`/`foot-bench.log`/`foot-head.log`.
+- **Gate final:** `bash scripts/check.sh` → `OK`, `CHECK_EXIT=0`; clippy default/bench `-D warnings` → 0; `--no-default-features` → 0; 4 harnesses vizinhos OK. Amostras falhas preservadas em `/tmp/opencode/f1-cursor2/`. Commits locais até `a1828be`; árvore limpa.
+- **Para reproduzir à mão:** `~/u` no tty3, mover o mouse — seta do tema acima do `foot` e do painel, ponta sob o ponteiro. Log bench: `CURSOR_RENDER … source=theme size=24x24 hotspot=(3,1)` e `UDEV_CURSOR_PLANE …`.
+- **Próximo passo proposto (NÃO executado):** se o humano autorizar, abrir o próximo subcartão do cartão-mãe `F1-gap-protocolos.md` (ordem: primary-selection → popups-render → fractional-scale → viewporter → text-input/IM → presentation-time → dmabuf). Só com cartão e "ok".
+- **Não medido:** número de cursor planes/`cursor_size` do vmwgfx (o log ficou instrumentado, mas o veredito foi visual); desempenho em GPU real (VM sem 3D).
+- **Contexto F1d3 preservado:** `udev.rs` chama `send_frame`; `~/u` lança o painel e define `AERO_WINDOW_IPC_SOCK`. Conteúdo do `foot` segue aprovado; nada disso foi alterado.
 
