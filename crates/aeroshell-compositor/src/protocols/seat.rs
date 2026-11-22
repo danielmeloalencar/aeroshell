@@ -1,8 +1,8 @@
 //! Seat, data-device (clipboard/DnD) e output.
 
 use smithay::{
-    delegate_data_device, delegate_output, delegate_seat,
-    input::{Seat, SeatHandler, SeatState},
+    delegate_cursor_shape, delegate_data_device, delegate_output, delegate_seat,
+    input::{pointer::CursorImageStatus, Seat, SeatHandler, SeatState},
     reexports::wayland_server::{protocol::wl_surface::WlSurface, Resource},
     wayland::{
         output::OutputHandler,
@@ -13,6 +13,7 @@ use smithay::{
             },
             SelectionHandler,
         },
+        tablet_manager::TabletSeatHandler,
     },
 };
 
@@ -27,11 +28,24 @@ impl SeatHandler for AeroState {
         &mut self.seat_state
     }
 
-    fn cursor_image(
-        &mut self,
-        _seat: &Seat<Self>,
-        _image: smithay::input::pointer::CursorImageStatus,
-    ) {
+    fn cursor_image(&mut self, _seat: &Seat<Self>, image: CursorImageStatus) {
+        #[cfg(feature = "bench")]
+        {
+            let t = crate::frame_diagnostics::now_ns();
+            match &image {
+                CursorImageStatus::Hidden => eprintln!("CURSOR_SHAPE t={t} source=hidden"),
+                CursorImageStatus::Named(icon) => {
+                    eprintln!("CURSOR_SHAPE t={t} source=named shape={}", icon.name())
+                }
+                CursorImageStatus::Surface(surface) => {
+                    eprintln!(
+                        "CURSOR_SHAPE t={t} source=surface surface={:?}",
+                        surface.id()
+                    )
+                }
+            }
+        }
+        self.cursor_image = image;
     }
 
     fn focus_changed(&mut self, seat: &Seat<Self>, focused: Option<&WlSurface>) {
@@ -49,6 +63,11 @@ impl SeatHandler for AeroState {
 }
 
 delegate_seat!(AeroState);
+
+// F1-cursor-shape: o `Dispatch` do device exige `SeatHandler + TabletSeatHandler`;
+// o trait só tem métodos com corpo default (tablet_seat.rs:42-44).
+impl TabletSeatHandler for AeroState {}
+delegate_cursor_shape!(AeroState);
 
 impl SelectionHandler for AeroState {
     type SelectionUserData = ();

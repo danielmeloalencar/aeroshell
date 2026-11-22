@@ -21,6 +21,23 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **F1-cursor-shape, etapa 1 (a)+(b)+(c) — global `wp_cursor_shape_v1` (2026-11-22).** Cartões
+      `F1-gap-protocolos.md` (mãe) e `F1-cursor-shape.md` (subcartão) criados e commitados (`1043df8`).
+      Código: `state.rs` ganha `CursorShapeManagerState` + campo `cursor_image` (default `Named(Default)`);
+      `protocols/seat.rs` ganha `impl TabletSeatHandler for AeroState {}` (bound confirmado em
+      `cursor_shape.rs:243`), `delegate_cursor_shape!` e um `cursor_image` que grava o status e loga
+      `CURSOR_SHAPE t=… source=… shape=…` **só sob `bench`**. Pré-requisitos lidos na fonte fixada antes
+      de editar (cartão § Contexto). **Teste-first:** baseline no nested
+      (`/tmp/opencode/f1-cursor/foot-baseline.log`) → `warn: wayland.c:1789: compositor does not implement
+      server-side cursors, falling back to client-side cursors`; depois (`foot-after2.log`,
+      `foot-bench.log`, `foot-head.log`) → aviso **AUSENTE**; os outros 5 avisos permanecem (fora de escopo).
+      Uma amostra intermediária (`foot-after.log`) falhou em `failed to connect` por corrida de socket e
+      foi preservada, não descartada. Sonda sob `bench`: `CURSOR_SHAPE t=… source=named shape=text`
+      (`comp-head.log`, 1 linha após `motion` sintético no headless); sem motion = 0 linhas; `strings` do
+      binário: prefixo exato `CURSOR_SHAPE t=` → 3 no bench, 0 no normal (os 10 `WP_CURSOR_SHAPE_*` são
+      símbolos do Smithay, não da sonda). Gate `check.sh` EXIT=0 **após** `cargo fmt` — a 1ª execução
+      falhou só em fmt (`gate-step1.log`, preservada); clippy default/bench `-D warnings` EXIT=0 e
+      `cargo check --workspace --no-default-features` EXIT=0. **Falta a etapa (d) e o juiz visual no tty3.**
 - [x] **GAP ANALYSIS F1 (2026-11-22) — mapa dos 15 itens de `docs/plano-mestre.md:176`, SOMENTE LEITURA.**
       Classificação: **6 ✅ · 2 ~ · 7 ❌**. Os ✅, com prova no código:
       **DRM** (`backend/udev.rs:87-221` libseat→DRM→GBM→`DrmOutputManager` + conectores/CRTC; `udev.rs:579-705`

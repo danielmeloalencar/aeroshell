@@ -4,7 +4,7 @@ use std::{collections::HashMap, ffi::OsString, sync::Arc, time::Instant};
 
 use smithay::{
     desktop::{PopupManager, Space, Window, WindowSurfaceType},
-    input::{Seat, SeatState},
+    input::{pointer::CursorImageStatus, Seat, SeatState},
     output::Output,
     reexports::{
         calloop::{EventLoop, LoopSignal},
@@ -17,6 +17,7 @@ use smithay::{
     utils::{Logical, Point},
     wayland::{
         compositor::{CompositorClientState, CompositorState},
+        cursor_shape::CursorShapeManagerState,
         output::OutputManagerState,
         selection::data_device::DataDeviceState,
         shell::{
@@ -176,6 +177,9 @@ pub struct AeroState {
     pub output_manager_state: OutputManagerState,
     pub seat_state: SeatState<AeroState>,
     pub data_device_state: DataDeviceState,
+    /// F1-cursor-shape: global `wp_cursor_shape_v1` e última forma pedida pelo cliente.
+    pub cursor_shape_state: CursorShapeManagerState,
+    pub cursor_image: CursorImageStatus,
     pub popups: PopupManager,
     pub seat: Seat<Self>,
 }
@@ -228,6 +232,7 @@ impl AeroState {
         let output_manager_state = OutputManagerState::new_with_xdg_output::<Self>(&dh);
         let mut seat_state = SeatState::new();
         let data_device_state = DataDeviceState::new::<Self>(&dh);
+        let cursor_shape_state = CursorShapeManagerState::new::<Self>(&dh);
 
         let mut seat: Seat<Self> = seat_state.new_wl_seat(&dh, "aeroshell");
         seat.add_keyboard(Default::default(), 200, 25)?;
@@ -306,6 +311,8 @@ impl AeroState {
             output_manager_state,
             seat_state,
             data_device_state,
+            cursor_shape_state,
+            cursor_image: CursorImageStatus::default_named(),
             popups: PopupManager::default(),
             seat,
         })
