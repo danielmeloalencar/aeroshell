@@ -319,6 +319,15 @@ pub fn collect_output_elements(
                             break;
                         }
                     }
+                    let content = if geo.size.w > 0 && geo.size.h > 0 {
+                        client_logical
+                    } else {
+                        state
+                            .suggested_window_size
+                            .get(&window_id)
+                            .copied()
+                            .unwrap_or(client_logical)
+                    };
                     let fgeo = crate::state::FrameGeometry {
                         insets: state.default_frame_insets,
                         ..Default::default()
@@ -334,7 +343,7 @@ pub fn collect_output_elements(
                         &mut elements,
                         &fgeo,
                         loc,
-                        client_logical,
+                        content,
                         output_scale,
                         local_loc,
                         window_id,

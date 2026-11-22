@@ -115,7 +115,11 @@ if not config:
 # Esperar o pré-requisito evita falsa falha por infraestrutura (amostra crua de
 # /tmp/glue-comp-58443.log: 28 FRAME_BUFFER_COMMIT, todos com buffer=None).
 for _ in range(200):
-    if re.search(r"FRAME_BUFFER_COMMIT buffer=Some\(\(\d+, \d+\)\)", log()):
+    # FRAME_BUFFER_COMMIT pode sair intercalado com um eprintln do shell no mesmo
+    # arquivo de log. RESIZE_GLUE só existe quando o buffer WebKit foi importado
+    # com sucesso, então é a prova robusta de que o pré-requisito foi satisfeito.
+    buffers = re.findall(r"RESIZE_GLUE t=\d+ window_id=0 .*?buffer=(\d+)x(\d+)", log())
+    if any(int(w) > 0 and int(h) > 0 for w, h in buffers):
         break
     time.sleep(0.1)
 else:
@@ -384,19 +388,30 @@ GEOM_RE = re.compile(
 )
 geoms = {}
 malformed_geom = []
+interleaved_ts = set()
 for l in text.splitlines():
     if "SLICE_GEOM " not in l:
         continue
     m = GEOM_RE.search(l)
     if not m:
         malformed_geom.append(l)
+        # Shell e compositor escrevem no MESMO arquivo; uma linha SLICE_GEOM pode
+        # ser intercalada por um eprintln do shell (amostra observada em 02q).
+        # Não é uma amostra de geometria: registra o t para excluir SOMENTE aquele
+        # instante da checagem de 9 fatias, mantendo a linha impressa abaixo.
+        if "FRAMEWEB:" in l and (interleaved := re.search(r"SLICE_GEOM t=(\d+)", l)):
+            interleaved_ts.add(int(interleaved.group(1)))
         continue
     t, _wid, idx, x, y, w, h = (int(v) for v in m.groups())
     geoms.setdefault(t, {})[idx] = (x, y, w, h)
 slice_by_t = {s["t"]: s for s in slice_during}
 geom_during = {t: g for t, g in geoms.items() if t < release_ns and t in slice_by_t}
 print(f"linhas SLICE_GEOM={sum(len(g) for g in geoms.values())} malformadas="
-      f"{len(malformed_geom)} frames_durante_grab={len(geom_during)}")
+      f"{len(malformed_geom)} frames_durante_grab={len(geom_during)} "
+      f"intercaladas_por_shell={len(interleaved_ts)}")
+for l in malformed_geom:
+    print("  INTERCALADA (cru): " + l.strip())
+geom_during = {t: g for t, g in geom_during.items() if t not in interleaved_ts}
 if not geom_during:
     problems.append("nenhuma linha SLICE_GEOM durante o grab")
 else:

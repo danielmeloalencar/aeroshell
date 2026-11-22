@@ -33,8 +33,15 @@ reportado como número separado, sem ser fingido dentro do limite.
 - Depois 3×: `VEREDITO: FALHA` **somente** pelo latch quente 434–537 ms; spawn 2,0–2,5 ms;
   placeholder 7–27 ms; frio 1227–1412 ms reportado à parte; latch→presented 3,7–12,0 ms
   (`/tmp/opencode/02q-reopen/final-{1,2,3}.log`). Gate e vizinhos verdes; juiz visual pendente.
-- Bloqueio registrado: canvas inicial 1292×836 (ADR 0007) domina o paint do WebKit em software;
-  reduzi-lo exigiria autorização para reabrir o ADR. Placeholder 12×36 até o cliente commitar (§6).
+- **Decisão híbrida do humano executada:** configure inicial do xdg-shell com tamanho sugerido 800×600
+  (não 0) + `suggested_window_size` no render eliminaram o spike 12×36 — teste-primeiro em
+  `spike-baseline.log` (12×36) e depois `spike-after-full.log`/`visual-final3.log` (retângulo real,
+  0 ocorrências). ADR 0007 **NÃO** reaberto; limite de 300 ms **NÃO** alterado.
+- Finais 3× (`stages-final-{1,2,3}.log`): `VEREDITO: FALHA` somente no latch quente 448–572 ms; frio
+  1,2–1,4 s reportado à parte; spawn 2–6 ms; placeholder <100 ms; latch→presented 4–18 ms.
+  Vizinhos 6× OK; gate `gate-hybrid.log` EXIT=0; clippy bench 0; `--no-default-features` 0.
+- Juiz visual pendente na instância final `wayland-aero-02q-visual3` (PID 196471, 3 `foot`).
+  Pergunta extra ao juiz: o `foot` abrindo em ~800×600 (por causa do configure sugerido) é aceitável?
 
 ## Critério de aceite (comandos exatos + resultado esperado)
 1. **Teste primeiro:** `python3 tests/integration/frame_cold_start_stages.py` no código atual,

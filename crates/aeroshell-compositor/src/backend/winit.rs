@@ -582,6 +582,18 @@ pub fn init_winit(
                                                 break;
                                             }
                                         }
+                                        // Enquanto o cliente não comita, a geometria do
+                                        // Space é 0×0. Usa o tamanho SUGERIDO do configure
+                                        // inicial como geometria provisória do placeholder.
+                                        let content = if geo.size.w > 0 && geo.size.h > 0 {
+                                            geo.size
+                                        } else {
+                                            state
+                                                .suggested_window_size
+                                                .get(&window_id)
+                                                .copied()
+                                                .unwrap_or(geo.size)
+                                        };
                                         let fgeo = crate::state::FrameGeometry {
                                             insets: state.default_frame_insets,
                                             ..Default::default()
@@ -597,7 +609,7 @@ pub fn init_winit(
                                             &mut elements,
                                             &fgeo,
                                             loc,
-                                            geo.size,
+                                            content,
                                             output_scale,
                                             geo.loc,
                                             window_id,

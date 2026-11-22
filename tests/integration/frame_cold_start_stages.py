@@ -246,6 +246,14 @@ for window_id in (0, 1, 2):
         print(f"  placeholder_ms={placeholder_ms:.3f} aligned_ms={aligned_ms:.3f}")
         print("  PLACEHOLDER: " + first_ph["raw"].strip())
         print("  PLACEHOLDER_ALIGNED: " + last_ph["raw"].strip())
+        # Sem configure inicial com tamanho sugerido, a janela mapeia com 0×0 e
+        # o placeholder vira só as insets (12×36) — um "spike" visível na tela.
+        tw, th = first_real["target"]
+        if first_ph["size"][0] < tw // 2 or first_ph["size"][1] < th // 2:
+            problems.append(
+                f"janela {window_id}: placeholder inicial {first_ph['size']} é spike "
+                f"(target {first_real['target']}); falta geometria provisória antes do commit"
+            )
         if last_ph["size"] != first_real["target"]:
             problems.append(f"janela {window_id}: placeholder final {last_ph['size']} != target {first_real['target']}")
         if placeholder_ms > LIMIT_PLACEHOLDER_MS:
@@ -269,8 +277,13 @@ pool_takes = re.findall(r"FRAMEWEB: pool_take window_id=(\d+) available=(\d+)", 
 pool_ready = [int(v) for v in re.findall(r"FRAMEWEB: pool_ready available=(\d+)", body)]
 anchor_alive = "FRAMEWEB: anchor viva" in body
 print(f"pool_takes={pool_takes} pool_ready_sequencia={pool_ready} anchor_viva={anchor_alive}")
+# eprintln do shell e do compositor compartilham o arquivo: uma linha de pool_take
+# pode sair intercalada (amostra final-2). O associate só acontece DEPOIS de um
+# take bem-sucedido, então é a evidência robusta de que o pool forneceu a view.
+associated = sorted(set(int(v) for v in re.findall(r"associate\(window_id=(\d+)\)", body)))
+print(f"associate_por_window_id={associated}")
 for window_id in (0, 1, 2):
-    if not any(int(taken) == window_id for taken, _ in pool_takes):
+    if window_id not in associated:
         problems.append(f"pool não forneceu a janela {window_id}")
 if not pool_ready or pool_ready[-1] != 2:
     problems.append(f"pool não terminou reposto com 2 views: {pool_ready}")

@@ -78,7 +78,7 @@ def wait_for(pattern, timeout_s=30):
     return False
 
 
-if not wait_for(r"FRAMEWEB: associate\(window_id=0\)"):
+if not wait_for(r"associate\(window_id=0\)"):
     print("FALHA: associate inicial", file=sys.stderr)
     sys.exit(1)
 if not wait_for(r"RESIZE_GLUE .*buffer=\d+x\d+"):
@@ -110,7 +110,7 @@ for line in text.splitlines():
 ignored = "FRAMEWEB: activate repetido ignorado" in text
 duplicate = "janela 0 já tem frame" in text
 shell_died = "conexão privilegiada do shell caiu" in text
-associates = len(re.findall(r"FRAMEWEB: associate\(window_id=0\)", text))
+associates = len(re.findall(r"associate\(window_id=0\)", text))
 new_frames = len(re.findall(r"RESIZE_GLUE .*buffer=\d+x\d+", after))
 print(f"activate_ignorado={ignored} duplicate={duplicate} shell_died={shell_died} "
       f"associates={associates} frames_depois={new_frames}")

@@ -41,6 +41,18 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
       `frame_window_id` precisou de 1 correção de regex no harness (interleaving de `eprintln` no log
       compartilhado) e passou; `frame_cold_start.py` antigo segue baseline-falha (não foi alterado).
       **Juiz visual NÃO obtido — §7.**
+- [~] **02q decisão híbrida do humano (2026-11-22) — spike 12×36 eliminado, sem ADR.** Teste-primeiro:
+      `spike-baseline.log` mostrou placeholder inicial `(12,36)` nas janelas 1/2; depois do configure
+      inicial do xdg-shell (tamanho sugerido padrão **800×600**, não 0) e do uso dessa geometria como
+      provisória no render (`suggested_window_size` em `AeroState`), o primeiro placeholder passou a
+      `(812,636)` — retângulo real, 0 ocorrências de `w=12 h=36` (`spike-after-full.log`,
+      `visual-final3.log`). Testei também metade do output (396×299 no foot: quebrou `frame_buttons`)
+      e output cheio (1284×799: estourou o canvas na 02p); 800×600 foi a única opção com todos os
+      vizinhos verdes. 3 execuções finais (`stages-final-{1,2,3}.log`): `VEREDITO: FALHA` **somente**
+      no latch quente 448–572 ms; spawn 2–6 ms; placeholder < 100 ms; frio 1,2–1,4 s reportado à
+      parte; latch→presented 4–18 ms. Vizinhos 6× OK (3× resize_glue após robustez contra
+      interleaving de log); gate `gate-hybrid.log` EXIT=0, clippy bench 0, `--no-default-features` 0.
+      **ADR 0007 NÃO reaberto; limite de 300 ms NÃO alterado; nenhuma amostra descartada.**
 - [x] **Correção F1 FECHADA PELO HUMANO (2026-11-22).** Veredito cru: *"funcionou, abri e fechei duas
       vezes, todas exibiu a decoração"*. Humano operou e julgou no tty3; agente não abriu/fechou app de
       julgamento nem trocou VT. Cobre o critério visual que faltava no item abaixo. Os avisos relatados
@@ -852,12 +864,13 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
-- **02q reaberta — PARCIAL, aguardando decisão do humano.** Falta o juiz visual (nested e tty3) e há uma
-  lacuna objetiva: `map → 1º HTML` nas janelas quentes é 434–537 ms (>300 ms do cartão). Causa medida:
-  canvas inicial 1292×836 (ADR 0007) faz o WebKit pintar ~1,08 Mpx em software antes do 9-slice; reduzir
-  o canvas inicial exigiria reabrir ADR 0007 — **não feito sem aprovação**. Instância nested deixada aberta:
-  `wayland-aero-02q-visual`, compositor PID 181933, foots 181935/181936, log
-  `/tmp/opencode/02q-reopen/visual-nested.log`. Quem fecha é o humano.
+- **02q reaberta — decisão híbrida executada; só falta o juiz visual (nested e tty3).** Não há mais
+  decisão de ADR pendente: humano decidiu NÃO reabrir ADR 0007 e aceitar os números de paint como
+  limitação de VM. `map → 1º HTML` quente 448–572 ms e frio 1,2–1,4 s ficam documentados em §7, sem
+  alterar o limite do teste. Instância FINAL deixada aberta: `wayland-aero-02q-visual3`, compositor PID
+  196471, foots 196472/196474, log `/tmp/opencode/02q-reopen/visual-final3.log`. Instâncias antigas
+  (`...-visual`, `...-02q-final`) também seguem abertas, mas estão desatualizadas: **usar a visual3**.
+  Quem fecha é o humano.
 - **GAP ANALYSIS F1 (2026-11-22) CONCLUÍDA, SOMENTE LEITURA** — mapa em §3 (✅) e §7 (~/❌). Nenhum
   protocolo implementado; ordem de cartões proposta em §5/§7, aguardando decisão do humano.
 - **F1d3 FECHADA (2026-11-22) — ver §3.** Não há trabalho em andamento na F1d3. Cursor invisível no udev
@@ -922,11 +935,12 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
-- **02q (2026-11-22): placeholder pré-associate com conteúdo 0×0.** O cliente mapeia antes do WebView;
-  `geo.size` ainda é 0 e o placeholder do compositor aparece 12×36 (só as insets) até o cliente commitar
-  o conteúdo (~400 ms depois no caminho quente). O placeholder alinhado (708×530) aparece só ~30 ms
-  antes do HTML real. Corrigir sem duplicar constantes do tema pode exigir configurar o cliente com um
-  tamanho inicial antes do map — mudança de comportamento xdg-shell, fora do cartão atual.
+- **02q (RESOLVIDO em 2026-11-22, decisão híbrida): spike 12×36.** Era placeholder com `geo.size=0`;
+  corrigido com configure inicial (800×600 sugerido) + `suggested_window_size` no render. Amostra crua
+  antes/depois em `/tmp/opencode/02q-reopen/spike-baseline.log` e `spike-after-full.log`. Não reabrir.
+- **02q (2026-11-22; ADIADO PELO HUMANO): canvas inicial 1292×836.** O paint do WebKit em software da VM
+  domina o latch quente (448–572 ms). Reabrir ADR 0007 foi **declinado** nesta sessão; revisitar só em
+  GPU real, por interação com a 02p. Não alterar o canvas para "passar" no limite de 300 ms.
 - **02q: `set_default_insets` chega após o primeiro map** (~600–800 ms no VM) porque depende do startup
   do shell; a janela 0 mostra placeholder 696×494 (sem titlebar) até lá. A alternativa "default no
   compositor" foi PROIBIDA pelo humano (duplicaria constantes do tema HTML).
@@ -1341,12 +1355,14 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- **02q reaberta (NÃO VALIDADO VISUALMENTE):** instância nested aberta (`wayland-aero-02q-visual`,
-  PID 181933) com 3 `foot`; o humano precisa olhar se a decoração sólida aparece imediata e sem gap e
-  se o HTML chega sem "moldura pequena" no meio. O tty3 (`~/u`) também não foi julgado nesta sessão —
-  agente não troca VT. Sem o "ok" do humano, 02q NÃO fecha.
-- **02q: `map → 1º HTML` quente ≤300 ms NÃO medido como passou** (434–537 ms em 3 execuções, VM sem 3D).
-  Nenhuma amostra foi descartada e o limite do cartão não foi alterado.
+- **02q reaberta (NÃO VALIDADO VISUALMENTE):** instância FINAL aberta (`wayland-aero-02q-visual3`,
+  PID 196471, 3 `foot`, log `visual-final3.log`); as duas instâncias anteriores estão desatualizadas.
+  O humano precisa olhar: barra no primeiro instante, sem moldura 12×36, sem flash/gap, e conferir se
+  o `foot` abrindo em ~800×600 (por causa do configure sugerido) é aceitável. tty3 (`~/u`) não foi
+  julgado — agente não troca VT. Sem o "ok", 02q NÃO fecha.
+- **02q: `map → 1º HTML` quente ≤300 ms NÃO BATIDO NESTA VM** (448–572 ms em 3 execuções finais) e frio
+  1,2–1,4 s = cold-start do WebProcess. Decisão do humano: aceitar como limitação de VM, **não alterar
+  o limite do teste, não descartar amostras e não reabrir ADR 0007 agora**. Nenhuma conclusão de GPU real.
 - **Correção F1 (reabertura) — RESOLVIDA PELO JUIZ VISUAL (2026-11-22).** Humano abriu e fechou duas
   vezes e todas exibiram a decoração (§3). Histórico preservado: o harness headless provou o id novo e o
   `frame_painted`; o agente não abriu/fechou aplicação de julgamento nem trocou VT. **Não medido:**
@@ -1668,13 +1684,15 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
 - **Reproduzir:** `python3 tests/integration/frame_cold_start_stages.py` → 3× `VEREDITO: FALHA` só pelo
   latch quente (434–537 ms); baseline em `/tmp/opencode/02q-reopen/baseline{1,2,3}.log`, finais em
   `final-{1,2,3}.log`. Gate `gate-final2.log` EXIT=0.
-- **Decisão pendente do humano:** aceitar o estado atual como "funciona, mas 300 ms não batido nesta VM"
-  **ou** autorizar reabrir ADR 0007 (canvas inicial menor) / mudar o configure inicial do xdg-shell para
-  tentar o ≤300 ms. Sem isso, NÃO alterar o limite do teste.
-- **Juiz visual:** nested aberto (`wayland-aero-02q-visual`, PID 181933, 3 foot); pedir "ok" e deixar o
-  humano fechar. tty3 exige o próprio humano rodar `~/u`.
-- **Risco observado:** placeholder 12×36 até o cliente commitar conteúdo (§6) pode ser visível — confirmar
-  com o juiz antes de chamar isso de pronto.
+- **Decisão do humano (executada):** híbrido — configure inicial sugerido 800×600 + geometria provisória
+  eliminaram o spike 12×36; ADR 0007 NÃO reaberto; 300 ms aceito como não-batido nesta VM.
+- **Reproduzir (final):** `python3 tests/integration/frame_cold_start_stages.py` → `VEREDITO: FALHA` só
+  no latch quente; `stages-final-{1,2,3}.log`; `spike-baseline.log` vs `spike-after-full.log`;
+  gate `gate-hybrid.log` EXIT=0.
+- **Juiz visual:** usar SOMENTE a instância `wayland-aero-02q-visual3` (PID 196471, 3 foot,
+  `visual-final3.log`); as outras duas (`...-visual`, `...-02q-final`) estão desatualizadas. Pedir "ok"
+  e deixar o humano fechar. tty3 exige o próprio humano rodar `~/u`.
+- **Pergunta para o juiz:** o `foot` abrindo em ~800×600 por causa do configure sugerido é aceitável?
 - **F1 FECHADAS pelo juiz:** F1a/b/c/d*, cursor-shape, primary-selection, popups-render, **F1f (ok visual em 1.5 e 2 no tty3)** e **correção F1 (reabertura: humano abriu/fechou 2×, todas com decoração)**. Sem push. **PARAR: não abrir F1g/subsurfaces sem aprovação (AGENTS.md §3.1).**
 - **Correção F1 entregue:** `next_window_id` monotônico (nunca reutiliza), `window_count` = water mark + testes, shell aposenta `FrameEntry` no `Closed` (move para `retired`, limpa PENDING_FRAMES) e preserva o log `FRAMEWEB: closed recebido`. Cartão `F1-correcao-reabertura-frame.md`.
 - **Prova:** `python3 tests/integration/frame_reopen.py` → 3× `VEREDITO: OK` (id 0 → 1, `frame_painted` no novo); baseline falhou antes. Regressões `frame_window_id`, `frame_follows_resize`, `frame_buttons`, `frame_resize_glue` → OK. `frame_cold_start` segue baseline-falha (02q). Gate `check.sh` EXIT=0, clippy bench 0, `--no-default-features` 0.

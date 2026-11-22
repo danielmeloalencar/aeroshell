@@ -9,7 +9,7 @@ use smithay::{
         protocol::{wl_seat, wl_surface::WlSurface},
         Resource,
     },
-    utils::Serial,
+    utils::{Logical, Serial, Size},
     wayland::{
         compositor::with_states,
         shell::xdg::{
@@ -54,6 +54,25 @@ impl XdgShellHandler for AeroState {
         self.next_window_id = self.next_window_id.saturating_add(1);
         let n = window_id as i32;
         let loc = (60 + n * 40, 80 + n * 40);
+        // Mecanismo padrão do xdg-shell: o compositor SUGERE um tamanho no
+        // configure inicial. O cliente pode escolher outro, mas até o primeiro
+        // commit a janela tem geometria 0×0 — é isso que fazia o placeholder do
+        // compositor virar só as insets (12×36). 800×600 é a sugestão padrão
+        // neutra (o cliente é livre para escolher o seu): não é constante do
+        // tema, não depende do output e não estoura o canvas fixo da 02p.
+        let suggested = Size::<i32, Logical>::new(800, 600);
+        self.suggested_window_size.insert(window_id, suggested);
+        if let Some(toplevel) = window.toplevel() {
+            toplevel.with_pending_state(|state| state.size = Some(suggested));
+            let _ = toplevel.send_configure();
+        }
+        #[cfg(feature = "bench")]
+        eprintln!(
+            "INITIAL_CONFIGURE t={} window_id={window_id} w={} h={}",
+            crate::frame_diagnostics::now_ns(),
+            suggested.w,
+            suggested.h
+        );
         self.space.map_element(window, loc, false);
         if let Some(window) = self.space.elements().last() {
             tracing::info!(

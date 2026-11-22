@@ -14,7 +14,7 @@ use smithay::{
             Display, DisplayHandle, Resource,
         },
     },
-    utils::{Logical, Point},
+    utils::{Logical, Point, Size},
     wayland::{
         compositor::{with_states, CompositorClientState, CompositorState},
         cursor_shape::CursorShapeManagerState,
@@ -168,6 +168,12 @@ pub struct AeroState {
     pub last_render_order: Vec<String>,
     /// Permite testes de protocolo validarem IDs sem criar uma janela xdg real.
     pub test_window_count: usize,
+    /// Tamanho SUGERIDO no configure inicial de cada toplevel (800×600 padrão
+    /// lógico). Serve de geometria provisória ao placeholder enquanto o cliente
+    /// não comita o conteúdo real — sem isso a janela mapeia 0×0 e só aparece a
+    /// moldura das insets (12×36). Política padrão de sizing do compositor, não
+    /// constante de tema nem decisão de privilégio.
+    pub suggested_window_size: HashMap<u32, Size<i32, Logical>>,
     /// Geometria da decoração anunciada pelo shell no startup via
     /// `set_default_insets`. Usada pelo placeholder do compositor para janelas
     /// mapeadas que ainda não têm WebView associado; `set_insets` do frame
@@ -346,6 +352,7 @@ impl AeroState {
             last_render_order: Vec::new(),
             test_window_count: 0,
             default_frame_insets: (0, 0, 0, 0),
+            suggested_window_size: HashMap::new(),
             test_client_count: 0,
             compositor_state,
             xdg_shell_state,
