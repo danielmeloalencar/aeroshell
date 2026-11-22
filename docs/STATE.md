@@ -21,6 +21,17 @@ próxima decisão depende do log com `RUST_LOG=debug` enviado pelo humano.**
 F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **F1d3-diagnóstico (2ª iteração, evidência de apresentação), 2026-11-22** — no log do tty3 do humano
+      (`/tmp/opencode/f1d3-rediag/judge-log-032739-excerpt.txt`, recorte do texto colado): `UDEV_SESSION
+      active=true`, `UDEV_OUTPUT active=true`, `UDEV_FRAME seq=1/2 queued="ok"`, `UDEV_VBLANK n=1/2/60
+      submitted="ok"`. **O caminho render→queue→vblank submitted FUNCIONOU**; a tela segue negada pelo juiz.
+      Dois defeitos do próprio diagnóstico corrigidos: (1) regex do analisador exigia `queued=ok` sem aspas,
+      mas o tracing imprime `queued="ok"` — baseline FALHA (`frame=0 vblank=0`), depois `VEREDITO: OK`
+      (`frame=6 queued=ok=2 vblank=3`); (2) atalho de VT usava keycodes evdev crus, mas o libinput do Smithay
+      devolve XKB = evdev+8 (`backend/libinput/mod.rs:113-117`) — agora Ctrl=37/105, Alt=64/108, F1..F4=67..70,
+      com `UDEV_KEY` para auditar. Filtro do `UDEV_FRAME` passou a registrar TODO frame não-vazio (antes só
+      os 10 primeiros + 1/250, o que escondia exatamente os frames após o `foot` mapear).
+      Gate/regressões: `/tmp/opencode/f1d3-rediag/gate-vtfix.log`. **Nenhum pixel medido; juiz visual pendente.**
 - [x] **F1d3-diagnóstico (instrumentação + atalho VT), 2026-11-22** — cartão `docs/tasks/F1d3-diagnostico-visual.md`.
       Novo `tests/integration/udev_frame_probe.py`: baseline no recorte do log do juiz
       `/tmp/opencode/f1d3-rediag/judge-log-excerpt.txt` → `VEREDITO: FALHA` (`EXIT=1`, 0 linhas `UDEV_*`);
@@ -525,6 +536,14 @@ F1 anterior revertida em `4307cc4`.
 8. `05-compatibilidade-protocolos.md` — RASCUNHO; 7 mensagens do `foot` registradas em §6. NÃO executar sem ok.
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- F1d3-diagnóstico (AMOSTRA, arquivo original sumiu 2×): tanto `aeroshell-udev-20261122-023701.log` quanto
+  `aeroshell-udev-20261122-032739.log` não existem mais em `/home/daniel` após o reboot; usei recortes literais
+  do texto colado pelo humano (`/tmp/opencode/f1d3-rediag/judge-log-excerpt.txt`,
+  `judge-log-032739-excerpt.txt`). **Pedir ao humano que copie o arquivo para `/tmp` ou envie o conteúdo
+  antes de reiniciar**, para não depender de transcrição.
+- F1d3-diagnóstico (ERRO MEU, corrigido): os keycodes do atalho de VT foram escritos como evdev crus;
+  o Smithay soma 8 (XKB) no libinput. Sintoma: `UDEV_VT` nunca apareceu no log. Correção em `udev.rs`,
+  com `UDEV_KEY` para auditar os códigos reais no próximo log.
 - F1d3-diagnóstico (AMOSTRA, arquivo original sumiu): o arquivo `/home/daniel/aeroshell-udev-20261122-023701.log`
   não existe mais em `/home/daniel` após o reboot do humano; o recorte literal colado na mensagem foi preservado
   em `/tmp/opencode/f1d3-rediag/judge-log-excerpt.txt` (NÃO é o arquivo original — as linhas `\00` finais
@@ -840,6 +859,15 @@ F1 anterior revertida em `4307cc4`.
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- F1d3 (**3º JUIZ VISUAL NEGOU — 2026-11-22, dado do humano**): rodou `~/u` (script com `RUST_LOG=debug`)
+  no tty3 e respondeu **"mesma coisa aconteceu"**. Agora há evidência objetiva no log:
+  `UDEV_SESSION active=true`, `UDEV_DRM active=true`, `UDEV_OUTPUT active=true`,
+  `UDEV_FRAME seq=1/2 is_empty=false queued="ok"` e `UDEV_VBLANK n=1/2/60 submitted="ok"`.
+  Analisador corrigido (aspas): `VEREDITO: OK`. Ou seja, **o DRM aceitou frames e confirmou vblank**;
+  o que falta saber é se os frames com o `foot`/frame mapeados foram enfileirados — o filtro antigo do
+  `UDEV_FRAME` escondia exatamente esses frames (agora registra todo não-vazio). Também não houve
+  `UDEV_VT`/`UDEV_SESSION_EVENT`: o atalho estava com keycode errado (§6), corrigido mas **não validado**.
+  Causa da imagem ausente **AINDA NÃO identificada**; não escolher hipótese sem o próximo log.
 - F1d3 (**2º JUIZ VISUAL NEGOU — 2026-11-22, dado do humano**): rodou `~/run-aeroshell-udev.sh` no tty3.
   Relato cru: *"o mouse funciona, mas nao aparece cursor, consegui mover a janela as cegas e tambem digitei
   exit no terminal e dei enter, a janela fechou, mesmo sem ter renderizado o foot nela. Nao deu pra sair do
@@ -1066,5 +1094,5 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
 - F1d3: `render/scene.rs` unifica a cena; `backend/udev.rs` faz libseat → udev → DRM/GBM → EGL → `DrmOutputManager` → libinput → vblank → render por timer. Diagnóstico: `UDEV_SESSION`/`UDEV_OUTPUT`/`UDEV_FRAME`/`UDEV_VBLANK`/`UDEV_SESSION_EVENT`/`UDEV_VT` + `Ctrl+Alt+F1..F4` via `change_vt`. Cursor invisível/hotplug logado são dívidas (§6).
 - Prova desta sessão: `check.sh` CHECK=0, clippy bench 0, `--no-default-features` 0, sonda 0, fmt 0; s1_nested=0, headless OK, multi=0 (`/tmp/opencode/f1d3-rediag/{gate-final,regressions}.log`). Analisador: baseline FALHA (0 linhas), self-test OK (fixture sintética). Nenhum pixel/juiz executado pelo agente: sem VT aqui, `--backend udev` falha com `EAGAIN`.
 - F1d2 (fechada): sonda GBM em `renderD128` medida (4 formats RENDERING|SCANOUT, dmabuf, 8 conectores/35 modos); `libgbm.so.1` em `DT_NEEDED`.
-- **Próximo passo (DO HUMANO):** no tty3 digitar só **`~/u`** e Enter (script já fixa `RUST_LOG=debug` e grava log); usar `Ctrl+Alt+F2` (sair) e `F3` (voltar); enviar o log novo. Agente roda `python3 tests/integration/udev_frame_probe.py <log>` e só então escolhe UMA hipótese. Plano B (dumb+legacy+pixman) exige aprovação explícita.
+- **Próximo passo (DO HUMANO):** no tty3 digitar só **`~/u`** e Enter (já fixa `RUST_LOG=debug`); usar `Ctrl+Alt+F2` (sair) e `F3` (voltar) — agora com keycode XKB corrigido; enviar o log novo (copie para `/tmp` antes de reiniciar, se possível). Agente roda `python3 tests/integration/udev_frame_probe.py <log>` e lê os frames NÃO-vazios após o `foot` mapear para escolher UMA hipótese. Plano B (dumb+legacy+pixman) exige aprovação explícita.
 

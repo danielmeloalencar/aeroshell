@@ -17,12 +17,13 @@ ANSI = re.compile(r"\x1b\[[0-9;]*m")
 PATTERNS = {
     "session": re.compile(r"UDEV_SESSION active=(true|false) seat=(\S+)"),
     "output": re.compile(r"UDEV_OUTPUT crtc=(\S+) active=(true|false) connectors=(\d+)"),
+    # O tracing imprime campos string COM aspas (queued="ok"); aceitar as duas formas.
     "frame": re.compile(
-        r"UDEV_FRAME seq=(\d+) is_empty=(true|false) needs_sync=(true|false) queued=(ok|empty|err)"
+        r'UDEV_FRAME seq=(\d+) is_empty=(true|false) needs_sync=(true|false) queued="?(ok|empty|err)"?'
     ),
-    "vblank": re.compile(r"UDEV_VBLANK crtc=(\S+) n=(\d+) submitted=(ok|err)"),
+    "vblank": re.compile(r'UDEV_VBLANK crtc=(\S+) n=(\d+) submitted="?(ok|err)"?'),
     "session_event": re.compile(r"UDEV_SESSION_EVENT event=(\S+) active=(true|false)"),
-    "vt": re.compile(r"UDEV_VT key=F(\d+) vt=(\d+) result=(ok|err)"),
+    "vt": re.compile(r'UDEV_VT key=F(\d+) vt=(\d+) result="?(ok|err)"?'),
 }
 ERROR_MARKERS = (
     "render_frame falhou",
@@ -110,10 +111,10 @@ def self_test():
         [
             "UDEV_SESSION active=true seat=seat0",
             "UDEV_OUTPUT crtc=crtc::Handle(45) active=true connectors=1",
-            "UDEV_FRAME seq=1 is_empty=false needs_sync=true queued=ok",
-            "UDEV_VBLANK crtc=crtc::Handle(45) n=1 submitted=ok",
+            "UDEV_FRAME seq=1 is_empty=false needs_sync=true queued=\"ok\"",
+            "UDEV_VBLANK crtc=crtc::Handle(45) n=1 submitted=\"ok\"",
             "UDEV_SESSION_EVENT event=ActivateSession active=true",
-            "UDEV_VT key=F2 vt=2 result=ok",
+            "UDEV_VT key=F2 vt=2 result=\"ok\"",
         ]
     )
     bad = "FRAMEWEB: pool_ready\nsessão libseat aberta seat=seat0\nudev: loop de render vivo tick=1500\n"

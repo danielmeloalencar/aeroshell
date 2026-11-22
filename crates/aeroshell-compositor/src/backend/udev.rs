@@ -242,13 +242,14 @@ pub fn init_udev(
         .handle()
         .insert_source(input_backend, move |event, _, data| {
             if let InputEvent::Keyboard { event } = &event {
-                // Keycode são os KEY_* de input-event-codes.h (Smithay 0.7.0,
-                // backend/input/mod.rs:100-114).
+                // ATENÇÃO: o libinput do Smithay devolve keycode XKB = evdev + 8
+                // (smithay-0.7.0/src/backend/libinput/mod.rs:113-117). Não usar os
+                // KEY_* crus de input-event-codes.h aqui.
                 let code: u32 = event.key_code().into();
                 let pressed = event.state() == KeyState::Pressed;
                 let mask = match code {
-                    29 | 97 => 1,  // KEY_LEFTCTRL / KEY_RIGHTCTRL
-                    56 | 100 => 2, // KEY_LEFTALT / KEY_RIGHTALT
+                    37 | 105 => 1, // KEY_LEFTCTRL+8 / KEY_RIGHTCTRL+8
+                    64 | 108 => 2, // KEY_LEFTALT+8 / KEY_RIGHTALT+8
                     _ => 0,
                 };
                 let modifiers = vt_modifiers.get();
@@ -259,9 +260,12 @@ pub fn init_udev(
                         modifiers & !mask
                     });
                 }
-                if pressed && modifiers == 3 && (59..=62).contains(&code) {
-                    // KEY_F1..KEY_F4 => VT 1..4. Não repassar ao cliente.
-                    let vt = (code - 58) as i32;
+                if mask != 0 || (67..=70).contains(&code) {
+                    tracing::debug!(code, pressed, modifiers, "UDEV_KEY");
+                }
+                if pressed && modifiers == 3 && (67..=70).contains(&code) {
+                    // KEY_F1..KEY_F4 em XKB => VT 1..4. Não repassar ao cliente.
+                    let vt = (code - 66) as i32;
                     let result = vt_session.change_vt(vt);
                     tracing::info!(
                         key = format!("F{vt}"),
@@ -385,9 +389,14 @@ pub fn init_udev(
                                 }
                             }
                         };
-                        // Debug em RUST_LOG=debug: primeiros frames + cadência baixa,
-                        // para não inchar o log do tty3 com 60 linhas/s.
-                        if frame_seq <= 10 || frame_seq.is_multiple_of(250) || queued == "err" {
+                        // Debug em RUST_LOG=debug: TODO frame com conteúdo (não vazio)
+                        // entra no log; os vazios só amostram a cadência. Assim o log
+                        // mostra se a cena nova realmente foi enfileirada para o DRM.
+                        if frame_seq <= 10
+                            || frame_seq.is_multiple_of(250)
+                            || !is_empty
+                            || queued == "err"
+                        {
                             tracing::debug!(
                                 seq = frame_seq,
                                 is_empty,
