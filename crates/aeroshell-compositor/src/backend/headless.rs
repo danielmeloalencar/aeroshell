@@ -90,6 +90,9 @@ pub fn init_headless(
     let buffer_size: Size<i32, BufferCoord> = Size::new(size.w, size.h);
     let mut renderbuffer = renderer.create_buffer(Fourcc::Abgr8888, buffer_size)?;
     let mut tracker = OutputDamageTracker::from_output(&output);
+    // O renderbuffer é persistente (não há swapchain): depois do primeiro draw,
+    // o conteúdo disponível é sempre o da tentativa anterior, equivalente a age=1.
+    let mut age = 0;
 
     let timer = Timer::from_duration(Duration::from_millis(16));
     event_loop
@@ -101,6 +104,7 @@ pub fn init_headless(
                 &mut renderer,
                 &mut renderbuffer,
                 &mut tracker,
+                &mut age,
             );
             TimeoutAction::ToDuration(Duration::from_millis(16))
         })?;
@@ -117,6 +121,7 @@ fn render_headless(
     renderer: &mut GlesRenderer,
     renderbuffer: &mut GlesRenderbuffer,
     tracker: &mut OutputDamageTracker,
+    age: &mut usize,
 ) {
     let state = &mut data.state;
     let output_scale = output.current_scale().fractional_scale();
@@ -256,9 +261,15 @@ fn render_headless(
             return;
         }
     };
-    match tracker.render_output(renderer, &mut target, 0, &elements, [0.08, 0.08, 0.10, 1.0]) {
+    match tracker.render_output(
+        renderer,
+        &mut target,
+        *age,
+        &elements,
+        [0.08, 0.08, 0.10, 1.0],
+    ) {
         Ok(rendered) => {
-            let _ = &rendered;
+            let had_damage = rendered.damage.is_some();
             #[cfg(feature = "bench")]
             {
                 let damage = match rendered.damage {
@@ -270,9 +281,15 @@ fn render_headless(
                         .collect::<Vec<_>>()
                         .join(";"),
                 };
-                eprintln!("HEADLESS_FRAME output={} damage={damage}", output.name());
+                eprintln!(
+                    "HEADLESS_FRAME output={} age={age} damage={damage}",
+                    output.name()
+                );
                 // 02o: pixels REAIS do alvo offscreen, só com AERO_PIXEL_DUMP_DIR.
                 crate::frame_pixel_probe::capture(renderer, &target, 0, false);
+            }
+            if had_damage {
+                *age = 1;
             }
         }
         Err(err) => {

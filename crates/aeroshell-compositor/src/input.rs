@@ -10,10 +10,30 @@ use smithay::{
         pointer::{AxisFrame, ButtonEvent, MotionEvent},
     },
     reexports::wayland_server::{protocol::wl_surface::WlSurface, Resource},
-    utils::SERIAL_COUNTER,
+    utils::{Logical, Rectangle, SERIAL_COUNTER},
 };
 
 use crate::state::AeroState;
+
+/// Espaço de coordenadas do ponteiro absoluto do winit.
+///
+/// `smithay-0.7.0/src/backend/winit/mod.rs:482-490` normaliza a posição pela
+/// janela host inteira (N tiles), mas `input.rs` transformava usando apenas
+/// o primeiro output: com host 1280×480 e output 640×480 o ponteiro andava
+/// pela metade e o output da direita ficava inalcançável.
+fn absolute_pointer_space(
+    geometries: impl IntoIterator<Item = Rectangle<i32, Logical>>,
+) -> Option<Rectangle<i32, Logical>> {
+    let mut iter = geometries.into_iter();
+    let first = iter.next()?;
+    Some(iter.fold(first, |acc, geo| {
+        let x = acc.loc.x.min(geo.loc.x);
+        let y = acc.loc.y.min(geo.loc.y);
+        let right = (acc.loc.x + acc.size.w).max(geo.loc.x + geo.size.w);
+        let bottom = (acc.loc.y + acc.size.h).max(geo.loc.y + geo.size.h);
+        Rectangle::new((x, y).into(), (right - x, bottom - y).into())
+    }))
+}
 
 impl AeroState {
     /// Injeção de ponteiro usada pelo backend headless de teste (S3).
@@ -133,13 +153,16 @@ impl AeroState {
             }
             InputEvent::PointerMotion { .. } => {}
             InputEvent::PointerMotionAbsolute { event, .. } => {
-                let Some(output) = self.space.outputs().next() else {
+                // O winit normaliza pelo tamanho da janela host; em N>1 isso
+                // inclui todos os outputs, não apenas o primeiro.
+                let geometries = self
+                    .space
+                    .outputs()
+                    .filter_map(|output| self.space.output_geometry(output));
+                let Some(space_geo) = absolute_pointer_space(geometries) else {
                     return;
                 };
-                let Some(output_geo) = self.space.output_geometry(output) else {
-                    return;
-                };
-                let pos = event.position_transformed(output_geo.size) + output_geo.loc.to_f64();
+                let pos = event.position_transformed(space_geo.size) + space_geo.loc.to_f64();
                 let serial = SERIAL_COUNTER.next_serial();
                 let pointer = self.seat.get_pointer().unwrap();
                 let under = self.surface_under(pos);
@@ -217,5 +240,25 @@ impl AeroState {
             }
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ponteiro_absoluto_cobre_todos_os_outputs() {
+        let geos = [
+            Rectangle::<i32, Logical>::new((0, 0).into(), (640, 480).into()),
+            Rectangle::<i32, Logical>::new((640, 0).into(), (640, 480).into()),
+        ];
+        let Some(space) = absolute_pointer_space(geos) else {
+            panic!("dois outputs devem produzir geometria");
+        };
+        assert_eq!(
+            (space.loc.x, space.loc.y, space.size.w, space.size.h),
+            (0, 0, 1280, 480)
+        );
     }
 }

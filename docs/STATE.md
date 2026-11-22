@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-21 · **Fase atual: F1** · F0 fechada formalmente (relatório go/no-go + deferimentos) · 02q FECHADA pelo juiz (harness de 300 ms segue como lacuna registrada)
+Última atualização: 2026-11-21 · **Fase atual: F1** · F1c com prova técnica + moldura gigante corrigida, juiz visual PENDENTE · 02q FECHADA pelo juiz (harness de 300 ms segue como lacuna registrada)
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -15,7 +15,7 @@ lock, login) é TSX renderizado por WebKitGTK; runtime de política em Bun. Dev 
 decoração HTML funcional e painel React/TSX; fechamento formal em `docs/f0-relatorio-go-no-go.md` (quadro
 S1–S5, ratificação registrada dos ADRs, S4→F2/F9 e S5→F5/F6 deferidos com justificativa).
 F1 em andamento por cartões pequenos: F1a e F1b FECHADAS (F1a com juiz visual OK; F1b fechada pelo humano);
-próximo cartão F1c, somente após novo pedido/aprovação. F1 anterior revertida em `4307cc4`.
+F1c em andamento com prova técnica e juiz visual pendente; F1d só após novo pedido/aprovação. F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
 - [x] Compositor nested (winit) com socket próprio, xdg-shell, layer-shell — `scripts/check.sh` (S1 nested)
@@ -362,10 +362,45 @@ próximo cartão F1c, somente após novo pedido/aprovação. F1 anterior reverti
   `-D warnings` → EXIT=0; fmt → EXIT=0. Regressão nested (`/tmp/opencode/f1b/nested_*.log`): 10/12 OK na
   1ª rodada; `frame_configure_hygiene.py` falhou (`frame WebView não commitou buffer inicial`) e passou na
   **repetição diagnóstica única**; `frame_cold_start.py` segue baseline-falha (§7).
+- [~] F1c (CÓDIGO + PROVA TÉCNICA; JUIZ VISUAL PENDENTE): winit N>1 renderiza cada output em
+  `GlesTexture` persistente com tracker próprio e coordenadas locais, compõe os tiles na janela host;
+  N=1 segue no ramo original com `age=0`. Headless usa `age=1` após o primeiro draw. Nenhuma feature,
+  dependência, protocolo, ADR, geometria do 9-slice ou arquivo protegido novo/alterado.
+  **Testes primeiro vistos falhando:** `multi_output_damage.py` sem `OUTPUT_FRAME output=aero-1`
+  (`/tmp/opencode/f1c/baseline-multi-output-final.log`); headless sem `age>0/none` nem dano parcial
+  (`f1c/baseline-headless.log`). Depois, multi final 5/6 (`f1c/after-multi-content-final{5,6}.log`)
+  → `VEREDITO: OK`: 3 frames estáveis por output com `age=1 damage=none`, dano parcial após o 2º
+  foot e dano parcial em `aero-1` após arrastar a janela 1 para o segundo tile. Final 5 preservou
+  1 linha malformada por interleaving; final 6 teve 0. Headless: 4× OK (`after-headless-age{1,2,3}.log`,
+  `final-headless.log`), com `kind=frame`, `age=1 damage=none`, retângulo parcial e célula da titlebar
+  `rgb=(43,43,43)` vs clear `(20,20,25)` (`diff=21,33`), não apenas bytes não nulos.
+  Regressão nested (`f1c/regression/`): 11 harnesses OK; `frame_cold_start.py` manteve a baseline-falha
+  (421,578/434,266 ms > 300 ms), sem repetição para esconder. Gate `f1c/check-final.log` EXIT=0
+  (28 Rust + 9 Bun); clippy bench e fmt EXIT=0 (`f1c/{clippy-bench,fmt}-final.log`). Juiz visual: §7/§9.
+- [~] F1c (JUIZ VISUAL 1 NEGADO + CORREÇÃO OBJETIVA): o print humano mostrou os 2 foot de ponta-cabeça.
+  A sonda host reproduziu `rgb=(20,20,25) diff=0` na região da titlebar
+  (`orientation-baseline-double-flip-private-bus2.log`). `Normal` sozinho NÃO bastou: o framebuffer real era
+  1280×800 contra tracker 1280×480; `request_inner_size` (API winit 0.30.13 `window.rs:764-800`) corrigiu o
+  tamanho real. Host `Normal` + resize explícito → 2× `VEREDITO: OK`
+  (`orientation-after-normal-request-size{,3}.log`), `size=1280x480`, titlebar `rgb=(43,43,43) diff=21,33`.
+  Falhas intermediárias de harness e colisão D-Bus estão preservadas em §6. Gate pós-correção
+  `check-after-orientation.log` EXIT=0 (28 Rust + 9 Bun), clippy bench/fmt EXIT=0. Novo juiz visual PENDENTE.
+- [~] F1c (JUIZ VISUAL 2 — moldura ocupando metade da tela, CORREÇÃO OBJETIVA): humano relatou por texto
+  "estou vendo uma moldura ocupando a metade inteira da tela"; o modelo não lê imagem, então o relato
+  prevaleceu sobre a medição anterior (~400×336). Nova medição no dump do host (64×40 células/1280×480):
+  output 1 tinha `(43,43,43)` em 32/32 colunas (640 px) em y=38..39; output 0, 20/32 colunas (foot).
+  Canvas inicial 652×516 é por design (ADR 0007: >= output + insets); a causa foi o fallback de "frame
+  sem cliente mapeado" (`winit.rs:184-202`) desenhar a layer surface do OUTRO output inteira, sem 9-slice,
+  na origem (0,0) de cada output. Correção: `state.rs frame_has_mapped_client()` + fallback em `winit.rs`
+  pula frames cujo cliente já mapeou (desenhados pelo 9-slice no output do cliente). Teste primeiro em
+  `multi_output_damage.py` (`decoração_por_metade`): baseline FALHOU (`{0:20, 1:32}`,
+  `oversize-baseline.log`), depois 2× OK (`{0:20, 1:0}`, `oversize-after{,2}.log`). Gate
+  `check-oversize.log` EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0. Juiz visual: §7/§9.
 ## 4. Em andamento
-- Nenhuma implementação em andamento: F1b FECHADA pelo humano ("ok", 2026-11-21) após relatório com gate,
-  teste-primeiro, render compartilhado nos dois branches e regressão nested (§3). F1c NÃO iniciada;
-  abrir cartão próprio e obter aprovação antes de qualquer código.
+- F1c EM ANDAMENTO: implementação, regressão, gate e medição da moldura verdes em §3; falta o juiz visual
+  da correção da moldura gigante. Nova instância ÚNICA e sem timeout ABERTA (2 outputs, 2 `foot`):
+  ver PIDs/socket/log em `visual-oversize-current.env` (§9). A instância antiga (51121) foi encerrada.
+  Não encerrar pelo agente; sem "ok visual F1c", não fechar F1c/iniciar F1d.
 - A 02p foi concluída com pixels, vizinhos, gate/clippy e juiz visual positivos (§3).
 - 02o SUBSTITUÍDA pela medição/correção 02p; não ajustar sua grade antiga nem reabrir sem novo pedido.
 - 02n: **JUIZ VISUAL NEGOU (2026-11-20)** — humano: "problema ainda ocorre". Técnica/gate/clippy provados 3× (§3),
@@ -394,8 +429,8 @@ próximo cartão F1c, somente após novo pedido/aprovação. F1 anterior reverti
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. `F1c` — multi-output no winit + damage incremental (`age>0`) + mais cobertura do 9-slice no headless.
-   F1b FECHADA (§3); abrir cartão próprio antes de executar, um por sessão.
+0. `F1c` — prova técnica + moldura gigante corrigida e gate verde (§3); aguardar "ok visual F1c" na instância
+   aberta. Depois do fechamento, `F1d`/udev exige pedido e aprovação separados (inclusive features/apt).
    Não reabrir 02q pela divergência do cronômetro sem pedido explícito do humano.
 1. `02o` — SUBSTITUÍDA: a 02p criou sonda full-res que reproduziu o flicker (2×1.910 pixels) e depois
    comprovou canvas fixo sem transiente. A grade antiga não é mais critério; não reabrir sem novo pedido.
@@ -410,6 +445,29 @@ próximo cartão F1c, somente após novo pedido/aprovação. F1 anterior reverti
 8. `05-compatibilidade-protocolos.md` — RASCUNHO; 7 mensagens do `foot` registradas em §6. NÃO executar sem ok.
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- F1c (FALLBACK N>1, descoberto ao corrigir a moldura): o mesmo padrão de fallback "frame sem cliente"
+  existe em `winit.rs:699` (N=1), `headless.rs:223` e `headless.rs:314`. Só o caminho N>1 foi alterado,
+  porque é o único onde outro output pode cair no fallback; nos demais não há sintoma relatado. Não
+  reabrir sem novo pedido.
+- F1c (HARNESS, amostra preservada): `oversize-after.log` teve 1 linha malformada por interleaving de
+  `libEGL warning` (`OUTPUT_FRAME output=aero-1 seq=libEGL warning...`); a repetição `oversize-after2.log`
+  teve `malformadas=0`. Nenhuma amostra apagada; o warning intercalado não é evidência de dano.
+- F1c (VISUAL/HARNESS, amostras preservadas): a 1ª execução com a instância antiga aberta colidiu o
+  `application_id` e não mediu orientação; D-Bus privado isolou as provas. O avaliador teve 1 TypeError
+  (strings de `SLICE_GEOM`) e 2 corridas de estado estável parcial (`KeyError`), corrigidos sem alterar produto;
+  `orientation-after-normal-request-size2.log` é uma dessas falhas, não uma amostra válida. O 1º launcher da
+  nova instância usou `$$` em vez de `$!` e terminou o D-Bus (`wait ... não é um processo filho`), sem processos
+  sobreviventes; o launcher foi corrigido, sem mexer no compositor.
+- F1c (HOST, limitação explícita): o damage incremental com `age=1` vale para as texturas por output e para
+  o renderbuffer headless. A composição winit do host usa `age=0`/full damage em todo vsync, para manter a
+  cadência; reduzir o damage do host NÃO foi implementado nem medido.
+- F1c (1ª POLÍTICA, amostra preservada): pular compose+submit quando tudo estava estável causou busy-loop
+  (`after-multi-1.log`: 99.312 `OUTPUT_FRAME`, seq=49.656; 2º frame real ~31 s após o map). Full host a cada
+  vsync removeu esse gargalo funcional; não é conclusão de desempenho em VM sem 3D.
+- F1c (HARNESS, amostras preservadas): `after-multi-content-final2.log` aceitou uma linha intercalada
+  (`target=408FRAMEWEB...window_id=1`) com regex frouxo; `final4.log` esperou dano novo DEPOIS do buffer real,
+  mas a cena estável corretamente emitiu só `none` até seq=1713. O teste agora exige `RESIZE_GLUE` completo +
+  `SLICE_GEOM` válido e mede o intervalo desde antes do spawn; final 5/6 OK. Nenhuma amostra foi apagada.
 - F1b (DAMAGE, limitação medida — não é bug): o alvo é um `GlesRenderbuffer` offscreen sem buffer-age e o
   render usa `age=0`, então TODOS os frames saem com `damage=1280x800@0,0`. Redução de damage (age>0) é
   critério de F1c, não foi tentada nem medida aqui.
@@ -657,6 +715,18 @@ próximo cartão F1c, somente após novo pedido/aprovação. F1 anterior reverti
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- F1c (JUIZ VISUAL 2 NEGADO → 3 PENDENTE): humano relatou "somente o arrastar do foot a esquerda
+  funciona e mal", "vejo janela com decoração nos outputs; não deveria" e, por fim, "estou vendo uma
+  moldura ocupando a metade inteira da tela". O modelo NÃO lê imagem; os relatos por texto são dados.
+  Causa 1 (arrasto): `input.rs:136` usava só o primeiro output (640×480) contra host 1280×480 — corrigido
+  por união das geometrias (`absolute_pointer_space`), teste falhou antes (`640` vs `1280`) e passou depois.
+  Causa 2 (moldura gigante): fallback N>1 desenhava o frame do outro output inteiro (652×516) na origem;
+  corrigido em §3, medição `{0:20, 1:32}` → `{0:20, 1:0}` colunas. A decoração dos FEET (titlebar "janela")
+  é por design do F0/F1b e permanece; os outputs em si não têm título. Falta o "ok visual F1c" na instância
+  aberta, cobrindo: um foot por metade, moldura do tamanho do foot, titlebar no topo, arrasto dos dois lados
+  sem piscar. NÃO fechar F1c nem iniciar F1d sem o "ok".
+- F1c (NÃO MEDIDO): desempenho/FPS/latência em GPU real (VM sem 3D); resize dinâmico da janela host N>1
+  (o host fica fixo em N tiles); damage incremental do host (full por decisão, §6). N=1 manteve `age=0`.
 - F1b (NÃO MEDIDO): desempenho/FPS/latência do headless em GPU real (VM sem 3D, llvmpipe); o que foi medido
   foi funcionamento, contagens de frames, damage (sempre full, §6) e pixels não nulos. Nenhum juiz visual se
   aplica ao headless (sem tela); o winit não foi tocado nesta tarefa.
@@ -816,18 +886,18 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **Fase atual: F1.** F0, F1a (`342552d`) e F1b (`740b98d`) FECHADAS; F1c NÃO iniciada.
-- F1b: headless renderiza EGL surfaceless (`GlesRenderbuffer` offscreen) + `OutputDamageTracker` + timer 16 ms,
-  usando o MESMO `push_frame_elements` do winit (winit e `render/elements.rs` intocados). 2 `unsafe` com SAFETY.
-- Teste-primeiro: `timeout esperando HEADLESS_FRAME` no baseline → 3× `VEREDITO: OK` + 1 final
-  (`/tmp/opencode/f1b/{baseline,after1,after2,after3,final}.log`). `kind=frame`=33 e `kind=placeholder`=12:
-  9-slice e placeholder provados no 2º backend, com pixels 64×40×3 não nulos.
-- Damage SEMPRE full (`age=0`, offscreen sem buffer-age) — limitação medida em §6; incremental é F1c.
-- Gate `bash scripts/check.sh` verde; clippy default+bench `-D warnings` EXIT=0; fmt OK. Nested 10/12 OK,
-  `configure_hygiene` passou na repetição diagnóstica única (§6); `cold_start` segue baseline-falha (§7).
-- Próximo passo: abrir cartão F1c (multi-output no winit + damage incremental `age>0`); um por sessão.
-- Reproduzir: `python3 tests/integration/headless_render_damage.py` + `bash scripts/check.sh`.
-- VM sem 3D: sem conclusão de desempenho; udev real não validado aqui.
-- F1d (udev) exige aprovação SEPARADA de apt (libgbm-dev, libseat-dev, libdrm-dev, libinput-dev,
-  libudev-dev) e das features do Smithay no `Cargo.toml`; na VM só compile/revisão + "não validado em
-  hardware real".
+- **Fase atual: F1.** F1c tem implementação, moldura gigante corrigida, regressão e gate verdes; juiz visual PENDENTE.
+- Winit N>1: textura/tracker por output (`age=1`), cena em coordenadas locais, host `Normal` + `request_inner_size`
+  1280×480; N=1 segue `age=0`. Host full por vsync (§6).
+- Arrasto: `absolute_pointer_space` usa a união das geometrias; teste falhou antes (`640` vs `1280`) e passou depois.
+- Moldura gigante: fallback N>1 (`winit.rs`) agora pula frames com cliente mapeado (`frame_has_mapped_client`);
+  medição `{0:20,1:32}` → `{0:20,1:0}` colunas de decoração (limite 28/32).
+- Headless: `age=1`, 2× OK com dano parcial e titlebar `rgb=(43,43,43)` vs clear `(20,20,25)`.
+- Multi: 2× OK (`oversize-after{,2}.log`), `damage=none` estável, dano parcial nos 2 outputs, titlebar no lugar.
+- Instância VISUAL ABERTA (sem timeout): `visual-oversize-current.env` — compositor PID 57853, 2º foot PID 58129,
+  socket `wayland-aero-f1c-oversize-57852`, log `/tmp/opencode/f1c/visual-oversize-57852.log`. NÃO encerrar pelo agente.
+- Gate `check-oversize.log` EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0; baselines em `/tmp/opencode/f1c/` e §6.
+- Reproduzir: `dbus-run-session -- python3 tests/integration/multi_output_damage.py`,
+  `python3 tests/integration/headless_render_damage.py`, `bash scripts/check.sh`.
+- Próximo: humano testa a instância aberta (um foot por metade, moldura do tamanho do foot, titlebar no topo,
+  arrasto dos 2 lados sem piscar) e responde "ok visual F1c". Não fechar sem o "ok"; não iniciar F1d. VM sem 3D.

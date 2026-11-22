@@ -192,6 +192,22 @@ impl AeroState {
             .find(|w| w.toplevel().map(|t| t.wl_surface()) == Some(surface))
     }
 
+    /// True se o frame já tem cliente mapeado no space. Nesse caso o frame é
+    /// desenhado pelo 9-slice no output do cliente (`push_frame_elements`) e
+    /// NÃO deve cair no fallback de origem (0,0). Em N>1 esse fallback desenhava
+    /// a layer surface do outro output inteira (canvas >= output + insets),
+    /// atravessando a metade da tela — juiz visual F1c.
+    pub fn frame_has_mapped_client(&self, frame_surface: &WlSurface) -> bool {
+        let Some((_, _, window_id, _)) = self
+            .associated_frames
+            .iter()
+            .find(|(surface, _, _, _)| surface == frame_surface)
+        else {
+            return false;
+        };
+        self.window_for_id(*window_id).is_some()
+    }
+
     pub fn new(
         event_loop: &mut EventLoop<CalloopData>,
         display: Display<Self>,

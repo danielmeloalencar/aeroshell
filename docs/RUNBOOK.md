@@ -54,6 +54,8 @@ python3 tests/integration/frame_fixed_canvas_release_pixels.py growth  # 02p: ta
 python3 tests/integration/frame_fixed_canvas_hygiene.py                # 02p: sem ReleaseSwap
 python3 tests/integration/frame_repeated_activate.py                   # 02p: activate idempotente
 python3 tests/integration/frame_cold_start.py     # 02q: placeholder/pool/related-view + cronômetro map→1º render
+python3 tests/integration/headless_render_damage.py # F1b/c: age>0, damage parcial e pixels do 9-slice
+python3 tests/integration/multi_output_damage.py  # F1c: 2 outputs, damage incremental e conteúdo nos 2 tiles
 python3 tests/integration/frame_window_id.py      # 2 janelas, cada frame com o próprio window_id
 python3 tests/integration/sdk_cli.py              # 03: --list/--focus/--close do runtime Bun
 python3 tests/integration/supervisor_lifecycle.py # kill -9 do compositor derruba os filhos

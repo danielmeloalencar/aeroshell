@@ -4,10 +4,15 @@ use std::time::Duration;
 
 use smithay::{
     backend::{
+        allocator::Fourcc,
         renderer::{
             damage::OutputDamageTracker,
-            element::{surface::WaylandSurfaceRenderElement, AsRenderElements, Kind},
-            gles::GlesRenderer,
+            element::{
+                surface::WaylandSurfaceRenderElement, texture::TextureRenderElement,
+                AsRenderElements, Id, Kind,
+            },
+            gles::{GlesRenderer, GlesTexture},
+            Bind, Offscreen, Renderer, Texture,
         },
         winit::{self, WinitEvent},
     },
@@ -38,6 +43,192 @@ impl super::Backend for WinitBackend {
     }
 }
 
+// A composição do host é especializada em GlesTexture; a cena de cada output
+// continua usando o enum genérico compartilhado com o headless.
+smithay::backend::renderer::element::render_elements! {
+    ComposedElements<=GlesRenderer>;
+    Texture = TextureRenderElement<GlesTexture>,
+}
+
+#[cfg(feature = "bench")]
+type OutputProbe = Option<crate::frame_titlebar_probe::TitlebarFrame>;
+#[cfg(not(feature = "bench"))]
+type OutputProbe = ();
+
+/// Monta a cena frente->trás de UM output em coordenadas locais desse output.
+/// Usada pelo branch N>1; o caminho direto de N=1 permanece no corpo original.
+fn collect_output_elements(
+    state: &mut crate::state::AeroState,
+    output: &Output,
+    renderer: &mut GlesRenderer,
+) -> (Vec<AeroRenderElements<GlesRenderer>>, OutputProbe) {
+    let output_scale = output.current_scale().fractional_scale();
+    let output_origin = state
+        .space
+        .output_geometry(output)
+        .map(|geometry| geometry.loc)
+        .unwrap_or_default();
+    let mut elements: Vec<AeroRenderElements<GlesRenderer>> = Vec::new();
+    #[cfg(feature = "bench")]
+    let mut titlebar_probe = None;
+
+    {
+        let layer_map = smithay::desktop::layer_map_for_output(output);
+        let (lower, upper): (Vec<_>, Vec<_>) = layer_map
+            .layers()
+            .rev()
+            .partition(|s| matches!(s.layer(), Layer::Background | Layer::Bottom));
+
+        // LayerMap já usa coordenadas locais do output (layer.rs:248-267).
+        for layer in upper {
+            if let Some(geo) = layer_map.layer_geometry(layer) {
+                elements.extend(AsRenderElements::render_elements::<
+                    AeroRenderElements<GlesRenderer>,
+                >(
+                    layer,
+                    renderer,
+                    geo.loc.to_physical_precise_round(output_scale),
+                    UtilsScale::from(output_scale),
+                    1.0,
+                ));
+            }
+        }
+
+        let mut placed_frames = Vec::new();
+        let mut render_order: Vec<String> = Vec::new();
+        for window in state.space.elements_for_output(output).rev() {
+            let Some(geo) = state.space.element_geometry(window) else {
+                continue;
+            };
+            // Space usa coordenadas globais; render_output recorta a partir de
+            // (0,0), então cada output precisa da sua posição local.
+            let local_loc = geo.loc - output_origin;
+            let render_loc = local_loc - window.geometry().loc;
+            elements.extend(AsRenderElements::render_elements::<
+                AeroRenderElements<GlesRenderer>,
+            >(
+                window,
+                renderer,
+                render_loc.to_physical_precise_round(output_scale),
+                UtilsScale::from(output_scale),
+                1.0,
+            ));
+
+            // Frame deste cliente: depois do cliente = abaixo dele.
+            let client_surface = window.toplevel().map(|t| t.wl_surface());
+            render_order.push(format!("client@{:?}", client_surface.map(|s| s.id())));
+            if let Some((frame_surface, _, _window_id, _)) = state
+                .associated_frames
+                .iter()
+                .find(|(_, _, _, cs)| cs.as_ref() == client_surface)
+            {
+                let fgeo = state
+                    .frame_geometries
+                    .get(frame_surface)
+                    .copied()
+                    .unwrap_or_default();
+                let (dx, dy) = fgeo.offset();
+                let loc: smithay::utils::Point<i32, smithay::utils::Physical> =
+                    smithay::utils::Point::<i32, smithay::utils::Logical>::new(
+                        local_loc.x + dx,
+                        local_loc.y + dy,
+                    )
+                    .to_physical_precise_round(output_scale);
+
+                let result = crate::render::elements::push_frame_elements(
+                    renderer,
+                    &mut elements,
+                    FrameRenderInput {
+                        surface: frame_surface,
+                        fgeo,
+                        loc,
+                        #[cfg(feature = "bench")]
+                        client_origin: local_loc,
+                        committed: geo.size,
+                        output_scale,
+                        #[cfg(feature = "bench")]
+                        output,
+                        window_id: *_window_id,
+                        #[cfg(feature = "bench")]
+                        resize_active: state.resize_grab_active == Some(*_window_id),
+                    },
+                    #[cfg(feature = "bench")]
+                    &mut state.frame_diag,
+                );
+                if let Some(result) = result {
+                    placed_frames.push(frame_surface.clone());
+                    let kind = match result.kind {
+                        FrameRenderKind::Frame => "frame",
+                        FrameRenderKind::Placeholder => "placeholder",
+                    };
+                    render_order.push(format!("{kind}@{:?}", frame_surface.id()));
+                    #[cfg(feature = "bench")]
+                    if let Some(probe) = result.titlebar_probe {
+                        titlebar_probe = Some(probe);
+                    }
+                }
+            }
+        }
+
+        // O estado de log é único; não alternar com a cena dos outros outputs.
+        let is_first_output = state
+            .outputs
+            .first()
+            .map(|first| first == output)
+            .unwrap_or(false);
+        if is_first_output && render_order != state.last_render_order {
+            tracing::info!(order = ?render_order, "ordem de render (frente->tras)");
+            state.last_render_order = render_order;
+        }
+
+        // Frames sem cliente mapeado: abaixo de todas as janelas. Um frame cujo
+        // cliente JÁ mapeou é desenhado pelo 9-slice no output do cliente; se
+        // cair aqui, a layer surface (canvas >= output + insets) aparece inteira
+        // na origem de TODOS os outputs — em N>1 isso ocupa metade da tela.
+        for layer in &state.frame_layer_surfaces {
+            if !layer.alive()
+                || placed_frames.contains(layer.wl_surface())
+                || state.frame_has_mapped_client(layer.wl_surface())
+            {
+                continue;
+            }
+            let f = smithay::utils::Point::<f64, smithay::utils::Physical>::from((0.0, 0.0));
+            if let Ok(Some(el)) = with_states(layer.wl_surface(), |states| {
+                WaylandSurfaceRenderElement::from_surface(
+                    renderer,
+                    layer.wl_surface(),
+                    states,
+                    f,
+                    1.0,
+                    Kind::Unspecified,
+                )
+            }) {
+                elements.push(AeroRenderElements::Surface(el));
+            }
+        }
+
+        for layer in lower {
+            if let Some(geo) = layer_map.layer_geometry(layer) {
+                elements.extend(AsRenderElements::render_elements::<
+                    AeroRenderElements<GlesRenderer>,
+                >(
+                    layer,
+                    renderer,
+                    geo.loc.to_physical_precise_round(output_scale),
+                    UtilsScale::from(output_scale),
+                    1.0,
+                ));
+            }
+        }
+    }
+
+    #[cfg(feature = "bench")]
+    let probe = titlebar_probe;
+    #[cfg(not(feature = "bench"))]
+    let probe = ();
+    (elements, probe)
+}
+
 pub fn init_winit(
     opts: &Options,
     event_loop: &mut EventLoop<CalloopData>,
@@ -45,18 +236,44 @@ pub fn init_winit(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let (mut backend, winit_source) = winit::init::<GlesRenderer>()?;
 
-    // winit 0.30 não expõe Window::set_size. Fixamos min=max para forçar o tamanho
-    // pedido; assim `window_size()` e os eventos Resized convergem para `--size`.
-    if let Some((width, height)) = opts.size {
-        let requested = PhysicalSize::new(width, height);
-        backend.window().set_min_inner_size(Some(requested));
-        backend.window().set_max_inner_size(Some(requested));
-    }
-
+    let multi = opts.outputs > 1;
+    let initial_host_size = backend.window_size();
     let size = opts
         .size
         .map(|(w, h)| (w as i32, h as i32).into())
-        .unwrap_or_else(|| backend.window_size());
+        .unwrap_or_else(|| {
+            if multi {
+                // Sem --size, mantemos a janela host no tamanho inicial e
+                // dividimos sua largura entre os outputs.
+                (
+                    initial_host_size.w / opts.outputs as i32,
+                    initial_host_size.h,
+                )
+                    .into()
+            } else {
+                initial_host_size
+            }
+        });
+    let host_size = if multi {
+        (size.w * opts.outputs as i32, size.h).into()
+    } else {
+        size
+    };
+
+    // winit 0.30 não expõe Window::set_size. Fixamos min=max para forçar o
+    // tamanho pedido; N>1 usa um tile horizontal por output na mesma janela.
+    if opts.size.is_some() || multi {
+        let requested = PhysicalSize::new(host_size.w as u32, host_size.h as u32);
+        backend.window().set_min_inner_size(Some(requested));
+        backend.window().set_max_inner_size(Some(requested));
+        if multi {
+            // min/max NÃO muda o tamanho de uma janela já criada nesta VM.
+            // A resposta pode ser None: nesse caso o tamanho real vem em Resized.
+            let reported = backend.window().request_inner_size(requested);
+            tracing::info!(?reported, "resize explícito da janela multi-output");
+        }
+    }
+
     let mode = Mode {
         size,
         refresh: 60_000,
@@ -66,6 +283,7 @@ pub fn init_winit(
         requested = ?opts.size,
         window = ?backend.window_size(),
         mode = ?size,
+        host = ?host_size,
         "tamanho do output winit"
     );
 
@@ -97,7 +315,30 @@ pub fn init_winit(
         .iter()
         .map(OutputDamageTracker::from_output)
         .collect();
-    let forced_size = opts.size;
+
+    // F1c: somente N>1 sai do caminho direto. Cada textura é um backbuffer
+    // persistente (age=1); o host é recomposto por inteiro a cada redraw/vsync.
+    let mut output_textures: Vec<GlesTexture> = Vec::new();
+    if multi {
+        for _ in &outputs {
+            let texture = <GlesRenderer as Offscreen<GlesTexture>>::create_buffer(
+                backend.renderer(),
+                Fourcc::Abgr8888,
+                smithay::utils::Size::<i32, smithay::utils::Buffer>::new(size.w, size.h),
+            )?;
+            output_textures.push(texture);
+        }
+    }
+    let mut output_ages = vec![0usize; outputs.len()];
+    // As texturas dos outputs já foram renderizadas com Flipped180. Aplicar a
+    // mesma transformação no host inverte a apresentação pela segunda vez.
+    let mut host_tracker =
+        OutputDamageTracker::new(host_size, UtilsScale::from(1.0), Transform::Normal);
+    #[cfg(feature = "bench")]
+    let mut redraw_seq = 0u64;
+    #[cfg(feature = "bench")]
+    let mut host_probe_done = false;
+    let fixed_host_size = opts.size.is_some() || multi;
 
     event_loop
         .handle()
@@ -107,7 +348,7 @@ pub fn init_winit(
                 WinitEvent::Resized { size, .. } => {
                     // Sem `--size`, a janela host é a fonte da verdade. Com `--size`,
                     // mantemos o modo pedido: winit 0.30 não permite redimensionar a janela.
-                    if forced_size.is_none() {
+                    if !fixed_host_size {
                         if let Some(output) = state.outputs.first() {
                             let new_mode = Mode {
                                 size,
@@ -121,7 +362,218 @@ pub fn init_winit(
                 }
                 WinitEvent::Input(event) => state.process_input_event(event),
                 WinitEvent::Redraw => {
-                    // F0/S1: renderizamos o primeiro output; multi-output real entra em F1.
+                    if state.outputs.len() > 1 {
+                        let outputs = state.outputs.clone();
+                        #[cfg(feature = "bench")]
+                        let seq = {
+                            redraw_seq += 1;
+                            redraw_seq
+                        };
+                        let clear = if std::env::var_os("AERO_DEBUG_CLEAR_LIGHT").is_some() {
+                            [0.95, 0.95, 0.95, 1.0]
+                        } else {
+                            [0.08, 0.08, 0.10, 1.0]
+                        };
+
+                        // Todas as operações offscreen acontecem ANTES de
+                        // backend.bind(): map/bind trocam a surface EGL atual.
+                        let mut scenes = Vec::new();
+                        for output in &outputs {
+                            scenes.push(collect_output_elements(
+                                state,
+                                output,
+                                backend.renderer(),
+                            ));
+                        }
+
+                        let context = backend.renderer().context_id();
+                        let mut composed: Vec<ComposedElements> = Vec::new();
+                        for (index, _output) in outputs.iter().enumerate() {
+                            let age = output_ages[index];
+                            let (elements, _) = &scenes[index];
+                            let (damage_text, output_ok) = {
+                                let renderer = backend.renderer();
+                                match renderer.bind(&mut output_textures[index]) {
+                                    Ok(mut target) => match damage_trackers[index].render_output(
+                                        renderer, &mut target, age, elements, clear,
+                                    ) {
+                                        Ok(rendered) => {
+                                            let text = match rendered.damage {
+                                                Some(rects) if !rects.is_empty() => rects
+                                                    .iter()
+                                                    .map(|rect| {
+                                                        format!(
+                                                            "{}x{}@{},{}",
+                                                            rect.size.w,
+                                                            rect.size.h,
+                                                            rect.loc.x,
+                                                            rect.loc.y
+                                                        )
+                                                    })
+                                                    .collect::<Vec<_>>()
+                                                    .join(";"),
+                                                _ => "none".to_owned(),
+                                            };
+                                            if rendered.damage.is_some() {
+                                                output_ages[index] = 1;
+                                            }
+                                            (text, true)
+                                        }
+                                        Err(err) => {
+                                            tracing::warn!(?err, "render_output do output falhou");
+                                            ("error".to_owned(), false)
+                                        }
+                                    },
+                                    Err(err) => {
+                                        tracing::warn!(?err, "bind do output offscreen falhou");
+                                        ("error".to_owned(), false)
+                                    }
+                                }
+                            };
+                            if !output_ok {
+                                // O próximo frame deve refazer integralmente este alvo.
+                                output_ages[index] = 0;
+                            }
+                            #[cfg(feature = "bench")]
+                            eprintln!(
+                                "OUTPUT_FRAME output={} seq={seq} age={age} damage={damage_text}",
+                                _output.name()
+                            );
+                            #[cfg(not(feature = "bench"))]
+                            let _ = damage_text;
+
+                            let texture_size = output_textures[index].size();
+                            composed.push(ComposedElements::Texture(
+                                TextureRenderElement::from_static_texture(
+                                    Id::new(),
+                                    context.clone(),
+                                    smithay::utils::Point::<
+                                        f64,
+                                        smithay::utils::Physical,
+                                    >::new(
+                                        index as f64 * size.w as f64,
+                                        0.0,
+                                    ),
+                                    output_textures[index].clone(),
+                                    1,
+                                    Transform::Normal,
+                                    Some(1.0),
+                                    Some(smithay::utils::Rectangle::<
+                                        f64,
+                                        smithay::utils::Logical,
+                                    >::from_size(
+                                        smithay::utils::Size::new(
+                                            texture_size.w as f64,
+                                            texture_size.h as f64,
+                                        ),
+                                    )),
+                                    Some(smithay::utils::Size::<
+                                        i32,
+                                        smithay::utils::Logical,
+                                    >::new(size.w, size.h)),
+                                    None,
+                                    Kind::Unspecified,
+                                ),
+                            ));
+                        }
+
+                        let mut window_damage = None;
+                        {
+                            // Mesmo com todos os outputs estáveis, o host faz
+                            // full compose/submit: o swap fornece o vsync e evita
+                            // busy-loop; o skip incremental fica nas texturas.
+                            #[cfg(feature = "bench")]
+                            let host_size_matches = backend.window_size() == host_size;
+                            match backend.bind() {
+                                Ok((renderer, mut framebuffer)) => {
+                                    // Texturas estáticas não carregam o damage
+                                    // offscreen: o host é full por decisão explícita.
+                                    match host_tracker.render_output(
+                                        renderer,
+                                        &mut framebuffer,
+                                        0,
+                                        &composed,
+                                        clear,
+                                    ) {
+                                        Ok(rendered) => {
+                                            #[cfg(feature = "bench")]
+                                            if !host_probe_done
+                                                && host_size_matches
+                                                && scenes[0].1.is_some()
+                                            {
+                                                // UMA captura por execução com frame real:
+                                                // mede a orientação final do host, não a textura isolada.
+                                                crate::frame_pixel_probe::capture(
+                                                    renderer,
+                                                    &framebuffer,
+                                                    0,
+                                                    false,
+                                                );
+                                                host_probe_done = true;
+                                            }
+                                            window_damage = rendered.damage.cloned();
+                                        }
+                                        Err(err) => {
+                                            tracing::warn!(?err, "composição do host falhou");
+                                        }
+                                    }
+                                }
+                                Err(err) => {
+                                    tracing::warn!(?err, "bind do host falhou");
+                                }
+                            }
+                        }
+
+                        if let Some(damage) = window_damage {
+                            if let Err(err) = backend.submit(Some(&damage)) {
+                                tracing::warn!("submit falhou: {err}");
+                            }
+                        }
+
+                        let now = state.start_time.elapsed();
+                        for output in &outputs {
+                            state.space.elements().for_each(|window| {
+                                window.send_frame(output, now, Some(Duration::ZERO), |_, _| {
+                                    Some(output.clone())
+                                })
+                            });
+                            for layer in &state.layer_surfaces {
+                                if layer.alive() {
+                                    layer.send_frame(output, now, Some(Duration::ZERO), |_, _| {
+                                        Some(output.clone())
+                                    });
+                                }
+                            }
+                            for layer in &state.frame_layer_surfaces {
+                                if layer.alive() {
+                                    layer.send_frame(output, now, Some(Duration::ZERO), |_, _| {
+                                        Some(output.clone())
+                                    });
+                                }
+                            }
+                        }
+                        if let Some((action, started)) = state.last_geometry_action.take() {
+                            tracing::info!(
+                                action = %action,
+                                latency_ms = started.elapsed().as_secs_f64() * 1000.0,
+                                "S5: resize/move → frame atualizado"
+                            );
+                        }
+                        state.space.refresh();
+                        state.popups.cleanup();
+                        let _ = data.display_handle.flush_clients();
+                        backend
+                            .window()
+                            .set_cursor(if state.cursor_over_interactive {
+                                CursorIcon::Pointer
+                            } else {
+                                CursorIcon::Default
+                            });
+                        backend.window().request_redraw();
+                        return;
+                    }
+
+                    // F0/S1: caminho direto de UM output, inalterado pela F1c.
                     let Some(output) = state.outputs.first() else {
                         return;
                     };
