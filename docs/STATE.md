@@ -811,9 +811,24 @@ F1 anterior revertida em `4307cc4`.
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- F1d3 (JUIZ VISUAL **PENDENTE** — bloqueia o fechamento): nenhuma renderização DRM foi julgada. O comando do
-  RUNBOOK no tty3 ainda precisa ser executado **pelo humano**, que troca o VT, olha e fecha (AGENTS.md §0.9).
-  O agente NÃO trocou VT, NÃO abriu sessão real no tty3 e NÃO encerrou aplicação alguma nesta etapa.
+- F1d3 (**JUIZ VISUAL NEGOU — 2026-11-22, dado do humano**): rodou `~/run-aeroshell-udev.sh` no tty3.
+  Relato cru: *"abriu uma janela decorada que deveria ser o foot, porém antes mesmo de exibir o conteúdo do
+  foot travou tudo e tive que reiniciar. Não apareceu cursor do mouse na tela também nem aceitou comandos do
+  teclado, provavelmente porque travou, já que nem chegou a abrir o conteúdo da janela com o foot dentro."*
+  Interpretação mínima: a moldura (shell/frame) **chegou a renderizar** — DRM/GBM/EGL e o 9-slice funcionaram
+  ao menos 1 frame — e o travamento ocorreu antes do cliente `foot` mapear. Cursor invisível é dívida conhecida
+  (§6), não causa do travamento. **O agente NÃO reproduziu** (sem VT ativo nesta VM) e **NÃO vai corrigir no
+  escuro** (AGENTS.md §0.3). Hipóteses em aberto, todas não confirmadas: (a) ciclo `queue_frame`/`frame_submitted`
+  dessincronizado com o timer fixo de 16 ms sob renderer software (llvmpipe), (b) `frame_webview`/WebKitGTK travou
+  ao renderizar no DRM, (c) modeset de `Virtual-1` (1920x955@60) contra o GPU virtual do VirtualBox, (d) o código
+  não rejeita `EGLDevice::is_software()` como o anvil faz. **Nenhuma foi testada.**
+- F1d3 (INSTRUMENTAÇÃO DE DIAGNÓSTICO adicionada após o relato): logs de progresso em `init_udev`
+  (`DRM/GBM abertos`, `renderer EGL/GLES criado`, `formatos de render`, `conectores inicializados`) e heartbeat
+  `udev: loop de render vivo` a cada 250 ticks (~4 s). O script `~/run-aeroshell-udev.sh` agora grava
+  `~/aeroshell-udev-YYYYMMDD-HHMMSS.log` via `tee`. Testado nesta VM: log criado e falha `EAGAIN` registrada.
+  **Falta o humano reexecutar no tty3 e enviar o log** — é a única forma de reproduzir o travamento sem VT aqui.
+- F1d3 (JUIZ VISUAL — pendente a reexecução): o comando do RUNBOOK precisa ser repetido com logging e o veredito
+  dado depois. O agente NÃO trocou VT, NÃO abriu sessão real no tty3 e NÃO encerrou aplicação alguma nesta etapa.
 - F1d3 (LACUNA DE AMBIENTE, amostra preservada em `/tmp/opencode/f1d3/validate.log`): `--backend udev` nesta VM
   (sem VT ativo) loga `sessão libseat aberta seat0`, `dispositivo DRM selecionado /dev/dri/card0` e termina
   com `Error: "abrir \"/dev/dri/card0\" via libseat: Failed to open device: Resource temporarily unavailable
@@ -1013,8 +1028,10 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
 - F1d2 (fechada): `--probe-gbm[=NO]` em `cli.rs` → `backend/udev.rs::probe_gbm`; sonda medida: `backend_name=drm`, 4 formats RENDERING|SCANOUT, 64×64 Linear stride 256 com dmabuf, card0 com 8 conectores (`Virtual-1`, 35 modos). `DT_NEEDED` tem `libgbm.so.1`.
 - Winit N>1 (F1c): textura/tracker por output (`age=1`), arrasto por união das geometrias; JUIZ F1c aprovou. Refactor F1d3 preservou os harnesses (RENDER_SHARED=22, `{0:20,1:0}`).
 - Reproduzir: `bash scripts/check.sh` · `python3 tests/integration/udev_drm_probe.py` · `bash tests/integration/s1_nested.sh` · `dbus-run-session -- python3 tests/integration/multi_output_damage.py`.
-- **Próximo passo (DO HUMANO, não executado):** `Ctrl+Alt+F3`, login e **`~/run-aeroshell-udev.sh`** (script em
-  `$HOME`, fora do repo, documentado no RUNBOOK). Faz build/pré-checagens/flags e imprime o que observar; `Ctrl+C`
-  encerra. Testado aqui: passa nas pré-checagens e para em `session.open()` com `EAGAIN` (sem VT), sem socket
-  órfão nem processo deixado. No tty3: trocar/voltar VT, olhar painel/`foot`/arrasto/sem piscar, dar o ok e fechar.
-  Só então marcar F1d3 FECHADA no cartão/§3/§9. Se negar: registrar §7 e parar (plano B exige aprovação).
+- **JUIZ NEGOU (2026-11-22, §7): moldura apareceu, travou antes do `foot`.** Não corrigir no escuro: sem VT aqui.
+  Instrumentei logs de progresso + heartbeat e o script agora grava `~/aeroshell-udev-YYYYMMDD-HHMMSS.log`.
+- **Próximo passo (DO HUMANO):** reexecutar `~/run-aeroshell-udev.sh` no tty3 (pode travar de novo — o log fica)
+  e, após reiniciar, enviar o `tail -40` do log **e** responder: (1) o heartbeat `udev: loop de render vivo`
+  apareceu? (2) `Ctrl+Alt+F2` funcionou durante o travamento (compositor preso vs. máquina toda)? (3) a última
+  linha de progresso foi qual? Com isso escolho UMA hipótese de §7 e corrijo uma coisa por vez. Sem isso, PARO.
+  Plano B (dumb+legacy) continua exigindo aprovação explícita.

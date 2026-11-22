@@ -99,6 +99,7 @@ pub fn init_udev(
     let (drm, drm_notifier) =
         DrmDevice::new(drm_fd.clone(), true).map_err(|e| format!("DrmDevice::new: {e}"))?;
     let gbm = GbmDevice::new(drm_fd.clone()).map_err(|e| format!("GbmDevice::new: {e}"))?;
+    tracing::info!("udev: DRM/GBM abertos");
 
     // SAFETY: GbmDevice é uma native display EGL válida (EGLDisplay::new aceita
     // qualquer tipo que implemente `AsRawDisplay`); o GBM/fd permanecem vivos
@@ -107,6 +108,7 @@ pub fn init_udev(
     let context = EGLContext::new(&display)?;
     // SAFETY: contexto EGL recém-criado e válido; nenhum outro contexto ativo na thread.
     let mut renderer = unsafe { GlesRenderer::new(context)? };
+    tracing::info!("udev: renderer EGL/GLES criado");
 
     let allocator = GbmAllocator::new(
         gbm.clone(),
@@ -131,6 +133,7 @@ pub fn init_udev(
             })
             .collect();
     }
+    tracing::info!(formats = render_formats.len(), "udev: formatos de render");
     let mut manager = DrmOutputManager::new(
         drm,
         allocator,
@@ -205,6 +208,10 @@ pub fn init_udev(
         });
         tracing::info!(?crtc, "output DRM inicializado");
     }
+    tracing::info!(
+        outputs = slots.borrow().len(),
+        "udev: conectores inicializados"
+    );
     if slots.borrow().is_empty() {
         return Err("nenhum conector DRM conectado".into());
     }
@@ -278,9 +285,15 @@ pub fn init_udev(
         })?;
 
     // 9. Loop de render por timer (mesma cena de headless/winit via render::scene).
+    let mut tick: u64 = 0;
     event_loop.handle().insert_source(
         Timer::from_duration(Duration::from_millis(16)),
         move |_, _, data| {
+            tick += 1;
+            // Heartbeat: se o log parar aqui, o travamento está no ciclo de render.
+            if tick.is_multiple_of(250) {
+                tracing::info!(tick, "udev: loop de render vivo");
+            }
             let mut borrowed = slots.borrow_mut();
             for slot in borrowed.iter_mut() {
                 let (elements, _) =
