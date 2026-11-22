@@ -214,6 +214,7 @@ impl AeroState {
                 state.frame_geometries.remove(&frame_surface);
                 state.frame_configured_content.remove(&frame_surface);
                 state.frame_canvases.remove(&frame_surface);
+                state.maximized_restore.remove(&window_id);
                 state
                     .frame_layer_surfaces
                     .retain(|l| l.wl_surface() != &frame_surface);

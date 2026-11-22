@@ -19,7 +19,7 @@ use calloop::channel;
 use smithay::{
     desktop::Window,
     reexports::wayland_protocols::xdg::shell::server::xdg_toplevel,
-    utils::SERIAL_COUNTER,
+    utils::{Logical, Point, Size, SERIAL_COUNTER},
     wayland::{compositor::with_states, shell::xdg::XdgToplevelSurfaceData},
 };
 
@@ -126,27 +126,64 @@ impl AeroState {
                 "OK".to_owned()
             }
             "maximize" => {
-                let Some(window) = id.and_then(|i| self.window_for_id(i as u32).cloned()) else {
+                let Some(id) = id else {
+                    return "ERR janela inexistente".to_owned();
+                };
+                let Some(window) = self.window_for_id(id as u32).cloned() else {
                     return "ERR janela inexistente".to_owned();
                 };
                 let Some(toplevel) = window.toplevel() else {
                     return "ERR sem toplevel".to_owned();
                 };
-                let output_size = self
-                    .outputs
-                    .first()
-                    .and_then(|o| o.current_mode())
-                    .map(|m| m.size.to_logical(1))
-                    .unwrap_or((1280, 800).into());
-                toplevel.with_pending_state(|state| {
-                    if state.states.contains(xdg_toplevel::State::Maximized) {
-                        state.states.unset(xdg_toplevel::State::Maximized);
-                        state.size = None;
+                // O toggle usa o estado JÁ COMITADO pelo cliente (current_state),
+                // não o pending: um duplo clique antes do commit não inverte o
+                // estado. Fonte: Smithay 0.7.0 xdg/mod.rs:1735-1747.
+                if toplevel
+                    .current_state()
+                    .states
+                    .contains(xdg_toplevel::State::Maximized)
+                {
+                    if let Some((loc, size)) = self.maximized_restore.remove(&(id as u32)) {
+                        // map_element reposiciona um elemento já mapeado e preserva
+                        // seus outputs (Smithay 0.7.0 space/mod.rs:96-119).
+                        self.space.map_element(window.clone(), loc, false);
+                        toplevel.with_pending_state(|state| {
+                            state.states.unset(xdg_toplevel::State::Maximized);
+                            state.size = Some(size);
+                        });
                     } else {
-                        state.states.set(xdg_toplevel::State::Maximized);
-                        state.size = Some(output_size);
+                        // Maximizado sem geometria salva (cliente pediu o estado
+                        // por conta própria): só limpa o estado, sem inventar loc.
+                        toplevel.with_pending_state(|state| {
+                            state.states.unset(xdg_toplevel::State::Maximized);
+                            state.size = None;
+                        });
                     }
-                });
+                } else {
+                    let Some(area) = self.work_area() else {
+                        return "ERR sem área útil".to_owned();
+                    };
+                    if let Some(geo) = self.space.element_geometry(&window) {
+                        self.maximized_restore
+                            .insert(id as u32, (geo.loc, geo.size));
+                    }
+                    let fgeo = self.frame_geometry_for_window(id as u32);
+                    let (dx, dy) = fgeo.offset();
+                    // frame_loc = cliente + offset; queremos frame_loc == origem
+                    // da área útil (nem um pixel embaixo do painel).
+                    let client_loc = Point::<i32, Logical>::new(area.loc.x - dx, area.loc.y - dy);
+                    // frame_target = conteúdo + extras; queremos == tamanho da
+                    // área útil, nunca o tamanho bruto do output.
+                    let client_size = Size::<i32, Logical>::new(
+                        (area.size.w - fgeo.extra_w()).max(1),
+                        (area.size.h - fgeo.extra_h()).max(1),
+                    );
+                    self.space.map_element(window.clone(), client_loc, false);
+                    toplevel.with_pending_state(|state| {
+                        state.states.set(xdg_toplevel::State::Maximized);
+                        state.size = Some(client_size);
+                    });
+                }
                 toplevel.send_configure();
                 "OK".to_owned()
             }

@@ -1,4 +1,4 @@
-# Tarefa 02r (RASCUNHO — aguardando "ok" para executar) — maximizar usa a área útil do output
+# Tarefa 02r (AUTORIZADA em 2026-11-22; juiz visual pendente) — maximizar usa a área útil do output
 
 > Cartão novo, aberto a pedido do humano em 2026-11-22 após a 02q. Descoberta registrada em
 > `STATE.md` §6: maximizar **só aumenta o tamanho**; a janela não volta para a origem e vaza pelo canto.

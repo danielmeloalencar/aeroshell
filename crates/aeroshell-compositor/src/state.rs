@@ -14,7 +14,7 @@ use smithay::{
             Display, DisplayHandle, Resource,
         },
     },
-    utils::{Logical, Point, Size},
+    utils::{Logical, Point, Rectangle, Size},
     wayland::{
         compositor::{with_states, CompositorClientState, CompositorState},
         cursor_shape::CursorShapeManagerState,
@@ -32,6 +32,10 @@ use smithay::{
 };
 
 use crate::{cli::Options, render::cursor::CursorImage, CalloopData};
+
+/// Geometria salva de uma janela antes do maximize (02r): origem no Space e
+/// tamanho do cliente.
+pub type SavedGeometry = (Point<i32, Logical>, Size<i32, Logical>);
 
 /// Crescimento excepcional do canvas, confirmado pelo paint do shell.
 #[derive(Debug, Clone, Copy)]
@@ -179,6 +183,9 @@ pub struct AeroState {
     /// mapeadas que ainda não têm WebView associado; `set_insets` do frame
     /// sobrescreve quando ele associa. (0,0,0,0) até o shell declarar.
     pub default_frame_insets: (i32, i32, i32, i32),
+    /// 02r: geometria (origem no Space + tamanho do cliente) guardada no maximize
+    /// para o desmaximizar devolver a janela exatamente ao lugar de origem.
+    pub maximized_restore: HashMap<u32, SavedGeometry>,
     /// Lista de clientes inseridos (usada só para sinalizar prontidão em testes).
     #[allow(dead_code)]
     pub test_client_count: usize,
@@ -240,6 +247,36 @@ impl AeroState {
         self.space
             .elements()
             .find(|w| w.toplevel().map(|t| t.wl_surface()) == Some(surface))
+    }
+
+    /// 02r: área não exclusiva do primeiro output em coordenadas do Space.
+    /// `non_exclusive_zone()` devolve um retângulo em coordenadas lógicas do
+    /// output (origem no canto do output); somamos a origem do output no Space
+    /// para obter a origem global. Fonte: Smithay 0.7.0
+    /// `desktop/wayland/layer.rs:135-138` e `:254-267`.
+    pub fn work_area(&self) -> Option<Rectangle<i32, Logical>> {
+        let output = self.outputs.first()?;
+        let origin = self.space.output_geometry(output)?.loc;
+        let zone = smithay::desktop::layer_map_for_output(output).non_exclusive_zone();
+        Some(Rectangle::new(
+            Point::new(origin.x + zone.loc.x, origin.y + zone.loc.y),
+            zone.size,
+        ))
+    }
+
+    /// 02r: geometria da decoração de uma janela. O frame é layer surface, mas
+    /// NÃO entra no LayerMap (exceção do ADR 0004): as insets vêm do `set_insets`
+    /// do protocolo privado, não da zona. Sem frame associado, usamos o padrão
+    /// anunciado pelo shell no startup.
+    pub fn frame_geometry_for_window(&self, window_id: u32) -> FrameGeometry {
+        self.associated_frames
+            .iter()
+            .find(|(_, _, id, _)| *id == window_id)
+            .and_then(|(surface, _, _, _)| self.frame_geometries.get(surface).copied())
+            .unwrap_or(FrameGeometry {
+                insets: self.default_frame_insets,
+                ..Default::default()
+            })
     }
 
     /// True se o frame já tem cliente mapeado no space. Nesse caso o frame é
@@ -352,6 +389,7 @@ impl AeroState {
             last_render_order: Vec::new(),
             test_window_count: 0,
             default_frame_insets: (0, 0, 0, 0),
+            maximized_restore: HashMap::new(),
             suggested_window_size: HashMap::new(),
             test_client_count: 0,
             compositor_state,
