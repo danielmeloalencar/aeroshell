@@ -3,7 +3,7 @@
 use smithay::{
     backend::input::{
         AbsolutePositionEvent, Axis, AxisSource, ButtonState, Event, InputBackend, InputEvent,
-        KeyboardKeyEvent, PointerAxisEvent, PointerButtonEvent,
+        KeyboardKeyEvent, PointerAxisEvent, PointerButtonEvent, PointerMotionEvent,
     },
     input::{
         keyboard::FilterResult,
@@ -151,7 +151,42 @@ impl AeroState {
                     |_, _, _| FilterResult::Forward,
                 );
             }
-            InputEvent::PointerMotion { .. } => {}
+            InputEvent::PointerMotion { event, .. } => {
+                // Libinput (backend udev) emite movimento RELATIVO; os demais
+                // backends usam absoluto/injeção sintética e não caem aqui.
+                // F1d3: sem este braço o ponteiro não anda em sessão real.
+                let serial = SERIAL_COUNTER.next_serial();
+                let pointer = self.seat.get_pointer().unwrap();
+                let current = pointer.current_location();
+                let delta = event.delta();
+                let mut pos = smithay::utils::Point::<f64, Logical>::new(
+                    current.x + delta.x,
+                    current.y + delta.y,
+                );
+                if let Some(space) = absolute_pointer_space(
+                    self.space
+                        .outputs()
+                        .filter_map(|output| self.space.output_geometry(output)),
+                ) {
+                    pos.x = pos
+                        .x
+                        .clamp(space.loc.x as f64, (space.loc.x + space.size.w) as f64);
+                    pos.y = pos
+                        .y
+                        .clamp(space.loc.y as f64, (space.loc.y + space.size.h) as f64);
+                }
+                let under = self.surface_under(pos);
+                pointer.motion(
+                    self,
+                    under,
+                    &MotionEvent {
+                        location: pos,
+                        serial,
+                        time: event.time_msec(),
+                    },
+                );
+                pointer.frame(self);
+            }
             InputEvent::PointerMotionAbsolute { event, .. } => {
                 // O winit normaliza pelo tamanho da janela host; em N>1 isso
                 // inclui todos os outputs, não apenas o primeiro.
