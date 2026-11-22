@@ -87,8 +87,11 @@ XDG_RUNTIME_DIR=/run/user/$(id -u) MESA_DEBUG=1 LIBGL_ALWAYS_SOFTWARE=1 \
 ```
 - `--backend udev` é aceito pela CLI (`src/cli.rs:85`); sem compositor host (`WAYLAND_DISPLAY`/`DISPLAY`
   ausentes) a autodetecção já escolhe udev (`src/cli.rs:63-70`).
-- **Trocar o VT (`Ctrl+Alt+F3`) e fechar a sessão é tarefa do humano** (AGENTS.md §0.9). O agente não troca
-  VT, não usa `sudo`, não toca em `/etc` (AGENTS.md §3.8).
+- **Trocar o VT e fechar a sessão é tarefa do humano** (AGENTS.md §0.9). O agente não troca VT, não usa
+  `sudo`, não toca em `/etc` (AGENTS.md §3.8). Como o libinput "graba" os `/dev/input/event*`, o atalho do
+  kernel (`Ctrl+Alt+F*n*`) não chega ao VT: o compositor intercepta `Ctrl+Alt+F1..F4` e chama
+  `session.change_vt(n)` (`backend/udev.rs`, diagnóstico F1d3). Use `Ctrl+Alt+F2` para sair e `Ctrl+Alt+F3`
+  para voltar; se o compositor morrer, o kernel volta a aceitar o atalho.
 - **Validação visual PENDENTE (juiz humano, não teste headless)**: no tty3, confirmar que aparecem o painel e
   a janela `foot`, que arrastar a barra move só a janela dona, que a tela não pisca no resize e que trocar
   para outro VT e voltar retoma a imagem. **Cursor ainda NÃO é renderizado no backend udev** (Smithay 0.7.0
@@ -96,6 +99,20 @@ XDG_RUNTIME_DIR=/run/user/$(id -u) MESA_DEBUG=1 LIBGL_ALWAYS_SOFTWARE=1 \
   O humano dá o ok e fecha; o agente não encerra o processo.
 - VM VirtualBox **sem 3D**: `LIBGL_ALWAYS_SOFTWARE=1` é o caminho em dev; tempo/RAM medidos aqui **não**
   valem como desempenho (GPU real pendente, STATE.md §7).
+
+### Diagnóstico da tela sem imagem (cartão `F1d3-diagnostico-visual.md`)
+Se o tty3 ligar mas não mostrar imagem, reexecutar com logging de debug (o script do humano já grava log):
+```
+cd ~/Projetos/aeroshell
+RUST_LOG=debug ~/run-aeroshell-udev.sh
+```
+No log, procurar `UDEV_SESSION`, `UDEV_OUTPUT`, `UDEV_FRAME`, `UDEV_VBLANK`, `UDEV_SESSION_EVENT` e
+`UDEV_VT`. O analisador roda em qualquer máquina com o arquivo de log:
+```
+python3 tests/integration/udev_frame_probe.py ~/aeroshell-udev-YYYYMMDD-HHMMSS.log
+```
+`VEREDITO: OK` exige sessão ativa, CRTC ativo, `UDEV_FRAME ... queued=ok` e `UDEV_VBLANK ... submitted=ok`.
+Ele **não** mede pixels — a imagem na tela continua sendo julgada pelo humano.
 
 ## Runtime Bun / SDK (tarefa 03)
 Tipos TS gerados do Rust (não editar à mão):

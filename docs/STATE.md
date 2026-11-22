@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-22 · **Fase atual: F1** · **F1d1 e F1d2 FECHADAS; F1d3 com código pronto e JUIZ VISUAL PENDENTE no tty3** · F1c FECHADA pelo juiz visual · 02q FECHADA pelo juiz (harness de 300 ms segue como lacuna registrada)
+Última atualização: 2026-11-22 · **Fase atual: F1** · **F1d1/F1d2 FECHADAS; F1d3 NÃO FECHADA (juiz negou 2×); diagnóstico instrumentado, aguardando log do tty3** · F1c FECHADA pelo juiz visual · 02q FECHADA pelo juiz (harness de 300 ms segue como lacuna registrada)
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -15,12 +15,25 @@ lock, login) é TSX renderizado por WebKitGTK; runtime de política em Bun. Dev 
 decoração HTML funcional e painel React/TSX; fechamento formal em `docs/f0-relatorio-go-no-go.md` (quadro
 S1–S5, ratificação registrada dos ADRs, S4→F2/F9 e S5→F5/F6 deferidos com justificativa).
 F1 em andamento por cartões pequenos: F1a, F1b e F1c FECHADAS (juiz visual OK nas três; F1c em 2026-11-21);
-F1d autorizada pelo humano em 2026-11-21: **F1d1 e F1d2 FECHADAS no critério técnico (§3); F1d3 implementada
-com gate verde, mas NÃO FECHADA — falta o ok visual do humano no tty3 (§7)**.
+F1d autorizada pelo humano em 2026-11-21: **F1d1 e F1d2 FECHADAS no critério técnico (§3); F1d3 implementada,
+mas NÃO FECHADA — juiz visual negou no tty3 em 2026-11-22 (§7). Cartão de diagnóstico instrumentado (§3);
+próxima decisão depende do log com `RUST_LOG=debug` enviado pelo humano.**
 F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
-- [ ] **F1d3 — backend udev completo + cena compartilhada (código pronto, juiz visual PENDENTE)**, 2026-11-22.
+- [x] **F1d3-diagnóstico (instrumentação + atalho VT), 2026-11-22** — cartão `docs/tasks/F1d3-diagnostico-visual.md`.
+      Novo `tests/integration/udev_frame_probe.py`: baseline no recorte do log do juiz
+      `/tmp/opencode/f1d3-rediag/judge-log-excerpt.txt` → `VEREDITO: FALHA` (`EXIT=1`, 0 linhas `UDEV_*`);
+      `--self-test` → `EXIT=0` (fixture sintética, **não** evidência de produto). `udev.rs` passa a logar
+      `UDEV_SESSION` (session.is_active), `UDEV_DRM`/`UDEV_OUTPUT` (device.is_active), `UDEV_FRAME`
+      (is_empty/needs_sync/queued,primeiros 10 + 1/250), `UDEV_VBLANK`/`frame_submitted`, `UDEV_SESSION_EVENT`
+      e `UDEV_VT`. Ctrl+Alt+F1..F4 agora chama `session.change_vt(n)` (antes: `grep -rn change_vt crates/` → 0).
+      Gate: `CHECK_EXIT=0`, clippy bench 0, `--no-default-features` 0, sonda F1d2 0
+      (`/tmp/opencode/f1d3-rediag/gate-final.log`); `cargo check -p aeroshell-compositor` 0, fmt 0.
+      Regressões (`/tmp/opencode/f1d3-rediag/regressions.log`): `s1_nested.sh` EXIT=0,
+      `headless_render_damage.py` VEREDITO OK, `multi_output_damage.py` EXIT=0.
+      RUNBOOK documenta `RUST_LOG=debug` + o analisador; nenhuma imagem foi julgada por mim.
+- [ ] **F1d3 — backend udev completo + cena compartilhada (código pronto, juiz visual NEGOU)**, 2026-11-22.
       `render/scene.rs` novo: `collect_output_elements` (antes em `winit.rs`) agora é usado por headless, winit
       N>1 e udev — mesma ordem, offsets por `output_geometry`, filtro `frame_has_mapped_client` e log. O log
       `RENDER_SHARED` do headless sob `bench` foi preservado por parâmetro explícito (winit N>1 não o emite);
@@ -451,11 +464,13 @@ F1 anterior revertida em `4307cc4`.
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
-- **F1d3 CÓDIGO PRONTO, JUIZ VISUAL PENDENTE (§3).** Cartão `docs/tasks/F1d-udev-drm-gbm-libinput.md`.
-  Gate e todos os harnesses automatizados verdes; `--backend udev` nesta VM para em `session.open()` com
-  `EAGAIN` (sem VT ativo) — ambiente não permite julgar a renderização DRM. **Próximo passo é do humano:**
-  abrir no tty3 com o comando do RUNBOOK, trocar/voltar VT, olhar painel/`foot`/arrasto, dar o ok e fechar.
-  Até lá a tarefa **NÃO está FECHADA** (AGENTS.md §0.9). Cursor no udev segue ausente (§6). Sem push.
+- **F1d3 NÃO FECHADA — juiz negou 2× (§7); diagnóstico instrumentado pronto (§3).**
+  Cartões: `F1d-udev-drm-gbm-libinput.md` e `F1d3-diagnostico-visual.md`. Gate e regressões verdes;
+  nesta VM (sem VT) `--backend udev` falha em `session.open()` com `EAGAIN`, então **não posso medir pixels**.
+  O humano já entregou o 2º log: heartbeat vivo, input vivo, tela sem imagem e `Ctrl+Alt+F*` sem efeito.
+  **Próximo passo é do humano:** reexecutar com `RUST_LOG=debug ~/run-aeroshell-udev.sh` no tty3, usar
+  `Ctrl+Alt+F2/F3` (agora implementado) e enviar o log. Até o ok visual, F1d3 **NÃO está FECHADA**.
+  Cursor no udev segue ausente (§6). Sem push.
 - F1c FECHADA (§3): prova técnica + juiz visual "aprovado visualmente" em 2026-11-21. Aplicação encerrada
   pelo humano (não pelo agente). F1d foi autorizada em 2026-11-21 e F1d1/F1d2 foram executadas (§3);
   F1d3 segue pedindo aprovação separada. Sem push.
@@ -487,9 +502,10 @@ F1 anterior revertida em `4307cc4`.
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. **F1d3 (AGUARDANDO JUIZ VISUAL):** humano executa o comando do RUNBOOK no tty3, troca o VT e volta,
-   observa painel/`foot`/arrasto/sem piscar, dá o ok e fecha. Só então marcar FECHADA em §3/§9. Se o juiz
-   negar: registrar o sintoma em §7 e PARAR (regra das duas tentativas; plano B dumb+legacy exige aprovação).
+0. **F1d3-diagnóstico (AGUARDANDO LOG DO HUMANO):** humano reexecuta no tty3 com `RUST_LOG=debug`,
+   envia o log; agente roda `udev_frame_probe.py`, escolhe UMA causa e abre cartão de correção (com ok).
+   Depois, novo juiz visual: painel/`foot`/arrasto/VT, dá o ok e fecha. Só então marcar F1d3 FECHADA.
+   Plano B (dumb+legacy+pixman) continua exigindo aprovação explícita.
    `git push` é feito pelo humano. Não reabrir 02q pela divergência do cronômetro sem pedido explícito.
 1. `02o` — SUBSTITUÍDA: a 02p criou sonda full-res que reproduziu o flicker (2×1.910 pixels) e depois
    comprovou canvas fixo sem transiente. A grade antiga não é mais critério; não reabrir sem novo pedido.
@@ -504,6 +520,14 @@ F1 anterior revertida em `4307cc4`.
 8. `05-compatibilidade-protocolos.md` — RASCUNHO; 7 mensagens do `foot` registradas em §6. NÃO executar sem ok.
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- F1d3-diagnóstico (AMOSTRA, arquivo original sumiu): o arquivo `/home/daniel/aeroshell-udev-20261122-023701.log`
+  não existe mais em `/home/daniel` após o reboot do humano; o recorte literal colado na mensagem foi preservado
+  em `/tmp/opencode/f1d3-rediag/judge-log-excerpt.txt` (NÃO é o arquivo original — as linhas `\00` finais
+  foram transcritas, não decodificadas). Nenhuma amostra foi descartada; o baseline do analisador usa o recorte.
+- F1d3-diagnóstico (FORMATO DOS LOGS, verificado): `tracing_subscriber` imprime mensagem e depois os campos
+  na ordem da macro (confirmado em `/home/daniel/aeroshell-udev-20261122-023701.log`:
+  `iniciando AeroShell backend="udev" seat=...`). As macros `UDEV_*` seguem essa ordem; se o próximo log
+  mostrar outra ordem, o analisador deve ser ajustado (não o produto).
 - F1d3 (CURSOR, confirmado no código): `init_udev` não adiciona elemento de cursor — o ponteiro **anda e clica**
   (movimento relativo implementado em `input.rs`), mas é **invisível** no DRM. Caminho: `cursor-icon` 1.2 +
   `MemoryRenderBufferRenderElement` (`element/memory.rs:463`). Exige cartão próprio; o juiz visual foi avisado.
@@ -811,7 +835,18 @@ F1 anterior revertida em `4307cc4`.
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- F1d3 (**JUIZ VISUAL NEGOU — 2026-11-22, dado do humano**): rodou `~/run-aeroshell-udev.sh` no tty3.
+- F1d3 (**2º JUIZ VISUAL NEGOU — 2026-11-22, dado do humano**): rodou `~/run-aeroshell-udev.sh` no tty3.
+  Relato cru: *"o mouse funciona, mas nao aparece cursor, consegui mover a janela as cegas e tambem digitei
+  exit no terminal e dei enter, a janela fechou, mesmo sem ter renderizado o foot nela. Nao deu pra sair do
+  tty de volta pressionando alt + ctrl + f2 nem f1 nem f4."* Log (recorte em §6): heartbeat `tick=250..1500`
+  (~24 s), 0 `render_frame/queue_frame falhou`, `FRAME_BUFFER_COMMIT ... ok=true`, cena com `client` + `frame`,
+  foco de teclado no `foot`, 3 grabs de move/resize, **0 linhas de evento de sessão**, fim com NULs binários.
+  Interpretação mínima: **não houve travamento do loop de render**; cursor invisível é dívida conhecida;
+  o atalho de VT falhava porque `grep -rn change_vt crates/` era 0 (agora corrigido, mas **não validado** no tty3).
+  Causa da tela sem imagem **NÃO identificada**: hipóteses em aberto — (a) `queue_frame` sem vblank de volta,
+  (b) `vmwgfx` não faz scanout do dmabuf sob `LIBGL_ALWAYS_SOFTWARE=1`, (c) sessão nunca ativada
+  (`is_active()`/`device.is_active()` não medidos no 1º log). Nenhuma confirmada; instrumentação pronta (§3).
+- F1d3 (**1º JUIZ VISUAL NEGOU — 2026-11-22, dado do humano**): rodou `~/run-aeroshell-udev.sh` no tty3.
   Relato cru: *"abriu uma janela decorada que deveria ser o foot, porém antes mesmo de exibir o conteúdo do
   foot travou tudo e tive que reiniciar. Não apareceu cursor do mouse na tela também nem aceitou comandos do
   teclado, provavelmente porque travou, já que nem chegou a abrir o conteúdo da janela com o foot dentro."*
@@ -1022,16 +1057,9 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **Fase atual: F1.** F1a/F1b/F1c FECHADAS pelo juiz visual; F1d1/F1d2 FECHADAS no técnico. **F1d3 CÓDIGO PRONTO, NÃO FECHADA — falta ok visual no tty3 (2026-11-22).** Sem push.
-- F1d3: `render/scene.rs` unifica a cena (headless/winit-N>1/udev); `backend/udev.rs::init_udev` faz libseat → udev → DRM/GBM → EGL/GLES → `DrmOutputManager` → libinput → vblank → render por timer; `input.rs` trata movimento relativo. Cursor invisível e hotplug logado são dívidas (§6); sem `smithay_drm_extras`.
-- Prova (VM sem 3D): fmt/clippy/bench/`--no-default-features` EXIT=0; headless e multi-output VEREDITO OK; s1_nested e sonda F1d2 verdes; gate `check.sh` EXIT=0 (29 Rust + 9 Bun). `--backend udev` aqui: libseat seat0 + card0 descoberto, falha graciosa `EAGAIN` em `session.open()` (sem VT) — NÃO valida DRM (§7).
-- F1d2 (fechada): `--probe-gbm[=NO]` em `cli.rs` → `backend/udev.rs::probe_gbm`; sonda medida: `backend_name=drm`, 4 formats RENDERING|SCANOUT, 64×64 Linear stride 256 com dmabuf, card0 com 8 conectores (`Virtual-1`, 35 modos). `DT_NEEDED` tem `libgbm.so.1`.
-- Winit N>1 (F1c): textura/tracker por output (`age=1`), arrasto por união das geometrias; JUIZ F1c aprovou. Refactor F1d3 preservou os harnesses (RENDER_SHARED=22, `{0:20,1:0}`).
-- Reproduzir: `bash scripts/check.sh` · `python3 tests/integration/udev_drm_probe.py` · `bash tests/integration/s1_nested.sh` · `dbus-run-session -- python3 tests/integration/multi_output_damage.py`.
-- **JUIZ NEGOU (2026-11-22, §7): moldura apareceu, travou antes do `foot`.** Não corrigir no escuro: sem VT aqui.
-  Instrumentei logs de progresso + heartbeat e o script agora grava `~/aeroshell-udev-YYYYMMDD-HHMMSS.log`.
-- **Próximo passo (DO HUMANO):** reexecutar `~/run-aeroshell-udev.sh` no tty3 (pode travar de novo — o log fica)
-  e, após reiniciar, enviar o `tail -40` do log **e** responder: (1) o heartbeat `udev: loop de render vivo`
-  apareceu? (2) `Ctrl+Alt+F2` funcionou durante o travamento (compositor preso vs. máquina toda)? (3) a última
-  linha de progresso foi qual? Com isso escolho UMA hipótese de §7 e corrijo uma coisa por vez. Sem isso, PARO.
-  Plano B (dumb+legacy) continua exigindo aprovação explícita.
+- **Fase atual: F1.** F1a/F1b/F1c FECHADAS pelo juiz visual; F1d1/F1d2 FECHADAS no técnico. **F1d3 NÃO FECHADA: juiz negou 2× no tty3 em 2026-11-22 (§7).** Sem push.
+- F1d3: `render/scene.rs` unifica a cena; `backend/udev.rs` faz libseat → udev → DRM/GBM → EGL → `DrmOutputManager` → libinput → vblank → render por timer. Diagnóstico: `UDEV_SESSION`/`UDEV_OUTPUT`/`UDEV_FRAME`/`UDEV_VBLANK`/`UDEV_SESSION_EVENT`/`UDEV_VT` + `Ctrl+Alt+F1..F4` via `change_vt`. Cursor invisível/hotplug logado são dívidas (§6).
+- Prova desta sessão: `check.sh` CHECK=0, clippy bench 0, `--no-default-features` 0, sonda 0, fmt 0; s1_nested=0, headless OK, multi=0 (`/tmp/opencode/f1d3-rediag/{gate-final,regressions}.log`). Analisador: baseline FALHA (0 linhas), self-test OK (fixture sintética). Nenhum pixel/juiz executado pelo agente: sem VT aqui, `--backend udev` falha com `EAGAIN`.
+- F1d2 (fechada): sonda GBM em `renderD128` medida (4 formats RENDERING|SCANOUT, dmabuf, 8 conectores/35 modos); `libgbm.so.1` em `DT_NEEDED`.
+- **Próximo passo (DO HUMANO):** no tty3, `cd ~/Projetos/aeroshell && RUST_LOG=debug ~/run-aeroshell-udev.sh`; usar `Ctrl+Alt+F2` (sair) e `F3` (voltar); enviar o log novo. Agente roda `python3 tests/integration/udev_frame_probe.py <log>` e só então escolhe UMA hipótese. Plano B (dumb+legacy+pixman) exige aprovação explícita.
+

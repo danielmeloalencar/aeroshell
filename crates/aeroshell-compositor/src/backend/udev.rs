@@ -32,7 +32,12 @@ pub fn init_udev(
     event_loop: &mut EventLoop<CalloopData>,
     data: &mut CalloopData,
 ) -> Result<(), Box<dyn Error>> {
-    use std::{cell::RefCell, path::PathBuf, rc::Rc, time::Duration};
+    use std::{
+        cell::{Cell, RefCell},
+        path::PathBuf,
+        rc::Rc,
+        time::Duration,
+    };
 
     use smithay::{
         backend::{
@@ -47,7 +52,7 @@ pub fn init_udev(
                 DrmDevice, DrmDeviceFd, DrmEvent,
             },
             egl::{EGLContext, EGLDisplay},
-            input::InputEvent,
+            input::{InputEvent, KeyState, KeyboardKeyEvent},
             libinput::{LibinputInputBackend, LibinputSessionInterface},
             renderer::gles::GlesRenderer,
             session::{libseat::LibSeatSession, Event as SessionEvent, Session},
@@ -77,7 +82,7 @@ pub fn init_udev(
     let (mut session, session_notifier) =
         LibSeatSession::new().map_err(|e| format!("libseat: {e}"))?;
     let seat = session.seat();
-    tracing::info!(seat = %seat, "sessão libseat aberta");
+    tracing::info!(active = session.is_active(), seat = %seat, "UDEV_SESSION");
 
     // 2. Descoberta de GPU via udev. AERO_DRM_DEVICE permite fixar o nó.
     let udev = UdevMonitor::new(&seat).map_err(|e| format!("udev: {e}"))?;
@@ -99,7 +104,7 @@ pub fn init_udev(
     let (drm, drm_notifier) =
         DrmDevice::new(drm_fd.clone(), true).map_err(|e| format!("DrmDevice::new: {e}"))?;
     let gbm = GbmDevice::new(drm_fd.clone()).map_err(|e| format!("GbmDevice::new: {e}"))?;
-    tracing::info!("udev: DRM/GBM abertos");
+    tracing::info!(active = drm.is_active(), "UDEV_DRM");
 
     // SAFETY: GbmDevice é uma native display EGL válida (EGLDisplay::new aceita
     // qualquer tipo que implemente `AsRawDisplay`); o GBM/fd permanecem vivos
@@ -206,7 +211,12 @@ pub fn init_udev(
             wl_output: output,
             drm_output,
         });
-        tracing::info!(?crtc, "output DRM inicializado");
+        tracing::info!(
+            ?crtc,
+            active = manager.device().is_active(),
+            connectors = 1,
+            "UDEV_OUTPUT"
+        );
     }
     tracing::info!(
         outputs = slots.borrow().len(),
@@ -223,11 +233,44 @@ pub fn init_udev(
         .udev_assign_seat(&seat)
         .map_err(|_| "udev_assign_seat falhou")?;
     let input_backend = LibinputInputBackend::new(libinput.clone());
+    // O libinput abre /dev/input/event* via libseat e os "graba": o manipulador
+    // de VT do kernel não recebe Ctrl+Alt+F*n*. O compositor tem de chamar
+    // `change_vt` ele próprio (padrão do anvil). Bit 1 = Ctrl, bit 2 = Alt.
+    let mut vt_session = session.clone();
+    let vt_modifiers = Rc::new(Cell::new(0u8));
     event_loop
         .handle()
         .insert_source(input_backend, move |event, _, data| {
-            if let InputEvent::DeviceAdded { .. } = &event {
-                // LEDs e hotplug de teclado ficam para F1d3+; o estado já trata teclas.
+            if let InputEvent::Keyboard { event } = &event {
+                // Keycode são os KEY_* de input-event-codes.h (Smithay 0.7.0,
+                // backend/input/mod.rs:100-114).
+                let code: u32 = event.key_code().into();
+                let pressed = event.state() == KeyState::Pressed;
+                let mask = match code {
+                    29 | 97 => 1,  // KEY_LEFTCTRL / KEY_RIGHTCTRL
+                    56 | 100 => 2, // KEY_LEFTALT / KEY_RIGHTALT
+                    _ => 0,
+                };
+                let modifiers = vt_modifiers.get();
+                if mask != 0 {
+                    vt_modifiers.set(if pressed {
+                        modifiers | mask
+                    } else {
+                        modifiers & !mask
+                    });
+                }
+                if pressed && modifiers == 3 && (59..=62).contains(&code) {
+                    // KEY_F1..KEY_F4 => VT 1..4. Não repassar ao cliente.
+                    let vt = (code - 58) as i32;
+                    let result = vt_session.change_vt(vt);
+                    tracing::info!(
+                        key = format!("F{vt}"),
+                        vt,
+                        result = if result.is_ok() { "ok" } else { "err" },
+                        "UDEV_VT"
+                    );
+                    return;
+                }
             }
             data.state.process_input_event(event);
         })?;
@@ -235,13 +278,17 @@ pub fn init_udev(
     // 6. Pausa/retomada da sessão (VT switch feito pelo humano).
     // `activate(false)` preserva o estado atual do crank/connector (anvil udev.rs);
     // `true` faria modeset completo e poderia piscar.
+    let notifier_session = session.clone();
     event_loop
         .handle()
         .insert_source(session_notifier, move |event, _, _| match event {
             SessionEvent::PauseSession => {
                 libinput.suspend();
                 manager.pause();
-                tracing::info!("sessão pausada (VT trocado)");
+                tracing::info!(
+                    active = notifier_session.is_active(),
+                    "UDEV_SESSION_EVENT event=PauseSession"
+                );
             }
             SessionEvent::ActivateSession => {
                 if let Err(err) = manager.activate(false) {
@@ -250,20 +297,38 @@ pub fn init_udev(
                 if let Err(err) = libinput.resume() {
                     tracing::warn!(?err, "falha ao retomar libinput");
                 }
-                tracing::info!("sessão ativada");
+                tracing::info!(
+                    active = notifier_session.is_active(),
+                    "UDEV_SESSION_EVENT event=ActivateSession"
+                );
             }
         })?;
 
     // 7. VBlank: completa o ciclo do swapchain de cada output.
     let vblank_slots = slots.clone();
+    let vblank_count = Rc::new(Cell::new(0u64));
+    let vblank_source_count = vblank_count.clone();
     event_loop
         .handle()
         .insert_source(drm_notifier, move |event, _, _| match event {
             DrmEvent::VBlank(crtc) => {
-                if let Some(slot) = vblank_slots.borrow().iter().find(|slot| slot.crtc == crtc) {
-                    if let Err(err) = slot.drm_output.frame_submitted() {
-                        tracing::warn!(?err, "frame_submitted falhou");
+                let n = vblank_source_count.get() + 1;
+                vblank_source_count.set(n);
+                let submitted = if let Some(slot) =
+                    vblank_slots.borrow().iter().find(|slot| slot.crtc == crtc)
+                {
+                    match slot.drm_output.frame_submitted() {
+                        Ok(_) => "ok",
+                        Err(err) => {
+                            tracing::warn!(?err, "frame_submitted falhou");
+                            "err"
+                        }
                     }
+                } else {
+                    "no-slot"
+                };
+                if n <= 10 || n.is_multiple_of(10) {
+                    tracing::debug!(?crtc, n, submitted, "UDEV_VBLANK");
                 }
             }
             DrmEvent::Error(err) => tracing::warn!(?err, "erro DRM"),
@@ -286,6 +351,7 @@ pub fn init_udev(
 
     // 9. Loop de render por timer (mesma cena de headless/winit via render::scene).
     let mut tick: u64 = 0;
+    let mut frame_seq: u64 = 0;
     event_loop.handle().insert_source(
         Timer::from_duration(Duration::from_millis(16)),
         move |_, _, data| {
@@ -296,6 +362,7 @@ pub fn init_udev(
             }
             let mut borrowed = slots.borrow_mut();
             for slot in borrowed.iter_mut() {
+                frame_seq += 1;
                 let (elements, _) =
                     collect_output_elements(&mut data.state, &slot.wl_output, &mut renderer, false);
                 match slot.drm_output.render_frame(
@@ -305,13 +372,43 @@ pub fn init_udev(
                     FrameFlags::DEFAULT,
                 ) {
                     Ok(result) => {
-                        if !result.is_empty {
-                            if let Err(err) = slot.drm_output.queue_frame(()) {
-                                tracing::warn!(?err, "queue_frame falhou");
+                        let is_empty = result.is_empty;
+                        let needs_sync = result.needs_sync();
+                        let queued = if is_empty {
+                            "empty"
+                        } else {
+                            match slot.drm_output.queue_frame(()) {
+                                Ok(()) => "ok",
+                                Err(err) => {
+                                    tracing::warn!(?err, "queue_frame falhou");
+                                    "err"
+                                }
                             }
+                        };
+                        // Debug em RUST_LOG=debug: primeiros frames + cadência baixa,
+                        // para não inchar o log do tty3 com 60 linhas/s.
+                        if frame_seq <= 10 || frame_seq.is_multiple_of(250) || queued == "err" {
+                            tracing::debug!(
+                                seq = frame_seq,
+                                is_empty,
+                                needs_sync,
+                                queued,
+                                "UDEV_FRAME"
+                            );
                         }
                     }
-                    Err(err) => tracing::warn!(?err, "render_frame falhou"),
+                    Err(err) => {
+                        tracing::warn!(?err, "render_frame falhou");
+                        if frame_seq <= 10 || frame_seq.is_multiple_of(250) {
+                            tracing::debug!(
+                                seq = frame_seq,
+                                is_empty = true,
+                                needs_sync = false,
+                                queued = "err",
+                                "UDEV_FRAME"
+                            );
+                        }
+                    }
                 }
             }
             drop(borrowed);

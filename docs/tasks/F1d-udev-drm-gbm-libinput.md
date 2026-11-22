@@ -15,7 +15,8 @@ F1d é executada em **três sub-cartões independentes**, cada um com gate verde
 |---|---|---|
 | **F1d1** (este arquivo, §critério) | features do Smithay, `doctor`, `ci.yml`, RUNBOOK, deps no `Cargo.lock` | gate + nested + opt-out |
 | **F1d2** (executada 2026-11-22, ok do humano) | sonda GBM em `renderD128` (GbmDevice → GbmAllocator) + enumerate de modos DRM, sem trocar VT/master | saída da sonda registrada em STATE.md §7 |
-| **F1d3** (implementada 2026-11-22, **juiz visual PENDENTE**) | backend udev (libseat/udev/DRM/GBM/EGL/libinput) + cena compartilhada em `render/scene.rs` | humano troca o VT no tty3, olha e fecha; sem o ok não é FECHADA |
+| **F1d3** (implementada 2026-11-22, **juiz visual NEGOU**) | backend udev (libseat/udev/DRM/GBM/EGL/libinput) + cena compartilhada em `render/scene.rs` | humano troca o VT no tty3, olha e fecha; sem o ok não é FECHADA |
+| **F1d3-diagnóstico** (cartão `F1d3-diagnostico-visual.md`) | instrumentação de sessão/CRTC/queue/vblank + `Ctrl+Alt+F1..F4` | log instrumentado do tty3 + `udev_frame_probe.py`; a imagem ainda é julgada pelo humano |
 
 ## Contexto mínimo (arquivos que importam)
 - `Cargo.toml:21-26` — `smithay = { version = "=0.7.0", default-features = false, features = [...] }` do workspace.
