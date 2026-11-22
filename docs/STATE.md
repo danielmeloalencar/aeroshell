@@ -21,6 +21,23 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **Correção F1 — `foot` reaberto volta a ter decoração (2026-11-22; juiz visual pendente).** Cartão
+      `docs/tasks/F1-correcao-reabertura-frame.md`. Causas confirmadas: (1) `FrameEvent::Closed` só logava
+      (`frame_webview.rs:324-327`) — entrada e WebView antiga ficavam no mapa; (2) `window_id` vinha de
+      `space.elements().count()` (`xdg_shell.rs:52`) e era reutilizado após o fechamento; (3) efeito de
+      2ª ordem: `window_count` em `aero_frame.rs:304` também vinha da contagem de janelas vivas, então o
+      novo id era classificado como `FrameCheck::Closed` e recebia `closed` em vez do configure.
+      Correção: `next_window_id` monotônico em `AeroState` (saturando em `u32::MAX`, nunca reutiliza),
+      `window_count = next_window_id + test_window_count`, e shell aposenta a entrada no `Closed`
+      (move para `retired` + limpa `PENDING_FRAMES`), preservando o prefixo de log
+      `FRAMEWEB: closed recebido` usado pelo `frame_buttons.py`. Harness novo
+      `tests/integration/frame_reopen.py` escrito ANTES: baseline `VEREDITO: FALHA` (id 0 reutilizado, sem
+      `frame_painted`), depois 3 execuções seguidas `VEREDITO: OK` (id 1, associate + `frame_painted`),
+      logs crus em `/tmp/opencode/f1-reopen/`. Amostras falhas preservadas: `window.close()` e
+      `frame.destroy()` matavam o shell com `zwlr_layer_surface_v1 invalid_size` — por isso a janela é
+      mantida viva em `retired` (dívida em §6). Regressões: `frame_window_id`, `frame_follows_resize`,
+      `frame_buttons`, `frame_resize_glue` → OK; `frame_cold_start` segue baseline-falha conhecido (02q).
+      Gate `check.sh` EXIT=0; clippy bench `-D warnings` 0; `--no-default-features` 0. **F1g NÃO executado.**
 - [x] **F1f/E — viewporter absorvido + geometria lógica do cliente (2026-11-22).** Guia domicile (não
       receita): `logical_size(buffer, buffer_scale)` (`scale.rs:47-57`), buffer fracionário mapeado por
       `wp_viewport.dst` (`surface_commit.rs:782-796`), `wl_output.scale` inteiro e preferred via protocolo,
@@ -874,6 +891,16 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **Destruição da janela GTK no `Closed` (2026-11-22, dívida da correção F1):** `window.close()`,
+  `frame.destroy()` e `set_visible(false)` no handler de `closed` derrubam o layer-surface com
+  `set_size(0,0)` e âncoras zeradas no mesmo commit; o Smithay 0.7 responde `zwlr_layer_surface_v1
+  invalid_size` e mata o shell (3 variantes medidas, logs em `/tmp/opencode/f1-reopen/`). A correção
+  aposenta a entrada para `SpikeState::retired`, sem destruir a janela. Não reabrir sem cartão próprio.
+- **Avisos do `foot` ainda faltantes (2026-11-22, FORA da correção F1):** `xdg_activation`, `text_input`,
+  `xdg_toplevel_icon` e `hangup` são **protocolos não implementados** (F1i/F7), **não a causa** da perda
+  de decoração ao reabrir. Registrados aqui separadamente; não mexer nesta tarefa.
+- **`frame_cold_start.py` (baseline-falha conhecido, 02q):** continua `VEREDITO: FALHA` com 2 problemas
+  após a correção F1; é o harness de 300 ms já registrado em §7/§5, não regressão da correção.
 - **GATE DO FECHAMENTO do F1-popups-render (2026-11-22) — NO-GO, amostra preservada:** a execução final
   de `bash scripts/check.sh` **após** as edições de docs falhou **só na fase visual do S1**:
   `zenity:102919: Gtk-WARNING **: 14:18:38.091: Failed to open display`,
@@ -1272,6 +1299,11 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- **Correção F1 (reabertura) — JUIZ VISUAL PENDENTE (2026-11-22).** O harness headless prova id novo e
+  `frame_painted` na nova janela, mas nenhum humano viu o ciclo abrir→fechar→reabrir no nested/tty3.
+  O agente não abriu/fechou aplicação visual para julgamento (os harnesses encerram só os PIDs que
+  iniciam). **Não fechar a correção sem o "ok" do humano.** Também não medido: destruição segura da
+  janela GTK aposentada (§6).
 - **F1f — JUIZ VISUAL PENDENTE (2026-11-22).** Pixelmedição headless (borda colada, titlebar/borda
   escalando em 1.0/1.25/1.5) e nested 1.5 sem erros estão provados (§3), mas **nenhum humano julgou a
   aparência em escala fracionária no tty3**. O juiz deve abrir `~/u --scale 1.5` — o repasse de args no
@@ -1584,11 +1616,11 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **Fase atual: F1; F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS pelo juiz; F1-cursor-shape, F1-primary-selection e F1-popups-render FECHADAS; F1f com código/gate verdes e JUIZ VISUAL PENDENTE (§7).** Sem push. **PARAR: não abrir F1g nem o próximo cartão sem aprovação (AGENTS.md §3.1).**
-- **F1f entregue:** `wp_fractional_scale_v1` anunciado, `preferred_scale` por superfície, `surface_scale()` no render (fallback `output_scale`), receita do 9-slice intacta; headless passou a aplicar `--scale`; sonda `AERO_PIXEL_FULL` sob bench. Commits até o deste fechamento.
-- **Prova F1f:** `python3 tests/integration/fractional_scale.py` → `VEREDITO: OK` em 1.0/1.25/1.5 (borda colada ao cliente sem gap, border/titlebar 6/30, 8/38, 8/46); nested `--scale 1.5` com 3 `FSCALE_SURFACE` e 0 erros; 6 harnesses vizinhos OK. Gate `check.sh` EXIT=0, clippy bench `-D warnings` 0, `--no-default-features` 0. Amostras falhas preservadas em `/tmp/opencode/f1-fscale/`.
-- **Para julgar à mão:** `~/u` com escala fracionária no tty3, conferir nitidez/alinhamento de frame, conteúdo e painel, sem gap. Agente não abriu/fechou app nem trocou VT.
-- **Próximo passo proposto (NÃO executado):** com o "ok" visual de F1f, abrir F1g (dmabuf/presentation-time); se preferir seguir a fila do cartão-mãe, viewporter. Só com cartão e autorização — um por sessão.
-- **Não medido / descoberta lateral:** udev/DRM, desempenho em GPU real (VM sem 3D); `nautilus` não abriu (Tracker3 — §6, fora de escopo); dismiss de popup por clique fora não exercitado no juiz.
-- **Contexto preservado:** `udev.rs` chama `send_frame`; `~/u` lança o painel e define `AERO_WINDOW_IPC_SOCK`. Conteúdo, cursor, seleção primária e popups seguem aprovados pelo humano; nada disso foi alterado.
+- **F1 FECHADAS pelo juiz:** F1a/b/c/d*, cursor-shape, primary-selection, popups-render e **F1f (ok visual em 1.5 e 2 no tty3)**. Correção F1 (reabertura) pronta com **juiz visual pendente (§7)**. Sem push. **PARAR: não abrir F1g/subsurfaces sem aprovação (AGENTS.md §3.1).**
+- **Correção F1 entregue:** `next_window_id` monotônico (nunca reutiliza), `window_count` = water mark + testes, shell aposenta `FrameEntry` no `Closed` (move para `retired`, limpa PENDING_FRAMES) e preserva o log `FRAMEWEB: closed recebido`. Cartão `F1-correcao-reabertura-frame.md`.
+- **Prova:** `python3 tests/integration/frame_reopen.py` → 3× `VEREDITO: OK` (id 0 → 1, `frame_painted` no novo); baseline falhou antes. Regressões `frame_window_id`, `frame_follows_resize`, `frame_buttons`, `frame_resize_glue` → OK. `frame_cold_start` segue baseline-falha (02q). Gate `check.sh` EXIT=0, clippy bench 0, `--no-default-features` 0.
+- **Para julgar à mão:** abrir→fechar→reabrir `foot` no nested/tty3 e confirmar decoração na nova janela. Agente não abriu/fechou app para julgamento visual.
+- **F1g:** cartão `F1g-dmabuf-presentation.md` commitado (`4108122`), **NÃO executado**. Depois viria o resto de subsurfaces (F1e). Um cartão por sessão.
+- **Não medido / descoberta lateral:** destruição segura da janela GTK aposentada (§6); avisos xdg_activation/text_input/icon/hangup = protocolos F1i/F7 (§6, não causa); udev/DRM e desempenho em GPU real fora do escopo desta correção.
+- **Contexto preservado:** `udev.rs` chama `send_frame`; `~/u` lança o painel e define `AERO_WINDOW_IPC_SOCK`. Conteúdo, cursor, seleção primária, popups e escala seguem aprovados pelo humano; nada disso foi alterado.
 

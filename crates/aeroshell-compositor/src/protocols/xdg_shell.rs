@@ -49,7 +49,10 @@ impl XdgShellHandler for AeroState {
         let client_surface = window.toplevel().map(|t| t.wl_surface().clone());
         // Margem para a decoração do frame (insets superiores) ficar visível e
         // cascata para janelas empilhadas não coincidirem exatamente.
-        let n = self.space.elements().count() as i32;
+        // Correção F1: ID monotônico, nunca reutilizado após o fechamento.
+        let window_id = self.next_window_id;
+        self.next_window_id = self.next_window_id.saturating_add(1);
+        let n = window_id as i32;
         let loc = (60 + n * 40, 80 + n * 40);
         self.space.map_element(window, loc, false);
         if let Some(window) = self.space.elements().last() {
@@ -68,7 +71,6 @@ impl XdgShellHandler for AeroState {
         // Janelas que mapeiam SEM frame precisam ser anunciadas ao shell para que
         // ele crie uma WebView por window_id. O associate do cliente inicial cobre
         // só o id 0 (cold-start); sem isto o segundo cliente nunca recebe decoração.
-        let window_id = n as u32;
         if !self.frames.iter().any(|(_, id)| *id == window_id) {
             if let Some(manager) = &self.shell_manager {
                 let size = self.client_content_size(window_id).unwrap_or((0, 0));

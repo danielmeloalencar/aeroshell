@@ -122,6 +122,10 @@ pub struct AeroState {
     /// reordenado: `elements()` é ordem z e muda a cada `raise_element`, então
     /// `nth(window_id)` apontaria para a janela errada após um clique.
     pub window_surfaces: HashMap<u32, WlSurface>,
+    /// Correção F1: IDs monotônicos, NUNCA reutilizados. O `count()` do Space
+    /// voltava a 0 ao fechar a janela e o novo `foot` recebia o mesmo id, fazendo
+    /// o shell ignorar o `frame_requested` como "já apresentado".
+    pub next_window_id: u32,
     /// Associações frame ↔ superfície. Marca SEM role: layer_surface é suportado;
     /// xdg_toplevel recebe `closed` e fica deferido (ADR 0004).
     pub associated_frames: Vec<(
@@ -332,6 +336,7 @@ impl AeroState {
             frame_canvases: HashMap::new(),
             shell_manager: None,
             window_surfaces: HashMap::new(),
+            next_window_id: 0,
             frame_geometries: HashMap::new(),
             frame_configured_content: HashMap::new(),
             frame_configure_serial: 0,

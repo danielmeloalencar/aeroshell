@@ -301,7 +301,11 @@ impl Dispatch<AeroFrameManagerV1, ()> for AeroState {
                         }
                     }
                 }
-                let window_count = state.space.elements().count() + state.test_window_count;
+                // Correção F1: com IDs monotônicos, o limite de "janela
+                // existente" é o contador (water mark), não a contagem de janelas
+                // vivas — senão o id recém-alocado é tratado como corrida de
+                // fechamento e recebe `closed` em vez do configure.
+                let window_count = state.next_window_id as usize + state.test_window_count;
                 let window_count = if pending_cmd.is_some() {
                     window_count.max(window_id as usize + 1)
                 } else {

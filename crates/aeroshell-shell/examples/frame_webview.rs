@@ -79,6 +79,9 @@ struct SpikeState {
     configures: usize,
     closed: usize,
     entries: Vec<FrameEntry>,
+    /// F1: entradas aposentadas no `Closed`, fora do mapa ativo. Mantidas vivas
+    /// para não disparar o `invalid_size` do layer-surface no Smithay 0.7.
+    retired: Vec<FrameEntry>,
     seat: Option<wl_seat::WlSeat>,
     pointer: Option<wl_pointer::WlPointer>,
     active: usize,
@@ -323,7 +326,33 @@ impl Dispatch<AeroFrameV1, ()> for SpikeState {
             }
             FrameEvent::Closed => {
                 state.closed += 1;
-                eprintln!("FRAMEWEB: closed recebido");
+                // Correção F1: aposentar a entrada e a janela GTK. Sem isso o
+                // frame_requested do novo foot (com id novo) encontrava a WebView
+                // antiga e caía em "já apresentado; ignorado".
+                let Some(pos) = state.entries.iter().position(|entry| entry.frame == *frame) else {
+                    eprintln!("FRAMEWEB: closed para frame desconhecido");
+                    return;
+                };
+                let entry = state.entries.remove(pos);
+                let window_id = entry.window_id;
+                // Destruir o proxy do frame ANTES da janela GTK: se a janela for
+                // fechada primeiro, o layer-surface é derrubado com largura 0 e
+                // sem âncoras, e o compositor responde protocol error matando o
+                // shell (medido no baseline: zwlr_layer_surface_v1 code 1).
+                // TODO(F1): tanto `frame.destroy()` quanto `window.close()`/
+                // `set_visible(false)` derrubam o layer-surface com `set_size(0,0)`
+                // e âncoras zeradas no mesmo commit; o Smithay 0.7 responde
+                // `invalid_size` e mata o shell (medido em 3 variantes). Aqui só
+                // aposentamos a entrada lógica — o compositor já enviou `closed`
+                // e não reutiliza mais o id. Destruição segura fica em §6.
+                state.retired.push(entry);
+                PENDING_FRAMES.with(|cell| {
+                    cell.borrow_mut().retain(|(id, _, _)| *id != window_id);
+                });
+                eprintln!(
+                    "FRAMEWEB: closed recebido window_id={window_id} entradas_restantes={}",
+                    state.entries.len()
+                );
             }
         }
     }
