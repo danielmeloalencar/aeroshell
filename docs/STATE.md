@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-22 · **Fase atual: F1** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · cursor invisível no udev segue em cartão separado · 02q FECHADA pelo juiz (harness de 300 ms segue como lacuna registrada)
+Última atualização: 2026-11-22 · **Fase atual: F1** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · cursor invisível no udev segue em cartão separado · 02q REABERTA E FECHADA PELO JUIZ em 2026-11-22 (sem adiamento, spike 12×36 eliminado; harness de 300 ms segue como limitação de VM registrada)
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -61,8 +61,13 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
       Não é regressão: `frame_buttons.py` define a variável e passa. Corrigido o RUNBOOK (comando nested
       agora exporta o IPC) e aberta a instância `wayland-aero-02q-visual5` (PID 197095, foots
       197105/197106, IPC `/tmp/opencode/02q-reopen/visual-ipc-5.sock`, log `visual-final5.log`) para o
-      humano confirmar os botões. **A decisão visual da 02q está dada; falta só essa confirmação dos
-      botões na instância com IPC.**
+      humano confirmar os botões. **Confirmação recebida:** humano rodou no tty3 (via `~/u`, que já define
+      o IPC) e relatou *"os botoes respondem, mas a janela não é reposicionada ao maximizar"*. Os botões
+      ✕/maximizar **funcionam**; o não-posicionamento é a dívida pré-existente de §6, fora da 02q.
+      **02q FECHADA PELO JUIZ em 2026-11-22** com: veredito visual "está ok" (nested) + tty3, serialização
+      cliente↔shell 2–6 ms, placeholder imediato (<100 ms) e sem spike 12×36. Os números de paint
+      (quente 448–572 ms, frio 1,2–1,4 s) seguem como limitação de VM em §7, por decisão do humano.
+      Gate final de fechamento `gate-close.log` EXIT=0; nenhuma instância 02q ficou em `ps` (humano fechou).
 - [x] **Correção F1 FECHADA PELO HUMANO (2026-11-22).** Veredito cru: *"funcionou, abri e fechei duas
       vezes, todas exibiu a decoração"*. Humano operou e julgou no tty3; agente não abriu/fechou app de
       julgamento nem trocou VT. Cobre o critério visual que faltava no item abaixo. Os avisos relatados
@@ -874,14 +879,10 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
-- **02q reaberta — decisão híbrida executada; só falta o juiz visual (nested e tty3).** Não há mais
-  decisão de ADR pendente: humano decidiu NÃO reabrir ADR 0007 e aceitar os números de paint como
-  limitação de VM. `map → 1º HTML` quente 448–572 ms e frio 1,2–1,4 s ficam documentados em §7, sem
-  alterar o limite do teste. Juiz visual **"está ok"** dado na visual4; resta confirmar os botões na
-  instância com IPC: `wayland-aero-02q-visual5`, compositor PID 197095, foots 197105/197106,
-  IPC `/tmp/opencode/02q-reopen/visual-ipc-5.sock`, log `/tmp/opencode/02q-reopen/visual-final5.log`.
-  Instâncias anteriores (`...-visual`, `...-02q-final`, `...-visual3`, `...-visual4`) foram fechadas
-  pelo humano ou estão desatualizadas: **usar a visual5**. Quem fecha é o humano.
+- **02q FECHADA (2026-11-22) — ver §3.** Reabertura executada e julgada: nested "está ok" e tty3 com
+  botões respondendo. Não há ADR pendente: humano decidiu NÃO reabrir ADR 0007 e aceitou os números de
+  paint como limitação de VM (§7), sem alterar limite de teste nem descartar amostras. Nenhuma instância
+  02q ficou aberta — o humano fechou todas. **Não reabrir sem novo pedido.**
 - **GAP ANALYSIS F1 (2026-11-22) CONCLUÍDA, SOMENTE LEITURA** — mapa em §3 (✅) e §7 (~/❌). Nenhum
   protocolo implementado; ordem de cartões proposta em §5/§7, aguardando decisão do humano.
 - **F1d3 FECHADA (2026-11-22) — ver §3.** Não há trabalho em andamento na F1d3. Cursor invisível no udev
@@ -1370,11 +1371,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- **02q reaberta (JUIZ VISUAL: "está ok" na visual4):** barra no primeiro instante, sem spike 12×36,
-  sem flash/gap, `foot` em ~800×600 aceito. Falta SÓ o humano testar max/✕ na instância com IPC
-  (`wayland-aero-02q-visual5`, PID 197095, 3 `foot`, IPC `/tmp/opencode/02q-reopen/visual-ipc-5.sock`,
-  log `visual-final5.log`) — na visual4 os cliques chegaram ao JS mas foram descartados por falta de
-  `AERO_WINDOW_IPC_SOCK` no comando de demonstração (RUNBOOK corrigido). tty3 (`~/u`) não foi julgado.
+- **02q (VALIDADA PELO JUIZ, FECHADA):** nested "está ok" (barra no primeiro instante, sem spike 12×36,
+  sem flash/gap, `foot` ~800×600 aceito) e tty3 via `~/u` com botões ✕/max respondendo. A janela
+  maximizada NÃO reposiciona — dívida pré-existente em §6, fora da 02q. Nenhuma instância ficou aberta.
 - **02q: `map → 1º HTML` quente ≤300 ms NÃO BATIDO NESTA VM** (448–572 ms em 3 execuções finais) e frio
   1,2–1,4 s = cold-start do WebProcess. Decisão do humano: aceitar como limitação de VM, **não alterar
   o limite do teste, não descartar amostras e não reabrir ADR 0007 agora**. Nenhuma conclusão de GPU real.
@@ -1704,15 +1703,14 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
 - **Reproduzir (final):** `python3 tests/integration/frame_cold_start_stages.py` → `VEREDITO: FALHA` só
   no latch quente; `stages-final-{1,2,3}.log`; `spike-baseline.log` vs `spike-after-full.log`;
   gate `gate-hybrid.log` EXIT=0.
-- **Juiz visual:** "está ok" dado na visual4. Instância para testar max/✕: `wayland-aero-02q-visual5`
-  (PID 197095, 3 foot, IPC `/tmp/opencode/02q-reopen/visual-ipc-5.sock`, `visual-final5.log`); as
-  anteriores estão desatualizadas. Deixar o humano fechar. tty3 exige o próprio humano rodar `~/u`.
-- **Descoberta lateral (fora da 02q):** maximizar só aumenta o tamanho e **não reposiciona** a janela
-  (`window_ipc.rs:128-151`); a janela maximizada começa em (60,80) e vaza para fora do output. É
-  comportamento pré-existente, não regressão da 02q — registrar cartão próprio se quiser corrigir.
+- **02q FECHADA PELO JUIZ (2026-11-22):** nested "está ok" + tty3 com botões respondendo. Não reabrir
+  sem novo pedido. Gate de fechamento `gate-close.log` EXIT=0; humano fechou as instâncias.
+- **Próximo passo proposto (NÃO executado):** cartão próprio para maximizar reposicionar a janela
+  (`window_ipc.rs:128-151` só muda `state.size`; falta origem do output e work area do painel).
+  É pré-existente, não regressão da 02q — aguardando decisão do humano.
 - **F1 FECHADAS pelo juiz:** F1a/b/c/d*, cursor-shape, primary-selection, popups-render, **F1f (ok visual em 1.5 e 2 no tty3)** e **correção F1 (reabertura: humano abriu/fechou 2×, todas com decoração)**. Sem push. **PARAR: não abrir F1g/subsurfaces sem aprovação (AGENTS.md §3.1).**
 - **Correção F1 entregue:** `next_window_id` monotônico (nunca reutiliza), `window_count` = water mark + testes, shell aposenta `FrameEntry` no `Closed` (move para `retired`, limpa PENDING_FRAMES) e preserva o log `FRAMEWEB: closed recebido`. Cartão `F1-correcao-reabertura-frame.md`.
-- **Prova:** `python3 tests/integration/frame_reopen.py` → 3× `VEREDITO: OK` (id 0 → 1, `frame_painted` no novo); baseline falhou antes. Regressões `frame_window_id`, `frame_follows_resize`, `frame_buttons`, `frame_resize_glue` → OK. `frame_cold_start` segue baseline-falha (02q). Gate `check.sh` EXIT=0, clippy bench 0, `--no-default-features` 0.
+- **Prova:** `python3 tests/integration/frame_reopen.py` → 3× `VEREDITO: OK` (id 0 → 1, `frame_painted` no novo); baseline falhou antes. Regressões `frame_window_id`, `frame_follows_resize`, `frame_buttons`, `frame_resize_glue` → OK. `frame_cold_start` (harness antigo) segue baseline-falha — 02q fechada pelo juiz, não por esse harness. Gate `check.sh` EXIT=0, clippy bench 0, `--no-default-features` 0.
 - **Veredito visual:** humano abriu→fechou→reabriu 2× no tty3, todas com decoração (§3). Agente não abriu/fechou app de julgamento nem trocou VT.
 - **F1g:** cartão `F1g-dmabuf-presentation.md` commitado (`4108122`), **NÃO executado**. Depois viria o resto de subsurfaces (F1e). Um cartão por sessão.
 - **Não medido / descoberta lateral:** destruição segura da janela GTK aposentada (§6); avisos xdg_activation/text_input/icon/hangup = protocolos F1i/F7 (§6, não causa); udev/DRM e desempenho em GPU real fora do escopo desta correção.

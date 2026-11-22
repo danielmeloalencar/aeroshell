@@ -1,4 +1,4 @@
-# Tarefa 02q (REABERTA em 2026-11-22) — cold-start da decoração, sem adiamento
+# Tarefa 02q (FECHADA PELO JUIZ em 2026-11-22) — cold-start da decoração, sem adiamento
 
 > Histórico preservado: cartão fechado em 2026-11-21 por decisão do juiz ("visualmente perfeito e bem
 > otimizado"), com o cronômetro >300 ms registrado como lacuna (`STATE.md` §7). O humano reabriu o
@@ -6,6 +6,9 @@
 > fechamento anterior é apagado; esta é uma nova execução com critério de medição diferente.
 > Decisão do humano (2026-11-22): **sem gambiarra** — nada de "esperar o associate para nascer o
 > cliente". O cliente nasce no startup; a garantia da decoração é do compositor.
+> **Fechamento (2026-11-22):** humano julgou nested ("está ok") e tty3 (`~/u`, botões respondendo);
+> serialização 2–6 ms, placeholder imediato, sem spike 12×36. Paint quente/frio aceito como limitação
+> de VM, sem alterar limite do teste. Maximizar não reposicionar é dívida pré-existente (STATE.md §6).
 
 ## Objetivo (uma frase, verificável)
 Toda janela mapeada tem decoração sólida no primeiro render, com o HTML real em ≤300 ms no caminho
@@ -40,12 +43,11 @@ reportado como número separado, sem ser fingido dentro do limite.
 - Finais 3× (`stages-final-{1,2,3}.log`): `VEREDITO: FALHA` somente no latch quente 448–572 ms; frio
   1,2–1,4 s reportado à parte; spawn 2–6 ms; placeholder <100 ms; latch→presented 4–18 ms.
   Vizinhos 6× OK; gate `gate-hybrid.log` EXIT=0; clippy bench 0; `--no-default-features` 0.
-- Juiz visual: humano respondeu **"está ok"** na visual4 (barra imediata, sem spike/flash). Falta testar
-  max/✕ na `wayland-aero-02q-visual5` (PID 197095, IPC `/tmp/opencode/02q-reopen/visual-ipc-5.sock`) —
-  na visual4 os cliques chegaram ao JS mas foram ignorados por falta de `AERO_WINDOW_IPC_SOCK` no comando
-  de demonstração (RUNBOOK corrigido). Maximizar não reposicionar a janela é dívida pré-existente (§6),
-  fora desta tarefa.
-  Pergunta extra ao juiz: o `foot` abrindo em ~800×600 (por causa do configure sugerido) é aceitável?
+- Juiz visual FINAL: humano respondeu **"está ok"** no nested e, no tty3 (`~/u`), **"os botoes respondem"**.
+  Na visual4 os cliques chegaram ao JS mas foram ignorados por falta de `AERO_WINDOW_IPC_SOCK` no comando
+  de demonstração (RUNBOOK corrigido; no tty3 o script já define a variável). O `foot` em ~800×600 foi
+  aceito. Maximizar não reposicionar é dívida pré-existente (§6), fora desta tarefa.
+  Gate de fechamento `gate-close.log` EXIT=0. Humano fechou as instâncias; nenhum PID meu ficou.
 
 ## Critério de aceite (comandos exatos + resultado esperado)
 1. **Teste primeiro:** `python3 tests/integration/frame_cold_start_stages.py` no código atual,
