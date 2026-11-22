@@ -867,9 +867,10 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
 - **02q reaberta — decisão híbrida executada; só falta o juiz visual (nested e tty3).** Não há mais
   decisão de ADR pendente: humano decidiu NÃO reabrir ADR 0007 e aceitar os números de paint como
   limitação de VM. `map → 1º HTML` quente 448–572 ms e frio 1,2–1,4 s ficam documentados em §7, sem
-  alterar o limite do teste. Instância FINAL deixada aberta: `wayland-aero-02q-visual3`, compositor PID
-  196471, foots 196472/196474, log `/tmp/opencode/02q-reopen/visual-final3.log`. Instâncias antigas
-  (`...-visual`, `...-02q-final`) também seguem abertas, mas estão desatualizadas: **usar a visual3**.
+  alterar o limite do teste. Instância FINAL deixada aberta: `wayland-aero-02q-visual4`, compositor PID
+  196715, foots 196720/196721, log `/tmp/opencode/02q-reopen/visual-final4.log`. Instâncias antigas
+  (`...-visual`, `...-02q-final`, `...-visual3`) seguem abertas ou foram fechadas pelo humano, mas estão
+  desatualizadas: **usar a visual4**.
   Quem fecha é o humano.
 - **GAP ANALYSIS F1 (2026-11-22) CONCLUÍDA, SOMENTE LEITURA** — mapa em §3 (✅) e §7 (~/❌). Nenhum
   protocolo implementado; ordem de cartões proposta em §5/§7, aguardando decisão do humano.
@@ -1355,8 +1356,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- **02q reaberta (NÃO VALIDADO VISUALMENTE):** instância FINAL aberta (`wayland-aero-02q-visual3`,
-  PID 196471, 3 `foot`, log `visual-final3.log`); as duas instâncias anteriores estão desatualizadas.
+- **02q reaberta (NÃO VALIDADO VISUALMENTE):** instância FINAL aberta (`wayland-aero-02q-visual4`,
+  PID 196715, 3 `foot`, log `visual-final4.log`); a instância visual3 foi fechada pelo humano e as
+  anteriores estão desatualizadas.
   O humano precisa olhar: barra no primeiro instante, sem moldura 12×36, sem flash/gap, e conferir se
   o `foot` abrindo em ~800×600 (por causa do configure sugerido) é aceitável. tty3 (`~/u`) não foi
   julgado — agente não troca VT. Sem o "ok", 02q NÃO fecha.
@@ -1689,7 +1691,7 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
 - **Reproduzir (final):** `python3 tests/integration/frame_cold_start_stages.py` → `VEREDITO: FALHA` só
   no latch quente; `stages-final-{1,2,3}.log`; `spike-baseline.log` vs `spike-after-full.log`;
   gate `gate-hybrid.log` EXIT=0.
-- **Juiz visual:** usar SOMENTE a instância `wayland-aero-02q-visual3` (PID 196471, 3 foot,
+- **Juiz visual:** usar SOMENTE a instância `wayland-aero-02q-visual4` (PID 196715, 3 foot,
   `visual-final3.log`); as outras duas (`...-visual`, `...-02q-final`) estão desatualizadas. Pedir "ok"
   e deixar o humano fechar. tty3 exige o próprio humano rodar `~/u`.
 - **Pergunta para o juiz:** o `foot` abrindo em ~800×600 por causa do configure sugerido é aceitável?

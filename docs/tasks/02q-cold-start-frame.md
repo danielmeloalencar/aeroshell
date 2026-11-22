@@ -40,7 +40,7 @@ reportado como número separado, sem ser fingido dentro do limite.
 - Finais 3× (`stages-final-{1,2,3}.log`): `VEREDITO: FALHA` somente no latch quente 448–572 ms; frio
   1,2–1,4 s reportado à parte; spawn 2–6 ms; placeholder <100 ms; latch→presented 4–18 ms.
   Vizinhos 6× OK; gate `gate-hybrid.log` EXIT=0; clippy bench 0; `--no-default-features` 0.
-- Juiz visual pendente na instância final `wayland-aero-02q-visual3` (PID 196471, 3 `foot`).
+- Juiz visual pendente na instância final `wayland-aero-02q-visual4` (PID 196715, 3 `foot`).
   Pergunta extra ao juiz: o `foot` abrindo em ~800×600 (por causa do configure sugerido) é aceitável?
 
 ## Critério de aceite (comandos exatos + resultado esperado)
