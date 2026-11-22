@@ -21,6 +21,14 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **F1-popups-render FECHADO PELO JUIZ VISUAL (2026-11-22).** Humano, no tty3 com `~/u`: abriu o
+      **`gedit`**, clicou com **botão direito** e relatou: *"apareceu sim um popup funcional, com borda
+      arredondada e largura da borda de 1px mais ou menos"*. Isso cobre o critério visual pendente (§7):
+      popup real acima da janela/painel, desenhado pelo caminho do `Window`/`LayerSurface` do Smithay, com
+      o grab implementado aqui. O humano operou e julgou; o agente não abriu/fechou aplicação nem trocou VT.
+      **Não investigamos o `nautilus`** — só mostrou `** Message: … Connecting to
+      org.freedesktop.Tracker3.Miner.Files` e não abriu; registrado como descoberta lateral em §6, fora
+      de escopo. **Nenhum cartão novo aberto.**
 - [x] **F1-popups-render (2026-11-22) — código, teste-first e gate verdes; aguarda juiz visual do popup.**
       **Correção ao mapa confirmada na fonte:** popups **já eram renderizados** pelo Smithay dentro de
       `Window`/`LayerSurface` (`desktop/space/wayland/window.rs:106-121`, `layer.rs:31-48`), que nosso
@@ -38,7 +46,7 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
       reordenando o cliente (grab antes do commit); preservada, não descartada. Outra amostra (`baseline3`)
       deu `NoCompositor` por socket stale no harness — corrigida com socket único por execução; preservada.
       Gate `check.sh` EXIT=0; clippy default/bench `-D warnings` 0; `--no-default-features` 0;
-      4 harnesses vizinhos OK. **FALTA o juiz visual do popup sobre a janela/painel no tty3 (§7).**
+      4 harnesses vizinhos OK. **Juiz visual APROVOU no gedit — ver primeiro bullet desta seção.**
 - [x] **F1-primary-selection FECHADA PELO HUMANO (2026-11-22).** Relato cru: *"Rodei o ~/u, ele abriu o foot
       com decoração e painel inferior. digitei 'teste', selecionei e quando pressionei botão do meio do mouse,
       ele colou o texto 'teste'"*. Isso cobre o round-trip que o harness automatizado não conseguiu medir
@@ -758,7 +766,7 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
 8. `05-compatibilidade-protocolos.md` — RASCUNHO; 7 mensagens do `foot` registradas em §6. NÃO executar sem ok.
 9. **GAP ANALYSIS F1 → ordem proposta de cartões (NÃO AUTORIZADA — abrir cartão e obter ok antes de executar).**
    Mapa completo em §7. **cursor-shape FECHADA pelo juiz e primary-selection FECHADA pelo humano (§3);
-   popups-render com código/gate prontos, juiz visual pendente (§7); próximo da fila: fractional-scale
+   popups-render FECHADO pelo juiz (§3); próximo da fila: fractional-scale
    (NÃO AUTORIZADO).** Ordem restante:
    fractional-scale →
    viewporter → text-input/IM → presentation-time → dmabuf (maior risco; VM sem 3D valida funcionamento,
@@ -769,6 +777,10 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **Descoberta lateral do juiz (2026-11-22, FORA DE ESCOPO):** ao tentar `nautilus` dentro do compositor,
+  o console mostrou só `** Message: 14:11:22.123: Connecting to org.freedesktop.Tracker3.Miner.Files` e a
+  aplicação não abriu. Hipótese: serviço GTK/Tracker fora do escopo do compositor. **Não investigado** — o
+  critério de popup já foi fechado com o `gedit`. Não reabrir sem pedido.
 - F1d3 (GATE, AMOSTRA FALHA PRESERVADA, 2026-11-22): `bash scripts/check.sh` após a mudança do `~/u`
       (painel) falhou **só** no S1, fase visual: `bun test` → `8 pass / 1 fail`,
       `(zenity:28441): Gtk-WARNING **: 05:36:59.858: Failed to open display`,
@@ -1150,14 +1162,12 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- **F1-popups-render — JUIZ VISUAL PENDENTE (2026-11-22).** O grab está provado por cliente real
-  (`POPUP_GRAB … estado=ok`, zero erros de protocolo) e a renderização pelo Smithay foi confirmada na
-  fonte, mas **nenhum pixel do popup foi julgado na tela pelo humano**. O cliente de teste não anexa
-  buffer (só prova o ciclo de protocolo), então a posição/sobreposição acima da janela e do painel
-  continua **não validada visualmente**. Para julgar: abrir um cliente com menu real (o humano indicou
-  GNOME Terminal — não instalado nesta VM) e conferir que o menu aparece sobre a janela/painel.
-  **Tarefa NÃO fechada sem o "ok" do humano** (AGENTS.md §0.9). Scroll/grab por clique fora também
-  não foi medido com input humano.
+- **F1-popups-render — RESOLVIDO PELO JUIZ VISUAL (2026-11-22).** Humano abriu `gedit` no tty3 e, com
+  botão direito, viu **popup funcional com borda arredondada e ~1 px**. Isso cobre a posição/sobreposição
+  que o cliente de teste sem buffer não media. Grab provado por cliente real (`POPUP_GRAB … estado=ok`,
+  zero erros de protocolo); renderização confirmada na fonte. Histórico preservado: GNOME Terminal
+  sugerido pelo humano não existe nesta VM e o nautilus não abriu (Tracker3, §6). **Não medido com input
+  humano:** dismiss por clique fora (o protocolo `xdg_popup.grab` prevê, mas não foi exercitado no juiz).
 - **F1-primary-selection — RESOLVIDO PELO HUMANO (2026-11-22); lacuna do harness preservada como histórico.**
   `wl-copy | wl-paste` e `wl-copy --primary | wl-paste --primary` deram `WLCOPY_EXIT=124` /
   `WLPASTE_EXIT=124` com saída vazia no nested sem foco e no headless com `button press` sintético
@@ -1454,12 +1464,11 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **Fase atual: F1; F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS pelo juiz; F1-cursor-shape e F1-primary-selection FECHADAS em 2026-11-22.** `F1-popups-render` tem código/gate verdes, **juiz visual pendente (§7)**. Sem push. **PARAR: não avançar de fase nem abrir o próximo cartão sem aprovação (AGENTS.md §3.1).**
-- **Nesta sessão:** humano autorizou `popups-render` e escolheu cliente `wayland-client` mínimo (gnome-terminal não existe nesta VM). Corrigiu-se o mapa: popups **já renderizam** via Smithay; a lacuna era o `grab()` no-op.
-- **Entrega técnica:** `PopupManager::grab_popup` com root de `find_popup_root_surface`, erro sem `unwrap`/`allow`; sondas `POPUP_*` sob bench; cliente `examples/popup_client.rs` + harness `tests/integration/popup_client.py` (RUNBOOK atualizado). Baseline `estado=noop` → depois `estado=ok`, zero erros de protocolo.
-- **Gate final:** `bash scripts/check.sh` → `OK`, `CHECK_EXIT=0`; clippy default/bench `-D warnings` → 0; `--no-default-features` → 0; harness de popup + 4 vizinhos OK. Amostras falhas (grab após commit, socket stale, clippy do example) preservadas em `/tmp/opencode/f1-popup/`. Commits até `ec49acd` + o deste fechamento.
-- **Para julgar à mão:** abrir cliente com menu real (`~/u` + cliente do humano) e confirmar que o popup aparece acima da janela e do painel; o agente não abriu/fechou aplicação nem trocou VT.
-- **Próximo passo proposto (NÃO executado):** com o "ok" do popup, abrir `fractional-scale` (cartão-mãe); depois viewporter → text-input/IM → presentation-time → dmabuf. Só com cartão e autorização.
-- **Não medido:** pixels/posição do popup (sem buffer no cliente de teste), cursor planes/vmwgfx, desempenho em GPU real.
-- **Contexto preservado:** `udev.rs` chama `send_frame`; `~/u` lança o painel e define `AERO_WINDOW_IPC_SOCK`. Conteúdo, cursor e seleção primária seguem aprovados; nada disso foi alterado.
+- **Fase atual: F1; F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS pelo juiz; F1-cursor-shape, F1-primary-selection e F1-popups-render FECHADAS em 2026-11-22.** Sem push. **PARAR: não avançar de fase nem abrir o próximo cartão sem aprovação (AGENTS.md §3.1).**
+- **Fechamento do popup:** humano abriu `gedit` no tty3 com `~/u`, clicou com botão direito e viu popup funcional com borda arredondada e ~1 px. Grab provado por cliente real (`POPUP_GRAB … estado=ok`, zero erros de protocolo). Humano operou e julgou; agente não abriu/fechou app nem trocou VT.
+- **Entrega técnica:** `PopupManager::grab_popup`, sondas `POPUP_*` sob bench, cliente `examples/popup_client.rs` + harness `tests/integration/popup_client.py` (RUNBOOK). Mapa corrigido: popups já renderizam via Smithay; nada foi mexido na cena.
+- **Gate final:** `bash scripts/check.sh` → `OK`, `CHECK_EXIT=0`; clippy default/bench `-D warnings` → 0; `--no-default-features` → 0; harness de popup + 4 vizinhos OK. Amostras falhas preservadas em `/tmp/opencode/f1-popup/`. Commits até `6e85be4` + o deste fechamento.
+- **Próximo passo proposto (NÃO executado):** se autorizado, abrir `fractional-scale` (cartão-mãe); depois viewporter → text-input/IM → presentation-time → dmabuf. Só com cartão e autorização.
+- **Não medido / descoberta lateral:** dismiss por clique fora não exercitado no juiz; cursor planes/vmwgfx; desempenho em GPU real; `nautilus` não abriu (Tracker3 — §6, fora de escopo).
+- **Contexto preservado:** `udev.rs` chama `send_frame`; `~/u` lança o painel e define `AERO_WINDOW_IPC_SOCK`. Conteúdo, cursor, seleção primária e popups seguem aprovados pelo humano; nada disso foi alterado.
 
