@@ -68,6 +68,9 @@ pub fn init_udev(
         utils::DeviceFd,
     };
 
+    #[cfg(feature = "bench")]
+    use smithay::wayland::compositor::{with_states, SurfaceAttributes};
+
     use crate::render::{elements::AeroRenderElements, scene::collect_output_elements};
 
     type Slot =
@@ -363,6 +366,31 @@ pub fn init_udev(
             // Heartbeat: se o log parar aqui, o travamento está no ciclo de render.
             if tick.is_multiple_of(250) {
                 tracing::info!(tick, "udev: loop de render vivo");
+            }
+            // F1d3: ler a fila de frame-callbacks SEM drenar. Quem drena e envia o
+            // `done()` é `send_frames_surface_tree` (smithay 0.7.0
+            // desktop/wayland/utils.rs:217) — este backend NÃO chama essa API.
+            // A sonda só observa: pending>0 significa que o cliente espera um
+            // `done()` que não chegou.
+            #[cfg(feature = "bench")]
+            if tick.is_multiple_of(60) {
+                let surface = data
+                    .state
+                    .space
+                    .elements()
+                    .find_map(|window| window.toplevel().map(|toplevel| toplevel.wl_surface()));
+                if let Some(surface) = surface {
+                    let pending = with_states(surface, |states| {
+                        states
+                            .cached_state
+                            .get::<SurfaceAttributes>()
+                            .current()
+                            .frame_callbacks
+                            .len()
+                    });
+                    let t = crate::frame_diagnostics::now_ns();
+                    eprintln!("UDEV_FRAME_CB t={t} surface=client pending={pending}");
+                }
             }
             let mut borrowed = slots.borrow_mut();
             for slot in borrowed.iter_mut() {

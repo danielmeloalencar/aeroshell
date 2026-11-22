@@ -35,6 +35,27 @@ impl CompositorHandler for AeroState {
     }
 
     fn commit(&mut self, surface: &WlSurface) {
+        // F1d3: cada commit do cliente (foot) e quantos frame-callbacks estavam
+        // pendentes NELE. Leitura sem drenar: a sonda não altera o protocolo.
+        #[cfg(feature = "bench")]
+        {
+            if self
+                .space
+                .elements()
+                .any(|window| window.toplevel().map(|t| t.wl_surface()) == Some(surface))
+            {
+                let pending = with_states(surface, |states| {
+                    states
+                        .cached_state
+                        .get::<SurfaceAttributes>()
+                        .current()
+                        .frame_callbacks
+                        .len()
+                });
+                let t = crate::frame_diagnostics::now_ns();
+                eprintln!("FOOT_COMMIT t={t} surface=client pending={pending}");
+            }
+        }
         // Medir o buffer REAL commitado pelo frame vs. o tamanho configurado.
         // `bench` também precisa dele para o diagnóstico FRAME_NEVER_DREW_AT_SIZE.
         #[cfg(any(debug_assertions, feature = "bench"))]

@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-22 · **Fase atual: F1** · **F1d1/F1d2 FECHADAS; F1d3 NÃO FECHADA (juiz negou 3×); cena/import provados no headless, falha localizada no caminho udev** · F1c FECHADA pelo juiz visual · 02q FECHADA pelo juiz (harness de 300 ms segue como lacuna registrada)
+Última atualização: 2026-11-22 · **Fase atual: F1** · **F1d1/F1d2 FECHADAS; F1d3 NÃO FECHADA (juiz negou 3×); cena/import provados no headless, `is_empty=true` é idle normal (fato do humano), falta medir frame-callbacks no udev** · F1c FECHADA pelo juiz visual · 02q FECHADA pelo juiz (harness de 300 ms segue como lacuna registrada)
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -21,6 +21,22 @@ import do cliente funcionam no headless; o elo que falta é a apresentação GBM
 F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **F1d3-diagnóstico (sonda de composição do cliente), 2026-11-22** — humano corrigiu fato: `is_empty=true`
+      é "sem damage, nada a submeter" (idle normal); input/VT/vblank provados bons no 4º log
+      (`/home/daniel/aeroshell-udev-20261122-045035.log`, sumiu — recorte literal em
+      `/tmp/opencode/f1d3-4exec/judge-log-045035-excerpt.txt`). Novo `tests/integration/udev_client_compose_probe.py`
+      escrito ANTES e visto FALHando no recorte (`probe-baseline.log`: `foot_commits=0 frame_cb_samples=0`,
+      `VEREDITO: FALHA`, EXIT=1). Instrumentação SOMENTE sob `bench`, sem drenar callbacks nem mudar protocolo:
+      `protocols/compositor.rs::commit` → `FOOT_COMMIT t=… surface=client pending=<n>`; `udev.rs` timer →
+      `UDEV_FRAME_CB t=… surface=client pending=<n>` a cada 60 ticks. Fonte da API: Smithay 0.7.0
+      `wayland/compositor/mod.rs:248` (`frame_callbacks: Vec<WlCallback>`) e `desktop/wayland/utils.rs:217`
+      (`send_frames_surface_tree`, que o repo NÃO chama). Gate `check.sh` EXIT=0 (`f1d3-4exec/gate-final.log`),
+      clippy `--features bench` 0, `--no-default-features` 0, fmt 0, `strings` do binário sem bench = 0 para
+      `FOOT_COMMIT`/`UDEV_FRAME_CB`. Sonda de commit provada em execução REAL: harness headless
+      (`headless_render_damage.py` VEREDITO OK, log `/tmp/opencode/f1c/headless-14037.log`) gerou 7
+      `FOOT_COMMIT` em 0,76 s com `pending_seq=0,1,1,0,1,1,0` — ou seja, no caminho que funciona os callbacks
+      circulam. Classificador validado com commits reais + CB sintético (só parser, não produto):
+      `SEM_DAMAGE_FORA_DA_CENA` e `CALLBACK_NAO_CHEGA` distintos. **Falta o log do tty3 com as sondas.**
 - [x] **F1d3-diagnóstico (cena/import provados), 2026-11-22** — juiz negou 3× no tty3; o 3º log
       (`/home/daniel/aeroshell-udev-20261122-040108.log`, transcrito na mensagem; arquivo sumiu depois)
       mostrou `UDEV_SESSION/DRM/OUTPUT active=true`, `UDEV_FRAME … queued="ok"` e `UDEV_VBLANK … submitted="ok"`
@@ -496,12 +512,13 @@ F1 anterior revertida em `4307cc4`.
 ## 4. Em andamento
 - **F1d3 NÃO FECHADA — juiz negou 3×; diagnóstico separou cena/import de apresentação (§3/§7).**
   Cartões: `F1d-udev-drm-gbm-libinput.md` e `F1d3-diagnostico-visual.md`. Headless prova que o cliente vira
-  elemento e aparece em pixels; udev aceita frames/vblank, mas o juiz vê só a moldura. Nesta VM (sem VT)
-  `--backend udev` falha em `session.open()` com `EAGAIN`: **não posso medir pixels do tty3**.
-  **Próximo passo proposto (não executado):** instrumentar `UDEV_FRAME` com `primary_element`/
-  `overlay_elements`/`cursor_element` e regiões opacas sob `bench`; humano reexecuta `~/u` no tty3 e envia
-  o log para escolher entre composição forçada (`FrameFlags::empty()`) e formato/alpha do GBM. Cursor segue
-  ausente (§6). Push WIP pedido pelo humano falhou por credencial (`could not read Username`); commits locais
+  elemento e aparece em pixels; udev aceita frames/vblank, mas o juiz vê só a moldura. Fato novo do humano:
+  `is_empty=true` é idle normal, **não** é bug e não deve ser alterado; input/VT/vblank estão provados bons.
+  Sinal em aberto: `is_empty` fica `true` ~47 s durante interação com o cliente. Instaladas as sondas
+  `FOOT_COMMIT`/`UDEV_FRAME_CB` (§3); **falta o log do tty3 com elas** para classificar
+  `CALLBACK_NAO_CHEGA` vs `SEM_DAMAGE_FORA_DA_CENA`. Nesta VM (sem VT) `--backend udev` falha em
+  `session.open()` com `EAGAIN`: **não posso medir o pending do udev**. Cursor segue ausente (§6).
+  Push WIP pedido pelo humano falhou por credencial (`could not read Username`); commits locais
   `f0da56a`/`a56b85a` prontos para o humano empurrar. **Não é push de conclusão**.
 - F1c FECHADA (§3): prova técnica + juiz visual "aprovado visualmente" em 2026-11-21. Aplicação encerrada
   pelo humano (não pelo agente). F1d foi autorizada em 2026-11-21 e F1d1/F1d2 foram executadas (§3);
@@ -534,12 +551,13 @@ F1 anterior revertida em `4307cc4`.
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. **F1d3 (PRÓXIMO PASSO, NÃO EXECUTADO):** sonda `primary_element`/overlay/opaque no `UDEV_FRAME` sob
-   `bench`, humano roda `~/u` no tty3 e envia o log; só então abrir cartão de correção com ok. Se Confirmado
-   direct-scanout/opaco, candidato mínimo é `FrameFlags::empty()` em `udev.rs` (forçar composição); se for
-   formato/alpha, trocar a ordem de `color_formats` exige decisão (transparência do painel/frame). Depois,
-   novo juiz visual: painel/`foot`/arrasto/VT, dá o ok e fecha. Plano B exige aprovação explícita.
-   Não reabrir 02q pela divergência do cronômetro sem pedido explícito.
+0. **F1d3 (PRÓXIMO PASSO, NÃO EXECUTADO):** humano roda `~/u` no tty3 (já com as sondas `FOOT_COMMIT`/
+   `UDEV_FRAME_CB` compiladas) e envia o log; `python3 tests/integration/udev_client_compose_probe.py <log>`
+   classifica. Se `CALLBACK_NAO_CHEGA`, candidato mínimo é chamar `send_frames_surface_tree` no loop udev
+   (API real Smithay 0.7.0 `utils.rs:217`); se `SEM_DAMAGE_FORA_DA_CENA`, investigar composição/`FrameFlags`
+   (candidato `FrameFlags::empty()`) e formato/alpha do GBM — trocar `color_formats` exige decisão. Só então
+   abrir cartão de correção com teste ANTES visto falhando, e novo juiz visual: painel/`foot`/arrasto/VT.
+   Cursor é cartão separado; Plano B exige aprovação explícita. Não reabrir 02q sem pedido.
 1. `02o` — SUBSTITUÍDA: a 02p criou sonda full-res que reproduziu o flicker (2×1.910 pixels) e depois
    comprovou canvas fixo sem transiente. A grade antiga não é mais critério; não reabrir sem novo pedido.
 2. `02n` — JUIZ NEGOU ("problema ainda ocorre"); instância já não existe. NÃO abrir 5ª correção sem decisão.
@@ -553,6 +571,18 @@ F1 anterior revertida em `4307cc4`.
 8. `05-compatibilidade-protocolos.md` — RASCUNHO; 7 mensagens do `foot` registradas em §6. NÃO executar sem ok.
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- F1d3 (FATO DO HUMANO, 2026-11-22 — prevalece sobre interpretação anterior): `is_empty=true` significa
+  "sem damage, nada a submeter", isto é, **idle normal**. Não alterar a lógica de `is_empty`. Input, troca de
+  VT e vblank estão provados bons no 4º log; não mexer neles. Cursor é cartão separado.
+- F1d3 (AMOSTRA, arquivo original sumiu 4×): `/home/daniel/aeroshell-udev-20261122-045035.log` não existe
+  mais; recorte literal das linhas `UDEV_*` preservado em `/tmp/opencode/f1d3-4exec/`. O atalho VT FUNCIONOU
+  (`UDEV_VT key="F1" vt=1 result="ok"`), mas o humano usou F1 (vt=1) em vez de F2/F3 do RUNBOOK e a sessão
+  foi pausada (`UDEV_SESSION_EVENT event=PauseSession active=false`), sem `ActivateSession` até o fim — o
+  `DeviceInactive` em loop depois disso é **esperado**, não causa da imagem ausente.
+- F1d3 (HARNESS, corrigir sem mexer no produto): `udev_frame_probe.py:26` exige `UDEV_VT key=F(\d+)` sem
+  aspas, mas o tracing imprime `key="F1"` → reporta `vt=0`; e o mesmo analisador marca `VEREDITO: FALHA` só
+  pelos `render_frame falhou` pós-`PauseSession`. Ambos são do analisador; a evidência de apresentação da
+  fase ativa (`session active=true`, `output active=true`, `frame queued=ok`, `vblank submitted=ok`) está boa.
 - F1d3-diagnóstico (AMOSTRA, arquivo original sumiu 2×): tanto `aeroshell-udev-20261122-023701.log` quanto
   `aeroshell-udev-20261122-032739.log` não existem mais em `/home/daniel` após o reboot; usei recortes literais
   do texto colado pelo humano (`/tmp/opencode/f1d3-rediag/judge-log-excerpt.txt`,
@@ -884,6 +914,11 @@ F1 anterior revertida em `4307cc4`.
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- F1d3 (**PENDENTE NO 2026-11-22 — sondas instaladas, sem log do tty3**): `FOOT_COMMIT` e `UDEV_FRAME_CB`
+  existem sob `bench` e o analisador `udev_client_compose_probe.py` distingue os cenários, mas **nenhum valor
+  de `pending` do backend udev foi medido** (VM sem VT). O headless que funciona mediu 7 commits em 0,76 s
+  com `pending_seq=0,1,1,0,1,1,0`; não é evidência do udev. Nenhuma causa foi escolhida e nenhuma correção
+  foi proposta — o juiz visual do tty3 segue pendente.
 - F1d3 (**3º JUIZ VISUAL NEGOU — 2026-11-22, dado do humano**): rodou `~/u` (script com `RUST_LOG=debug`)
   no tty3 e respondeu **"mesma coisa aconteceu"**. Agora há evidência objetiva no log:
   `UDEV_SESSION active=true`, `UDEV_DRM active=true`, `UDEV_OUTPUT active=true`,
@@ -1122,9 +1157,11 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **Fase atual: F1.** F1a/F1b/F1c FECHADAS pelo juiz; F1d1/F1d2 FECHADAS no técnico. **F1d3 NÃO FECHADA: juiz negou 3× no tty3.** Commits WIP locais `f0da56a`/`a56b85a`; `git push origin master` FALHOU (`could not read Username for 'https://github.com'`), sem conflito — credencial ausente neste ambiente. Não é push de conclusão.
-- F1d3: `render/scene.rs` unifica a cena; `backend/udev.rs` faz libseat → udev → DRM/GBM → EGL → `DrmOutputManager` → libinput → vblank → render por timer. Diagnóstico antigo: `UDEV_SESSION`/`UDEV_OUTPUT`/`UDEV_FRAME`/`UDEV_VBLANK`/`UDEV_VT` + `Ctrl+Alt+F1..F4` via `change_vt`. Cursor invisível é dívida (§6).
-- **Prova nova:** `python3 tests/integration/f1d3_headless_client_pixels.py` → `baseline=0`, `after=483/528`, OK; `python3 tests/integration/f1d3_client_element_probe.py` → `delta=1 from_surface=Some err=none`, OK. Ambos escritos antes e vistos FALHANDO sem instrumentação. Cena/import NÃO são a causa.
-- Gate final `bash scripts/check.sh` EXIT=0 (`/tmp/opencode/f1d3-pixels/gate-final2.log`); clippy bench 0; `--no-default-features` 0; s1_nested 0; multi 0; headless_render_damage 0 só em D-Bus privado (colisão com a sessão udev viva registrada).
-- **Próximo passo (NÃO executado):** sob `bench`, logar `primary_element`/`overlay_elements`/`cursor_element` e opacidades no `UDEV_FRAME`; humano roda `~/u` no tty3 e envia o log. Com o dado, abrir cartão: se direct-scanout/opaco, candidato mínimo `FrameFlags::empty()` em `udev.rs`; se formato/alpha, decidir troca de `color_formats`. Plano B exige aprovação explícita.
+- **Fase atual: F1.** F1a/F1b/F1c FECHADAS pelo juiz; F1d1/F1d2 FECHADAS no técnico. **F1d3 NÃO FECHADA: juiz negou 3× no tty3.** Push WIP falhou por credencial (`could not read Username`); commits locais `f0da56a`/`a56b85a` + o novo commit desta sessão prontos. Não é push de conclusão.
+- **Fato do humano:** `is_empty=true` = idle normal (sem damage), NÃO bug. Não alterar. Input/VT/vblank provados bons no 4º log; cursor é cartão separado (§6).
+- **Sinal:** `is_empty` fica `true` ~47 s durante interação. Cena/import já provados: `f1d3_headless_client_pixels.py` (`after=483/528`) e `f1d3_client_element_probe.py` (`delta=1`, `err=none`). Falta saber se o cliente recebe frame-callbacks no udev.
+- **Feito agora (código):** sondas SOMENTE sob `bench` em `protocols/compositor.rs::commit` (`FOOT_COMMIT … pending=`) e `udev.rs` timer (`UDEV_FRAME_CB … pending=`), ambas de LEITURA (não drenam). Novo `tests/integration/udev_client_compose_probe.py` escrito antes e visto FALHANDO (`probe-baseline.log`: 0 sondas, EXIT=1).
+- **Provas:** gate `check.sh` EXIT=0 (`/tmp/opencode/f1d3-4exec/gate-final.log`), clippy bench 0, `--no-default-features` 0, fmt 0, `strings` sem bench = 0. Headless real (`headless-14037.log`): 7 `FOOT_COMMIT` em 0,76 s, `pending_seq=0,1,1,0,1,1,0` — callbacks circulam no caminho que funciona. Classificador validado (parser, não produto).
+- **Estado exato para reproduzir:** `git status --short` limpo após o commit; gate em `/tmp/opencode/f1d3-4exec/gate-final.log`; recorte do 4º log em `/tmp/opencode/f1d3-4exec/judge-log-045035-excerpt.txt`.
+- **Próximo passo imediato (NÃO executado):** humano roda `~/u` no tty3 e envia o log; agente roda `python3 tests/integration/udev_client_compose_probe.py <log>`. Se `CALLBACK_NAO_CHEGA`, candidato mínimo: chamar `send_frames_surface_tree` no loop udev (Smithay 0.7.0 `utils.rs:217`). Se `SEM_DAMAGE_FORA_DA_CENA`, investigar composição (`FrameFlags::empty()`)/formato. Só depois: cartão de correção com teste-first + novo juiz visual.
 
