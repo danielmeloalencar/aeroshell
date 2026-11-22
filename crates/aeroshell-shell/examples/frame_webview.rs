@@ -804,6 +804,13 @@ fn main() {
     let app = Rc::new(
         gtk4::Application::builder()
             .application_id("dev.aeroshell.frame-webview")
+            // 02s: sem esta flag o GApplication registra o nome no D-Bus de
+            // sessão; uma segunda instância só reativa a primeira e sai sem
+            // executar o connect_activate — o shell privilegiado cai e a janela
+            // fica sem decoração. Cada processo deve ser independente.
+            // Fonte: gtk4-0.11.5/src/auto/application.rs:72 (builder.flags) e
+            // gio-0.22.11/src/auto/flags.rs:112-113 (NON_UNIQUE).
+            .flags(gtk4::gio::ApplicationFlags::NON_UNIQUE)
             .build(),
     );
     APP.with(|cell| *cell.borrow_mut() = Some(Rc::clone(&app)));

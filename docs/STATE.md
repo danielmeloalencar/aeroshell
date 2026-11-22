@@ -904,6 +904,13 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
+- **02s (2026-11-22) — código/teste/gates verdes, aguarda SÓ o juiz visual.** Correção aplicada:
+  `frame_webview.rs:803` usa `ApplicationFlags::NON_UNIQUE` no builder, para cada processo ser independente
+  no D-Bus. Harness novo `frame_two_instances.py`: baseline FALHA (B com `FRAMEWEB=0` e shell caiu),
+  3× OK (A e B com `FRAMEWEB`, `frame_painted`, IPC `W 0`, 0 quedas). Vizinhos OK; gate/clippy/no-default OK.
+  Instância nested deixada **aberta de propósito** para o juiz rodar `~/u` no tty3 com concorrência:
+  socket `wayland-aero-02s-visual`, IPC `/tmp/opencode/02s/visual-ipc.sock`, comp PID 229156,
+  painel 229162, log `/tmp/opencode/02s/visual.log`, PIDs em `visual.pids`. O agente NÃO fecha.
 - **02r FECHADA (2026-11-22) — ver §3.** Juiz aprovou no nested e no tty3. A instância nested foi fechada
   a pedido do humano (TERM só nos PIDs 211541/211563/211566 + remoção dos sockets); `ps` sem processos
   AeroShell. O `foot --server=3` PID 3911 é preexistente e NÃO foi tocado. Não reabrir sem novo pedido.
@@ -947,8 +954,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. **RASCUNHO `02s-frame-application-id.md` (duas instâncias no mesmo D-Bus) — aguardando o "ok" do humano
-   para executar.** Não começar sem confirmação. Fora isso, NENHUMA AUTORIZADA — PARAR.
+0. **02s EM EXECUÇÃO — só falta o juiz visual (§4/§7).** Não abrir outro cartão até o "ok". Fora isso,
+   NENHUMA AUTORIZADA — PARAR.
    02r FECHADA pelo juiz (§3); F1d3 FECHADA pelo juiz (§3).
    Cursor invisível no udev, hotplug, multi-GPU, presentation-time e
    Plano B são dívidas/cartões separados — abrir só com decisão explícita. Não avançar de fase sem
@@ -1747,8 +1754,13 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **Sessão atual: 02r FECHADA PELO JUIZ (2026-11-22) — nested e tty3 aprovados.** Nenhuma instância ficou
-  aberta pelo agente; o humano fechou/julgou no tty3. Sem push (commits locais até `cf66e2e` + fechamento).
+- **Sessão atual (02s, CÓDIGO/TESTE/GATE OK): aguarda SÓ o juiz visual.** Instância nested aberta de
+  propósito (§4); humano deve rodar `~/u` no tty3 **com ela aberta** e confirmar que a decoração aparece
+  e que ✕/max respondem nas DUAS instâncias. Sem o "ok", 02s NÃO está concluída (§0.9). Quem fecha é o humano.
+- **Reproduzir 02s:** `python3 tests/integration/frame_two_instances.py` → 3× `VEREDITO: OK`
+  (`final-{1,2,3}.log`); baseline FALHA em `baseline2.log`. Gate `gate-final.log` EXIT=0, clippy bench 0,
+  `--no-default-features` 0. Vizinhos buttons/reopen/window_id/resize_glue OK.
+- **Histórico: 02r FECHADA PELO JUIZ (2026-11-22) — nested e tty3 aprovados.** Sem push (commits locais).
 - **Reproduzir:** `python3 tests/integration/maximize_workarea.py` → `VEREDITO: OK` 3×
   (`/tmp/opencode/02r/final-{1,2,3}.log`); baseline FALHA em `baseline-final-harness.log`.
   Cliente `(60,80,798,598) → (6,30,788,516)`, frame `(800,552) == zona`, origem `(0,0)`, volta exato.
