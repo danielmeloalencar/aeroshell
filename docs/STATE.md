@@ -902,12 +902,11 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
-- **02r (2026-11-22) — código/teste/gate prontos, aguarda SOMENTE o juiz visual.** Instância nested
-  deixada aberta: socket `wayland-aero-02r-visual`, IPC `/tmp/opencode/02r/visual-ipc.sock`,
-  compositor PID 211541, painel PID 211563, log `/tmp/opencode/02r/visual.log`,
-  PIDs em `/tmp/opencode/02r/visual.pids`. O humano deve confirmar que o maximize cobre a área útil
-  sem vazar para baixo do painel e que o desmaximizar devolve a janela; o agente NÃO encerrou o
-  processo. Não reabrir sem novo pedido.
+- **02r (2026-11-22) — código/teste/gate prontos; nested APROVADO, tty3 em reteste.** O humano autorizou
+  explicitamente o agente a fechar a instância nested: TERM nos PIDs que ele iniciou (211541/211563/211566)
+  + remoção dos sockets `wayland-aero-02r-visual` e `visual-ipc.sock`. `ps` final: **NENHUM** processo
+  AeroShell vivo (o `foot --server=3` PID 3911 é preexistente, NÃO foi tocado). O humano vai repetir
+  `~/u` no tty3 sem concorrência de D-Bus; aguardando o resultado. Não reabrir sem novo pedido.
 - **02q FECHADA (2026-11-22) — ver §3.** Reabertura executada e julgada: nested "está ok" e tty3 com
   botões respondendo. Não há ADR pendente: humano decidiu NÃO reabrir ADR 0007 e aceitou os números de
   paint como limitação de VM (§7), sem alterar limite de teste nem descartar amostras. Nenhuma instância
@@ -1758,10 +1757,11 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
   (`/tmp/opencode/02r/final-{1,2,3}.log`); baseline FALHA em `baseline-final-harness.log`.
   Cliente `(60,80,798,598) → (6,30,788,516)`, frame `(800,552) == zona`, origem `(0,0)`, volta exato.
   Gate `check.sh` EXIT=0 (`gate-final.log`), clippy bench 0, `--no-default-features` 0.
-- **Próximo passo imediato (NÃO executado):** DECISÃO DO HUMANO: (a) autorizar o agente a fechar a instância
-  nested (PIDs 211541/211563/211566) para repetir `~/u` sem concorrência, ou (b) abrir cartão próprio para
-  a decoração no tty3 (fora da 02r), ou (c) encerrar a 02r como parcial com o nested aprovado. Só então
-  marcar FECHADA em §3/§4. Sem 3ª abordagem sozinho (AGENTS.md §3.12, regra das duas tentativas).
+- **Próximo passo imediato (NÃO executado pelo agente):** humano repetiu decisão (a) — **já executada**:
+  instância nested fechada e sockets removidos, `ps` sem processos AeroShell. Agora o humano roda `~/u`
+  no tty3 e reporta se a decoração apareceu; se aparecer, confirmar maximize/desmaximizar e fechar a 02r.
+  Se ainda falhar, **PARAR** e abrir cartão próprio para o frame no udev — sem 3ª abordagem sozinho
+  (AGENTS.md §3.12, regra das duas tentativas).
 - **Histórico 02q (FECHADA pelo juiz):** cliente nasce no startup, placeholder do compositor para
   qualquer janela e `set_default_insets` no protocolo; `pending_initial_command`/sleep removidos.
 - **Reproduzir:** `python3 tests/integration/frame_cold_start_stages.py` → 3× `VEREDITO: FALHA` só pelo
