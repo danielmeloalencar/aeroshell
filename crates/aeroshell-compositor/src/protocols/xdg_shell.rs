@@ -84,6 +84,11 @@ impl XdgShellHandler for AeroState {
 
     fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {
         self.unconstrain_popup(&surface);
+        #[cfg(feature = "bench")]
+        {
+            let t = crate::frame_diagnostics::now_ns();
+            eprintln!("POPUP_NEW t={t} surface={:?}", surface.wl_surface().id());
+        }
         let _ = self.popups.track_popup(PopupKind::Xdg(surface));
     }
 
@@ -114,7 +119,38 @@ impl XdgShellHandler for AeroState {
     ) {
     }
 
-    fn grab(&mut self, _surface: PopupSurface, _seat: wl_seat::WlSeat, _serial: Serial) {}
+    fn grab(&mut self, surface: PopupSurface, _seat: wl_seat::WlSeat, serial: Serial) {
+        let Ok(root) = find_popup_root_surface(&PopupKind::Xdg(surface.clone())) else {
+            #[cfg(feature = "bench")]
+            eprintln!(
+                "POPUP_GRAB t={} estado=sem_root",
+                crate::frame_diagnostics::now_ns()
+            );
+            return;
+        };
+        let popup = PopupKind::Xdg(surface);
+        // O `PopupGrab` vive no user_data do seat (grab.rs:99-102); o handle
+        // local só guarda o estado até o dismiss, não precisa ser persistido.
+        let resultado = self
+            .popups
+            .grab_popup::<crate::state::AeroState>(root, popup, &self.seat, serial);
+        #[cfg(feature = "bench")]
+        {
+            let t = crate::frame_diagnostics::now_ns();
+            let estado = match &resultado {
+                Ok(_) => "ok",
+                Err(err) => {
+                    tracing::warn!(?err, "grab de popup recusado");
+                    "erro"
+                }
+            };
+            eprintln!(
+                "POPUP_GRAB t={t} serial={} estado={estado}",
+                u32::from(serial)
+            );
+        }
+        let _ = resultado;
+    }
 }
 
 delegate_xdg_shell!(AeroState);
@@ -173,6 +209,11 @@ pub fn handle_commit(popups: &mut PopupManager, space: &Space<Window>, surface: 
     if let Some(PopupKind::Xdg(popup)) = popups.find_popup(surface) {
         if !popup.is_initial_configure_sent() {
             let _ = popup.send_configure();
+            #[cfg(feature = "bench")]
+            {
+                let t = crate::frame_diagnostics::now_ns();
+                eprintln!("POPUP_COMMIT t={t} surface={:?}", popup.wl_surface().id());
+            }
         }
     }
 }

@@ -155,6 +155,7 @@ python3 tests/integration/frame_fixed_canvas_release_pixels.py         # 02p: re
 python3 tests/integration/frame_fixed_canvas_release_pixels.py growth  # 02p: target > canvas
 python3 tests/integration/frame_fixed_canvas_hygiene.py                # 02p: sem ReleaseSwap
 python3 tests/integration/frame_repeated_activate.py                   # 02p: activate idempotente
+python3 tests/integration/popup_client.py         # F1-popups-render: xdg_popup real + grab (exige build --features bench)
 python3 tests/integration/frame_cold_start.py     # 02q: placeholder/pool/related-view + cronômetro map→1º render
 python3 tests/integration/headless_render_damage.py # F1b/c: age>0, damage parcial e pixels do 9-slice
 python3 tests/integration/multi_output_damage.py  # F1c: 2 outputs, damage incremental e conteúdo nos 2 tiles
@@ -164,6 +165,9 @@ python3 tests/integration/supervisor_lifecycle.py # kill -9 do compositor derrub
 python3 tests/integration/supervisor_real.py      # fluxo real shell privilegiado
 python3 tests/bench/run_frame_bench.py            # benchmark de protocolo (VM ruidosa: sem conclusão)
 ```
+Para o harness de popup (`popup_client.py`), compile antes com
+`cargo build -p aeroshell-compositor --features bench` e
+`cargo build -p aeroshell-compositor --example popup_client` — as sondas `POPUP_*` só existem com `bench`.
 Testes de protocolo headless (CI): `cargo test -p aeroshell-compositor`.
  
 ## Armadilhas conhecidas
