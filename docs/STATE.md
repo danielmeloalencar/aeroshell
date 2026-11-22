@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-22 · **Fase atual: F1** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · **F1i+ FECHADA PELO JUIZ VISUAL (digitação normal; só aviso de toplevel-icon, fora de escopo)** · **título real na titlebar FECHADO PELO JUIZ VISUAL ("ok")** · cursor invisível no udev segue em cartão separado · 02q REABERTA E FECHADA PELO JUIZ em 2026-11-22 (sem adiamento, spike 12×36 eliminado; harness de 300 ms segue como limitação de VM registrada) · **02r FECHADA PELO JUIZ (nested + tty3) e 02s FECHADA PELO JUIZ (duas instâncias no mesmo D-Bus, "ok aprovado")**
+Última atualização: 2026-11-22 · **Fase atual: F1** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · **F1i+ FECHADA PELO JUIZ VISUAL (digitação normal; só aviso de toplevel-icon, fora de escopo)** · **título real na titlebar FECHADO PELO JUIZ VISUAL ("ok")** · **F1-toplevel-icon: código/teste/gate verdes, juiz visual PENDENTE (§3/§7)** · cursor invisível no udev segue em cartão separado · 02q REABERTA E FECHADA PELO JUIZ em 2026-11-22 (sem adiamento, spike 12×36 eliminado; harness de 300 ms segue como limitação de VM registrada) · **02r FECHADA PELO JUIZ (nested + tty3) e 02s FECHADA PELO JUIZ (duas instâncias no mesmo D-Bus, "ok aprovado")**
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -21,6 +21,28 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [~] **F1-toplevel-icon — ícone real na titlebar (2026-11-22) — código/teste/gate verdes; juiz visual PENDENTE (§7).**
+      Cartão `docs/tasks/F1-toplevel-icon.md` (humano escolheu um cartão único com as duas etapas).
+      **Guia (não receita):** `domicile-engine` — base64 próprio (`packages/domicile-host/src/base64.rs:1`),
+      data URL (`data_url.rs:3`) e lookup de ícone em diretórios XDG (`docs/SHELL-CONFIG.md:388-393`).
+      APIs confirmadas no Smithay 0.7.0 fixado: `wayland/xdg_toplevel_icon.rs` (`:211` manager, `:40` `set_icon`,
+      `:76-92` cached state, `:390` delegate) e `with_buffer_contents` (`shm/mod.rs:241`). Nenhuma dep nova.
+      Código: `state.rs` + `seat.rs` anunciam `xdg_toplevel_icon_manager_v1` (tamanhos 16/32/48/64), sonda bench
+      `ICON_SET ... w/h/scale/name`; `window_ipc.rs` ganhou `icon <id>` → `ICON ... <base64>` ou `ICON ... NAME <json>`
+      com base64 próprio (teste unitário `base64_sem_dependencia`); `frame_webview.rs` consome via polling de 1 s,
+      converte pixels em canvas→PNG e resolve nomes com `gtk4::IconTheme` → data URI SVG/PNG. `<img id="icon">` dentro
+      da zona de 120 px (sem mudar insets/slices).
+      **Descoberta que explica o feedback do humano ("ainda não vi ícone"):** o `foot` envia `name=foot`, não buffers;
+      a primeira versão tratava só pixels e por isso nada aparecia. Agora o caminho de nome passa no harness.
+      **Teste-first:** `tests/integration/f1_toplevel_icon.py` escrito antes; baseline `VEREDITO: FALHA`
+      (`baseline2.log`: global ausente, aviso do foot, sem DOM). Depois 3× `VEREDITO: OK` (`final{15,16,17}.log`):
+      cliente com buffer 16×16 vermelho → `ICON_SET ... w=16 h=16`, IPC com BGRA `00 00 FF FF`, DOM com
+      `data:image/png`, e `foot` → `titlebar_icon window_id=1 source=nome name=foot`, aviso ausente. Amostras
+      intermediárias preservadas (global com nome errado, cliente sem pixels, wait no arquivo errado).
+      Gate `check.sh` EXIT=0 (`gate-final2.log`), clippy bench 0, `--no-default-features` 0.
+      Vizinhos: `frame_window_id`, `frame_reopen`, `frame_buttons`, `frame_resize_glue`, `headless_render_damage`,
+      `sdk_cli` OK; `frame_title` falhou 1× (2º `title_applied` ausente) e passou na repetição sem mudança de código
+      (`reg-frame_title.log` vs `-2`). **Nenhuma fase/cartão novo aberto.**
 - [x] **Título real na titlebar FECHADO PELO JUIZ VISUAL (2026-11-22).**
       Cartão `docs/tasks/F1-titlebar-real-title.md`. O compositor JÁ expunha o título no IPC
       (`window_ipc.rs:30-41,80-102`); a lacuna era só no shell. `frame_webview.rs` ganhou `ipc_title()`
@@ -970,6 +992,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
+- **F1-toplevel-icon (2026-11-22): código, teste-first, 3× harness verde, regressões e gate prontos (§3). Falta o juiz
+  visual: ícone real visível na barra do `foot`/`gedit`. O humano já reportou que NÃO viu ícone nos testes anteriores
+  (antes do caminho de nome); uma instância nova será deixada aberta para novo julgamento. Não abrir próximo cartão.**
 - **Título real na titlebar FECHADO PELO JUIZ (2026-11-22) — ver §3.** Humano confirmou o título real na barra com
   o `foot` na nested. Nenhuma instância encerrada pelo agente. Não reabrir sem novo pedido; próximo cartão só com
   autorização explícita.
@@ -1021,8 +1046,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. **NENHUMA AUTORIZADA — PARAR.** Título real FECHADO PELO JUIZ (§3/§4) e F1i+ FECHADA PELO JUIZ (§3).
-   O próximo cartão SÓ com autorização explícita.
+0. **NENHUMA AUTORIZADA — PARAR.** F1-toplevel-icon aguarda o juiz visual (§4/§7); título real e F1i+ FECHADOS PELO
+   JUIZ (§3). O próximo cartão SÓ com autorização explícita.
    02s FECHADA pelo juiz (§3), 02r FECHADA pelo juiz (§3),
    F1d3 FECHADA pelo juiz (§3).
    02r FECHADA pelo juiz (§3); F1d3 FECHADA pelo juiz (§3).
@@ -1054,6 +1079,13 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **F1-toplevel-icon (2026-11-22): caminho de nome é essencial.** `foot` envia `set_name` (`name=foot`), não
+  `add_buffer`; versões que só tratam pixels mostram nada. Mantemos os dois caminhos (pixels e nome via `IconTheme`).
+  Temas/DPI alto e ícones animados seguem fora de escopo. `xdg_toplevel_icon_v1` no cartão era grafia errada: o global
+  é `xdg_toplevel_icon_manager_v1`.
+- **F1-toplevel-icon (2026-11-22): `frame_title` teve 1 amostra falha preservada** em
+  `/tmp/opencode/f1-icon/reg-frame_title.log` (`title_applied` do 2º cliente não chegou a tempo); repetição imediata
+  OK sem mudança de código. Não foi descartada.
 - **S1 voltou a falhar no gate de fechamento do título real (2026-11-22):**
   `/tmp/opencode/f1-title/gate-close.log` → `FALHA: cliente não mapeou toplevel dentro do compositor` e
   `zenity: Gtk-WARNING: Failed to open display`,EXIT=1 (8/9 Bun, 32/32 Rust). O mesmo gate já tinha passado nesta
@@ -1514,6 +1546,11 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- **F1-toplevel-icon — JUIZ VISUAL PENDENTE (2026-11-22):** humano reportou *"ainda não vi ícone na barra de título em
+  nenhum dos seus testes"*. Isso era dado real: até então só tinha havido harnesses que fecham rápido, e o `foot`
+  envia nome (não pixels), caminho que não existia. O pré-filtro agora mede `icon_applied` com `data:image/png` e
+  `titlebar_icon ... source=nome name=foot`, mas **não** prova a tela. Falta o humano confirmar na instância aberta.
+  **Não medido:** tema/DPI alto, desempenho em GPU real (VM sem 3D).
 - **Título real na titlebar — JUIZ VISUAL OBTIDO (2026-11-22): humano respondeu "ok"** ao ver o título real na barra
   do `foot` na nested. O harness mediu o valor lido de volta do DOM via `postMessage` (`title_applied`); a sentença
   final foi do humano. **Não medido:** latência do polling em GPU real (VM sem 3D); títulos com UTF-8/emoji na tela.
@@ -1860,6 +1897,12 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
+- **Sessão atual: F1-toplevel-icon (2026-11-22) — código/teste/gate verdes (§3); JUIZ VISUAL PENDENTE (§7).**
+  Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-compositor --example toplevel_icon_client && cargo build -p aeroshell-shell --example frame_webview && python3 tests/integration/f1_toplevel_icon.py`
+  → `VEREDITO: OK` 3× (`/tmp/opencode/f1-icon/final{15,16,17}.log`); baseline FALHA em `baseline2.log`.
+  Gate `gate-final2.log` EXIT=0, clippy bench 0, `--no-default-features` 0.
+- **Próximo passo:** obter o "ok" visual do humano na instância deixada aberta (PIDs no relatório). Só depois fechar
+  o cartão. Não avançar de fase nem implementar temas/DPI alto sem autorização.
 - **Sessão atual: título real na titlebar FECHADO PELO JUIZ VISUAL (2026-11-22) — ver §3.**
   Instância nested deixada aberta: compositor PID 248731, shell 248736, `foot -T 'Titulo Real AeroShell'` PID 248740,
   socket `wayland-aero-title-1795388310`, IPC `/tmp/opencode/f1-title/visual-ipc-1795388310.sock`, log

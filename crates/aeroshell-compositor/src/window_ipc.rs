@@ -5,6 +5,7 @@
 //!   focus <id>      -> OK
 //!   close <id>      -> OK
 //!   maximize <id>   -> OK (alterna maximizado)
+//!   icon <id>       -> ICON <id> <w> <h> <scale> <formato> <base64-dos-pixels> | NONE
 //! Cada request é despachado no event loop (canal calloop) e respondido por um
 //! oneshot mpsc, para que `list` veja o estado atual do space sem snapshot obsoleto.
 
@@ -18,9 +19,15 @@ use std::{
 use calloop::channel;
 use smithay::{
     desktop::Window,
-    reexports::wayland_protocols::xdg::shell::server::xdg_toplevel,
+    reexports::{
+        wayland_protocols::xdg::shell::server::xdg_toplevel,
+        wayland_server::{protocol::wl_shm::Format, protocol::wl_surface::WlSurface, Resource},
+    },
     utils::{Logical, Point, Size, SERIAL_COUNTER},
-    wayland::{compositor::with_states, shell::xdg::XdgToplevelSurfaceData},
+    wayland::{
+        compositor::with_states, shell::xdg::XdgToplevelSurfaceData, shm::with_buffer_contents,
+        xdg_toplevel_icon::ToplevelIconCachedState,
+    },
 };
 
 use crate::state::AeroState;
@@ -38,6 +45,91 @@ fn window_title(window: &Window) -> String {
             .and_then(|data| data.lock().ok().and_then(|attrs| attrs.title.clone()))
     })
     .unwrap_or_default()
+}
+
+/// Base64 padrão com padding, para levar bytes na linha do IPC. Implementação
+/// pequena de propósito: nenhuma dependência nova (mesmo invariante do projeto
+/// de referência `domicile-engine/packages/domicile-host/src/base64.rs`).
+fn base64_encode(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let word = chunk.iter().enumerate().fold(0u32, |word, (at, byte)| {
+            word | u32::from(*byte) << (16 - 8 * at)
+        });
+        for at in 0..4 {
+            out.push(if at <= chunk.len() {
+                char::from(ALPHABET[((word >> (18 - 6 * at)) & 0x3f) as usize])
+            } else {
+                '='
+            });
+        }
+    }
+    out
+}
+
+/// Cópia dos pixels do ícone do cached state da superfície do toplevel.
+/// Devolve (largura, altura, escala, formato, RGB/BGRA em linhas tightly-packed).
+fn icon_pixels(surface: &WlSurface) -> Option<(i32, i32, i32, &'static str, Vec<u8>)> {
+    with_states(surface, |states| {
+        let mut cached = states.cached_state.get::<ToplevelIconCachedState>();
+        let mut chosen: Option<(i32, i32, i32, &'static str, Vec<u8>)> = None;
+        for (buffer, scale) in cached.current().buffers() {
+            if !buffer.is_alive() {
+                continue;
+            }
+            let Ok(Some(candidate)) = with_buffer_contents(buffer, |ptr, len, info| {
+                let (w, h, stride) = (info.width, info.height, info.stride);
+                let format = match info.format {
+                    Format::Argb8888 => "Argb8888",
+                    Format::Xrgb8888 => "Xrgb8888",
+                    _ => return None,
+                };
+                if w <= 0 || h <= 0 || stride < w * 4 {
+                    return None;
+                }
+                let row = w as usize * 4;
+                let needed = stride as usize * h as usize;
+                if needed > len {
+                    return None;
+                }
+                let mut pixels = vec![0u8; row * h as usize];
+                // SAFETY: `ptr` é válido enquanto este closure executa (documentado
+                // em smithay/wayland/shm/mod.rs:219-239). Copiamos na hora para um
+                // Vec próprio, linha a linha dentro do stride informado: nenhuma
+                // referência ao shm sobrevive ao closure, mesmo que o cliente o
+                // mute depois. `row*h` foi validado contra `len` acima.
+                unsafe {
+                    for y in 0..h as usize {
+                        std::ptr::copy_nonoverlapping(
+                            ptr.add(y * stride as usize),
+                            pixels[y * row..].as_mut_ptr(),
+                            row,
+                        );
+                    }
+                }
+                Some((w, h, *scale, format, pixels))
+            }) else {
+                continue;
+            };
+            let bigger = chosen
+                .as_ref()
+                .map(|old| old.0 * old.1 < candidate.0 * candidate.1)
+                .unwrap_or(true);
+            if bigger {
+                chosen = Some(candidate);
+            }
+        }
+        chosen
+    })
+}
+
+/// Nome de ícone do tema, quando o cliente não enviou buffers (ex.: `foot`).
+fn icon_name(surface: &WlSurface) -> Option<String> {
+    with_states(surface, |states| {
+        let mut cached = states.cached_state.get::<ToplevelIconCachedState>();
+        cached.current().icon_name().map(str::to_owned)
+    })
 }
 
 pub type Command = (String, mpsc::Sender<String>);
@@ -187,7 +279,46 @@ impl AeroState {
                 toplevel.send_configure();
                 "OK".to_owned()
             }
+            "icon" => {
+                let Some(id) = id else {
+                    return "ERR janela inexistente".to_owned();
+                };
+                let Some(window) = self.window_for_id(id as u32).cloned() else {
+                    return "ERR janela inexistente".to_owned();
+                };
+                let Some(toplevel) = window.toplevel() else {
+                    return "ERR sem toplevel".to_owned();
+                };
+                let surface = toplevel.wl_surface();
+                match icon_pixels(surface) {
+                    Some((w, h, scale, format, pixels)) => format!(
+                        "ICON {id} {w} {h} {scale} {format} {}",
+                        base64_encode(&pixels)
+                    ),
+                    None => match icon_name(surface) {
+                        Some(name) => format!(
+                            "ICON {id} NAME {}",
+                            serde_json::to_string(&name).unwrap_or_else(|_| "\"\"".to_owned())
+                        ),
+                        None => "NONE".to_owned(),
+                    },
+                }
+            }
             _ => "ERR comando desconhecido".to_owned(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::base64_encode;
+
+    #[test]
+    fn base64_sem_dependencia() {
+        assert_eq!(base64_encode(b""), "");
+        assert_eq!(base64_encode(b"f"), "Zg==");
+        assert_eq!(base64_encode(b"fo"), "Zm8=");
+        assert_eq!(base64_encode(b"foo"), "Zm9v");
+        assert_eq!(base64_encode(&[0, 0, 255, 255]), "AAD//w==");
     }
 }

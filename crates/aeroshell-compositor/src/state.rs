@@ -31,6 +31,7 @@ use smithay::{
         text_input::TextInputManagerState,
         viewporter::ViewporterState,
         xdg_activation::XdgActivationState,
+        xdg_toplevel_icon::XdgToplevelIconManager,
     },
 };
 
@@ -215,6 +216,8 @@ pub struct AeroState {
     pub input_method_state: InputMethodManagerState,
     /// F1i/F7: global `xdg_activation_v1` (token + pedido de ativação).
     pub xdg_activation_state: XdgActivationState,
+    /// F1-toplevel-icon: global `xdg_toplevel_icon_v1` (ícone por toplevel).
+    pub toplevel_icon_manager: XdgToplevelIconManager,
     pub cursor_image: CursorImageStatus,
     /// Imagens do tema XCursor por nome de forma, com o hotspot lido do arquivo.
     pub cursor_images: HashMap<String, Option<CursorImage>>,
@@ -335,6 +338,12 @@ impl AeroState {
         let input_method_state = InputMethodManagerState::new::<Self, _>(&dh, |_client| true);
         let text_input_state = TextInputManagerState::new::<Self>(&dh);
         let xdg_activation_state = XdgActivationState::new::<Self>(&dh);
+        let mut toplevel_icon_manager = XdgToplevelIconManager::new::<Self>(&dh);
+        // Tamanhos que oferecemos aos clientes (xdg_toplevel_icon.rs:222); o
+        // shell consome os pixels via IPC, sem precisar de dependência nova.
+        for size in [16, 32, 48, 64] {
+            toplevel_icon_manager.add_icon_size(size);
+        }
 
         let mut seat: Seat<Self> = seat_state.new_wl_seat(&dh, "aeroshell");
         seat.add_keyboard(Default::default(), 200, 25)?;
@@ -423,6 +432,7 @@ impl AeroState {
             text_input_state,
             input_method_state,
             xdg_activation_state,
+            toplevel_icon_manager,
             cursor_image: CursorImageStatus::default_named(),
             cursor_images: HashMap::new(),
             popups: PopupManager::default(),
