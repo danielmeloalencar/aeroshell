@@ -19,7 +19,7 @@ use smithay::{
             Bind, Offscreen,
         },
     },
-    output::{Mode, Output, PhysicalProperties, Subpixel},
+    output::{Mode, Output, PhysicalProperties, Scale, Subpixel},
     utils::{Buffer as BufferCoord, IsAlive, Size, Transform},
 };
 
@@ -62,7 +62,7 @@ pub fn init_headless(
     output.change_current_state(
         Some(mode),
         Some(Transform::Flipped180),
-        None,
+        Some(Scale::Fractional(opts.scale)),
         Some((0, 0).into()),
     );
     output.set_preferred(mode);

@@ -1,11 +1,13 @@
 //! Seat, data-device (clipboard/DnD) e output.
 
 use smithay::{
-    delegate_cursor_shape, delegate_data_device, delegate_output, delegate_primary_selection,
-    delegate_seat,
+    delegate_cursor_shape, delegate_data_device, delegate_fractional_scale, delegate_output,
+    delegate_primary_selection, delegate_seat,
     input::{pointer::CursorImageStatus, Seat, SeatHandler, SeatState},
     reexports::wayland_server::{protocol::wl_surface::WlSurface, Resource},
     wayland::{
+        compositor::with_states,
+        fractional_scale::{with_fractional_scale, FractionalScaleHandler},
         output::OutputHandler,
         selection::{
             data_device::{
@@ -110,3 +112,28 @@ delegate_data_device!(AeroState);
 
 impl OutputHandler for AeroState {}
 delegate_output!(AeroState);
+
+// F1f: a escala preferida é propriedade da SUPERFÍCIE, não do output global.
+// O cliente recebe `preferred_scale` quando cria o objeto e o render lê esse
+// valor por superfície (render/scene.rs).
+impl FractionalScaleHandler for AeroState {
+    fn new_fractional_scale(&mut self, surface: WlSurface) {
+        let scale = self
+            .outputs
+            .first()
+            .map(|output| output.current_scale().fractional_scale())
+            .unwrap_or(1.0);
+        with_states(&surface, |states| {
+            with_fractional_scale(states, |fs| fs.set_preferred_scale(scale));
+        });
+        #[cfg(feature = "bench")]
+        {
+            let t = crate::frame_diagnostics::now_ns();
+            eprintln!(
+                "FSCALE_SURFACE t={t} surface={:?} scale={scale} source=preferred",
+                surface.id()
+            );
+        }
+    }
+}
+delegate_fractional_scale!(AeroState);

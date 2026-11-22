@@ -25,7 +25,9 @@ const GRID_W: usize = 64;
 const GRID_H: usize = 40;
 
 static NEXT_FRAME: AtomicUsize = AtomicUsize::new(0);
-
+// F1f: dump FULL-RES (ligado por `AERO_PIXEL_FULL`) para medir com exatidão a
+// continuidade borda do frame ↔ cliente. Sobrescreve o arquivo a cada frame:
+// o primeiro frame é todo clear e não serve de medição.
 /// Chamado DEPOIS de `tracker.render_output`, com o renderer e o framebuffer
 /// ainda vivos. Não altera a cena: `copy_framebuffer` é não destrutivo.
 pub fn capture<R: ExportMem>(
@@ -90,6 +92,16 @@ pub fn capture<R: ExportMem>(
             grid[o] = (r / denom) as u8;
             grid[o + 1] = (g / denom) as u8;
             grid[o + 2] = (b / denom) as u8;
+        }
+    }
+
+    // F1f: um único dump full-res (w*h*4 bytes BGRA), sem filtro nem amostra.
+    if std::env::var_os("AERO_PIXEL_FULL").is_some() {
+        let full = std::path::Path::new(&dir).join("full_000000.bgra");
+        if let Err(err) = std::fs::write(&full, pixels) {
+            eprintln!("PIXEL_FRAME_ERRO dump full {full:?} falhou: {err}");
+        } else {
+            eprintln!("PIXEL_FRAME_FULL size={w}x{h} path={full:?}");
         }
     }
 

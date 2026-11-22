@@ -18,6 +18,7 @@ use smithay::{
     wayland::{
         compositor::{CompositorClientState, CompositorState},
         cursor_shape::CursorShapeManagerState,
+        fractional_scale::FractionalScaleManagerState,
         output::OutputManagerState,
         selection::{data_device::DataDeviceState, primary_selection::PrimarySelectionState},
         shell::{
@@ -179,6 +180,8 @@ pub struct AeroState {
     pub data_device_state: DataDeviceState,
     /// F1-primary-selection: global `wp-primary-selection-v1`.
     pub primary_selection_state: PrimarySelectionState,
+    /// F1f: global `wp_fractional_scale_v1`.
+    pub fractional_scale_state: FractionalScaleManagerState,
     /// F1-cursor-shape: global `wp_cursor_shape_v1` e última forma pedida pelo cliente.
     pub cursor_shape_state: CursorShapeManagerState,
     pub cursor_image: CursorImageStatus,
@@ -237,6 +240,7 @@ impl AeroState {
         let mut seat_state = SeatState::new();
         let data_device_state = DataDeviceState::new::<Self>(&dh);
         let primary_selection_state = PrimarySelectionState::new::<Self>(&dh);
+        let fractional_scale_state = FractionalScaleManagerState::new::<Self>(&dh);
         let cursor_shape_state = CursorShapeManagerState::new::<Self>(&dh);
 
         let mut seat: Seat<Self> = seat_state.new_wl_seat(&dh, "aeroshell");
@@ -317,6 +321,7 @@ impl AeroState {
             seat_state,
             data_device_state,
             primary_selection_state,
+            fractional_scale_state,
             cursor_shape_state,
             cursor_image: CursorImageStatus::default_named(),
             cursor_images: HashMap::new(),

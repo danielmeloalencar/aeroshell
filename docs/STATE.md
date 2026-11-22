@@ -21,6 +21,29 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **F1f — fractional-scale (2026-11-22) — código/teste/gates verdes; juiz visual PENDENTE.**
+      Cartão `docs/tasks/F1f-fractional-scale.md` aprovado e commitado (`4ecef8f`). APIs lidas no Smithay
+      0.7.0 fixado antes de editar: `FractionalScaleManagerState::new` (`fractional_scale/mod.rs:76-94`),
+      `FractionalScaleHandler` com método default (`:213-216`), `set_preferred_scale`/`with_fractional_scale`
+      (`:225-264`), `delegate_fractional_scale!` (`:268-281`). Implementado: global + campo em `state.rs`,
+      handler em `seat.rs` que grava a escala preferida **por superfície** (log `FSCALE_SURFACE` sob bench),
+      `render/scene.rs` passa `surface_scale()` (preferred, fallback `output_scale`) ao `AsRenderElements`
+      de janelas/layers/frame — **receita do 9-slice intocada**, só a fonte da escala. `backend/headless.rs`
+      agora aplica `--scale` (`Scale::Fractional`), que antes era ignorado. Sonda `AERO_PIXEL_FULL` em
+      `frame_pixel_probe.rs` (dump full-res sob bench, sem filtro).
+      **Teste-first:** `tests/integration/fractional_scale.py` escrito antes; baseline com binário real
+      (`/tmp/opencode/f1-fscale/`) falhou em `FSCALE_SURFACE`, borda 6 px e titlebar 30 px em 1.25/1.5
+      (esperados ~7.5/37.5 e ~9/45). Depois: 3 escalas, 5 checagens cada → `VEREDITO: OK`, com
+      `border/titlebar = 6/30 (1.0), 8/38 (1.25), 8/46 (1.5)` e **borda COLADA ao cliente sem gap de
+      CLEAR em todas** (bboxes frame vs cliente medidos no dump BGRA; output headless Flipped180, titlebar
+      na borda inferior). Amostras intermediárias preservadas: build sem diretório, dump do 1º frame
+      todo clear, tolerância larga demais, cor (43,43,43) cobrindo o canvas inteiro, e o critério inválido
+      de exigir `FSCALE_SURFACE` em 1.0 (cliente não binda quando scale=1). Gate `check.sh` EXIT=0;
+      clippy bench `-D warnings` EXIT=0; `--no-default-features` EXIT=0. Vizinhos: `headless_render_damage`,
+      `frame_resize_glue`, `frame_buttons`, `frame_window_id`, `frame_fixed_canvas_hygiene`,
+      `multi_output_damage` → OK. Nested com `--scale 1.5`: toplevel mapeado, 3 `FSCALE_SURFACE`, 0 erros.
+      Amostra de clippy bench falha por doc-comment vazio preservada (`clippy-bench-final.log`).
+      **NÃO houve juiz visual e F1g NÃO foi aberto (§7).**
 - [x] **Tarefa 00 (extensão infra S1) — gate determinístico verde (2026-11-22).** Humano decidiu **não**
       aceitar o S1 como flake permanente e autorizou escopo limitado (infra, ~1 sessão). Causa adotada:
       spawn do `bun test` herdava `DISPLAY=:0`; o supervisor já isolava o cliente em
@@ -778,10 +801,11 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
 7. `02i` — correções de documentação (somente docs): presentation-time, background_effect, WPE, cartões 02c/02d, F1.
 8. `05-compatibilidade-protocolos.md` — RASCUNHO; 7 mensagens do `foot` registradas em §6. NÃO executar sem ok.
 9. **GAP ANALYSIS F1 → ordem proposta de cartões (NÃO AUTORIZADA — abrir cartão e obter ok antes de executar).**
-   Mapa completo em §7. **cursor-shape FECHADA pelo juiz e primary-selection FECHADA pelo humano (§3);
-   popups-render FECHADO pelo juiz (§3); próximo da fila: fractional-scale
-   (NÃO AUTORIZADO).** Ordem restante:
-   fractional-scale →
+   Mapa completo em §7. **cursor-shape FECHADA pelo juiz; primary-selection FECHADA pelo humano;
+   popups-render FECHADO pelo juiz; F1f (fractional-scale) com código/gate verdes, juiz visual
+   pendente (§3/§7). Próximo da fila: viewporter (NÃO AUTORIZADO); F1g só depois do ok visual de F1f.**
+   Ordem restante:
+   viewporter →
    viewporter → text-input/IM → presentation-time → dmabuf (maior risco; VM sem 3D valida funcionamento,
    não desempenho). Critério da ordem: nenhum desses módulos depende de outro no Smithay 0.7.0
    (confirmado: `fractional_scale/mod.rs` não referencia viewporter); priorizar baixo risco + visibilidade
@@ -1188,6 +1212,12 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- **F1f — JUIZ VISUAL PENDENTE (2026-11-22).** Pixelmedição headless (borda colada, titlebar/borda
+  escalando em 1.0/1.25/1.5) e nested 1.5 sem erros estão provados (§3), mas **nenhum humano julgou a
+  aparência em escala fracionária no tty3**. O juiz deve abrir `~/u` com `--scale 1.5` (ou command equivalente)
+  e confirmar que frame/conteúdo/painel estão nítidos e alinhados, sem gap ou borda desproporcional.
+  **Tarefa NÃO fechada e F1g NÃO aberto sem o "ok"** (AGENTS.md §0.9 / §3.1). Não medido: udev/DRM,
+  desempenho em GPU real (VM sem 3D).
 - **F1-popups-render — RESOLVIDO PELO JUIZ VISUAL (2026-11-22).** Humano abriu `gedit` no tty3 e, com
   botão direito, viu **popup funcional com borda arredondada e ~1 px**. Isso cobre a posição/sobreposição
   que o cliente de teste sem buffer não media. Grab provado por cliente real (`POPUP_GRAB … estado=ok`,
@@ -1490,11 +1520,11 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **Fase atual: F1; F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS pelo juiz; F1-cursor-shape, F1-primary-selection e F1-popups-render FECHADAS em 2026-11-22.** Sem push. **PARAR: não avançar de fase nem abrir o próximo cartão sem aprovação (AGENTS.md §3.1).**
-- **Fechamento do popup:** humano abriu `gedit` no tty3 com `~/u`, clicou com botão direito e viu popup funcional com borda arredondada e ~1 px. Grab provado por cliente real (`POPUP_GRAB … estado=ok`, zero erros de protocolo). Humano operou e julgou; agente não abriu/fechou app nem trocou VT.
-- **Entrega técnica:** `PopupManager::grab_popup`, sondas `POPUP_*` sob bench, cliente `examples/popup_client.rs` + harness `tests/integration/popup_client.py` (RUNBOOK). Mapa corrigido: popups já renderizam via Smithay; nada foi mexido na cena.
-- **Gate determinístico RESTAURADO (tarefa 00 extensão):** o NO-GO do S1 não foi aceito como flake. Harness corrigido (env explícito no `s1_nested.sh` e no `Bun.spawn`, sem tocar em `scripts/check.sh`/feature/protocolo); **uma** execução pós-fix → `bash scripts/check.sh` → `OK: scripts/check.sh passou`, `GATE_EXIT=0`, `bun test → 9 pass / 0 fail` (`/tmp/opencode/f1-gate/gate-postfix.log`). Amostra do NO-GO preservada em §6.
-- **Próximo passo proposto (NÃO executado):** com o gate verde, se autorizado, abrir **`fractional-scale` (F1f)** — um cartão por sessão; depois viewporter → text-input/IM → presentation-time → dmabuf. Só com cartão e autorização.
-- **Não medido / descoberta lateral:** dismiss por clique fora não exercitado no juiz; cursor planes/vmwgfx; desempenho em GPU real; `nautilus` não abriu (Tracker3 — §6, fora de escopo).
+- **Fase atual: F1; F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS pelo juiz; F1-cursor-shape, F1-primary-selection e F1-popups-render FECHADAS; F1f com código/gate verdes e JUIZ VISUAL PENDENTE (§7).** Sem push. **PARAR: não abrir F1g nem o próximo cartão sem aprovação (AGENTS.md §3.1).**
+- **F1f entregue:** `wp_fractional_scale_v1` anunciado, `preferred_scale` por superfície, `surface_scale()` no render (fallback `output_scale`), receita do 9-slice intacta; headless passou a aplicar `--scale`; sonda `AERO_PIXEL_FULL` sob bench. Commits até o deste fechamento.
+- **Prova F1f:** `python3 tests/integration/fractional_scale.py` → `VEREDITO: OK` em 1.0/1.25/1.5 (borda colada ao cliente sem gap, border/titlebar 6/30, 8/38, 8/46); nested `--scale 1.5` com 3 `FSCALE_SURFACE` e 0 erros; 6 harnesses vizinhos OK. Gate `check.sh` EXIT=0, clippy bench `-D warnings` 0, `--no-default-features` 0. Amostras falhas preservadas em `/tmp/opencode/f1-fscale/`.
+- **Para julgar à mão:** `~/u` com escala fracionária no tty3, conferir nitidez/alinhamento de frame, conteúdo e painel, sem gap. Agente não abriu/fechou app nem trocou VT.
+- **Próximo passo proposto (NÃO executado):** com o "ok" visual de F1f, abrir F1g (dmabuf/presentation-time); se preferir seguir a fila do cartão-mãe, viewporter. Só com cartão e autorização — um por sessão.
+- **Não medido / descoberta lateral:** udev/DRM, desempenho em GPU real (VM sem 3D); `nautilus` não abriu (Tracker3 — §6, fora de escopo); dismiss de popup por clique fora não exercitado no juiz.
 - **Contexto preservado:** `udev.rs` chama `send_frame`; `~/u` lança o painel e define `AERO_WINDOW_IPC_SOCK`. Conteúdo, cursor, seleção primária e popups seguem aprovados pelo humano; nada disso foi alterado.
 

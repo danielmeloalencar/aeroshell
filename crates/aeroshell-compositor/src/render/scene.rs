@@ -13,13 +13,27 @@ use smithay::{
     output::Output,
     reexports::wayland_server::Resource,
     utils::{IsAlive, Scale as UtilsScale},
-    wayland::{compositor::with_states, shell::wlr_layer::Layer},
+    wayland::{
+        compositor::with_states, fractional_scale::with_fractional_scale, shell::wlr_layer::Layer,
+    },
 };
 
 use crate::{
     render::elements::{AeroRenderElements, FrameRenderInput, FrameRenderKind},
     state::AeroState,
 };
+
+/// Escala EFETIVA da superfície: a preferida pelo `wp_fractional_scale_v1`, com
+/// fallback para a escala do output. É o que o `AsRenderElements` deve usar —
+/// não somente `output.current_scale()` (F1f).
+fn surface_scale(
+    surface: &smithay::reexports::wayland_server::protocol::wl_surface::WlSurface,
+    output_scale: f64,
+) -> f64 {
+    with_states(surface, |states| {
+        with_fractional_scale(states, |fs| fs.preferred_scale().unwrap_or(output_scale))
+    })
+}
 
 #[cfg(feature = "bench")]
 pub type OutputProbe = Option<crate::frame_titlebar_probe::TitlebarFrame>;
@@ -57,13 +71,14 @@ pub fn collect_output_elements(
         // LayerMap já usa coordenadas locais do output (layer.rs:248-267).
         for layer in upper {
             if let Some(geo) = layer_map.layer_geometry(layer) {
+                let layer_scale = surface_scale(layer.wl_surface(), output_scale);
                 elements.extend(AsRenderElements::render_elements::<
                     AeroRenderElements<GlesRenderer>,
                 >(
                     layer,
                     renderer,
                     geo.loc.to_physical_precise_round(output_scale),
-                    UtilsScale::from(output_scale),
+                    UtilsScale::from(layer_scale),
                     1.0,
                 ));
             }
@@ -85,6 +100,10 @@ pub fn collect_output_elements(
             // `render_elements_from_surface_tree` (smithay surface.rs:194-222),
             // executada aqui SOB `bench` e sem alterar a cena.
             let client_surface = window.toplevel().map(|t| t.wl_surface());
+            let client_scale = client_surface
+                .as_ref()
+                .map(|s| surface_scale(s, output_scale))
+                .unwrap_or(output_scale);
             #[cfg(feature = "bench")]
             let probe_loc: smithay::utils::Point<i32, smithay::utils::Physical> =
                 render_loc.to_physical_precise_round(output_scale);
@@ -109,7 +128,7 @@ pub fn collect_output_elements(
                 window,
                 renderer,
                 render_loc.to_physical_precise_round(output_scale),
-                UtilsScale::from(output_scale),
+                UtilsScale::from(client_scale),
                 1.0,
             ));
             #[cfg(feature = "bench")]
@@ -145,6 +164,9 @@ pub fn collect_output_elements(
                     .get(frame_surface)
                     .copied()
                     .unwrap_or_default();
+                // A escala do element do frame é a da SUPERFÍCIE do frame; se ela
+                // divergir da do cliente, a borda "descolava" 1 px do conteúdo.
+                let frame_scale = surface_scale(frame_surface, output_scale);
                 let (dx, dy) = fgeo.offset();
                 let loc: smithay::utils::Point<i32, smithay::utils::Physical> =
                     smithay::utils::Point::<i32, smithay::utils::Logical>::new(
@@ -163,7 +185,7 @@ pub fn collect_output_elements(
                         #[cfg(feature = "bench")]
                         client_origin: local_loc,
                         committed: geo.size,
-                        output_scale,
+                        output_scale: frame_scale,
                         #[cfg(feature = "bench")]
                         output,
                         window_id: *_window_id,
@@ -216,13 +238,14 @@ pub fn collect_output_elements(
                 continue;
             }
             let f = smithay::utils::Point::<f64, smithay::utils::Physical>::from((0.0, 0.0));
+            let fallback_scale = surface_scale(layer.wl_surface(), output_scale);
             if let Ok(Some(el)) = with_states(layer.wl_surface(), |states| {
                 WaylandSurfaceRenderElement::from_surface(
                     renderer,
                     layer.wl_surface(),
                     states,
                     f,
-                    1.0,
+                    fallback_scale as f32,
                     Kind::Unspecified,
                 )
             }) {
@@ -232,13 +255,14 @@ pub fn collect_output_elements(
 
         for layer in lower {
             if let Some(geo) = layer_map.layer_geometry(layer) {
+                let layer_scale = surface_scale(layer.wl_surface(), output_scale);
                 elements.extend(AsRenderElements::render_elements::<
                     AeroRenderElements<GlesRenderer>,
                 >(
                     layer,
                     renderer,
                     geo.loc.to_physical_precise_round(output_scale),
-                    UtilsScale::from(output_scale),
+                    UtilsScale::from(layer_scale),
                     1.0,
                 ));
             }
