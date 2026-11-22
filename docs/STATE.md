@@ -1898,6 +1898,10 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
 - **Sessão atual: F1-toplevel-icon (2026-11-22) — código/teste/gate verdes (§3); JUIZ VISUAL PENDENTE (§7).**
+  Instância normal (sem bench) deixada aberta: compositor PID 266058, shell 266062, `foot` 266066, socket
+  `wayland-aero-iconvisual-1795391114`, IPC `/tmp/opencode/f1-icon/visual-ipc-1795391114.sock`, log
+  `/tmp/opencode/f1-icon/visual.log` (já com `titlebar_icon ... source=nome name=foot` e `icon_applied ...
+  data:image/svg+xml`). Quem fecha é o humano.
   Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-compositor --example toplevel_icon_client && cargo build -p aeroshell-shell --example frame_webview && python3 tests/integration/f1_toplevel_icon.py`
   → `VEREDITO: OK` 3× (`/tmp/opencode/f1-icon/final{15,16,17}.log`); baseline FALHA em `baseline2.log`.
   Gate `gate-final2.log` EXIT=0, clippy bench 0, `--no-default-features` 0.
