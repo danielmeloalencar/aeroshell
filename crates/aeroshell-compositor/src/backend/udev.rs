@@ -201,6 +201,7 @@ pub fn init_udev(
         );
         data.state.space.map_output(&output, (0, 0));
         data.state.outputs.push(output.clone());
+        data.state.resend_scales();
 
         let planes = manager
             .device()

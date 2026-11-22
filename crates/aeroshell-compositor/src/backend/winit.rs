@@ -144,6 +144,7 @@ pub fn init_winit(
         outputs.push(output);
     }
     data.state.outputs = outputs.clone();
+    data.state.resend_scales();
 
     let mut damage_trackers: Vec<_> = outputs
         .iter()

@@ -68,6 +68,7 @@ pub fn init_headless(
     output.set_preferred(mode);
     data.state.space.map_output(&output, (0, 0));
     data.state.outputs = vec![output.clone()];
+    data.state.resend_scales();
 
     // F1b: EGL surfaceless + GlesRenderer, sem janela nativa (llvmpipe nesta VM).
     // SAFETY: `EGLSurfacelessDisplay` usa a plataforma EGL_MESA_platform_surfaceless

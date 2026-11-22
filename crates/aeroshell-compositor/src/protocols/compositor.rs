@@ -201,6 +201,10 @@ impl CompositorHandler for AeroState {
                 }
             }
         }
+        // F1f/E: `on_commit_buffer_handler` já chama
+        // `viewporter::ensure_viewport_valid` e comita o `ViewportCachedState`
+        // double-buffered (Smithay 0.7 viewporter/mod.rs:49-54) — não chamar
+        // duas vezes para não postar erro de protocolo duplicado.
         on_commit_buffer_handler::<Self>(surface);
         if !is_sync_subsurface(surface) {
             let mut root = surface.clone();

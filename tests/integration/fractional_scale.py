@@ -14,6 +14,7 @@ import math
 import os
 import pathlib
 import re
+import socket
 import subprocess
 import sys
 import tempfile
@@ -90,10 +91,12 @@ def run_scale(scale):
     out = pathlib.Path(tempfile.mkdtemp(prefix=f"aero-fscale-{tag}-"))
     sock = f"wayland-aero-fscale-{tag}-{os.getpid()}"
     log = out / "compositor.log"
+    input_sock = out / "input.sock"
     env = {
         **os.environ,
         "AERO_PIXEL_DUMP_DIR": str(out),
         "AERO_PIXEL_FULL": "1",
+        "AERO_TEST_INPUT_SOCK": str(input_sock),
         "RUST_LOG": "info",
     }
     comp = subprocess.Popen(
@@ -103,6 +106,18 @@ def run_scale(scale):
         cwd=ROOT, stdout=log.open("wb"), stderr=subprocess.STDOUT, env=env,
     )
     try:
+        # Manter dano/vsync no headless (ele fica ocioso sem input) para que
+        # o FSCALE_FRAME seja amostrado com buffer já commitado.
+        for i in range(50):
+            if input_sock.exists():
+                try:
+                    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                    s.connect(str(input_sock))
+                    s.sendall(f"motion {300 + (i % 5) * 20} {300}\n".encode())
+                    s.close()
+                except OSError:
+                    pass
+            time.sleep(0.1)
         data = read_dump(out / "full_000000.bgra")
         text = log.read_text(errors="replace") if log.exists() else ""
         if data is None:
@@ -110,6 +125,29 @@ def run_scale(scale):
         border, titlebar, continuous = analyze(data, scale)
         expected_border = 6 * scale
         expected_titlebar = 30 * scale
+        # Item 4 do plano: exercitar escalas INDEPENDENTES — o foot entrega um
+        # buffer 2x enquanto o preferred_scale e fracionario. Sem isso o teste
+        # usaria a mesma escala nos dois lados e nao pegaria o descolamento.
+        linhas = [
+            line for line in text.splitlines()
+            if "FSCALE_FRAME" in line
+            and "foot_logical=Size<smithay::utils::geometry::Logical> { w: 0, h: 0 }" not in line
+        ]
+        fscale = linhas[-1] if linhas else ""
+        bs_m = re.search(r"foot_buffer_scale=(\d+)", fscale)
+        logic_m = re.search(r"foot_logical=Size<[^>]+> \{ w: (\d+), h: (\d+) \}", fscale)
+        foot_bs = int(bs_m.group(1)) if bs_m else -1
+        foot_w, foot_h = (int(logic_m.group(1)), int(logic_m.group(2))) if logic_m else (0, 0)
+        viewport = "viewport_dst=Some" in fscale
+        # No headless o foot entrega buffer_scale=1 mas usa wp_viewport.dst
+        # (700x494); no nested entrega buffer_scale=2. Ambos sao escalas
+        # INDEPENDENTES do preferred fracionario — e é isso que o teste exige.
+        checks_independentes = (
+            680 <= foot_w <= 720
+            and abs(foot_h - 494) <= 6
+            and viewport
+            and foot_bs <= 2
+        )
         checks = {
             "dump full-res": True,
             # Em 1.0 o cliente nao precisa bindingar o protocolo: a ausencia do
@@ -123,9 +161,13 @@ def run_scale(scale):
             "borda acompanha escala": abs(border - expected_border) <= 1.0,
             "titlebar acompanha escala": abs(titlebar - expected_titlebar) <= 1.5,
             "borda COLADA ao cliente (sem gap)": continuous,
+            "escalas independentes (buffer/viewport vs preferred)": (
+                foot_bs >= 1 if scale == 1.0 else checks_independentes
+            ),
         }
         print(f"-- scale {scale}: border={border} (esperado~{expected_border:.1f}) "
-              f"titlebar={titlebar} (esperado~{expected_titlebar:.1f}) continuo={continuous}")
+              f"titlebar={titlebar} (esperado~{expected_titlebar:.1f}) continuo={continuous} "
+              f"foot_buffer_scale={foot_bs} foot_logical={foot_w}x{foot_h}")
         return checks, text
     finally:
         if comp.poll() is None:

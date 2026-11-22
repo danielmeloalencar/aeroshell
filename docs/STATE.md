@@ -21,6 +21,24 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **F1f/E — viewporter absorvido + geometria lógica do cliente (2026-11-22).** Guia domicile (não
+      receita): `logical_size(buffer, buffer_scale)` (`scale.rs:47-57`), buffer fracionário mapeado por
+      `wp_viewport.dst` (`surface_commit.rs:782-796`), `wl_output.scale` inteiro e preferred via protocolo,
+      reenviado com `send_configure()` na mudança de escala (`outputs.rs:224-233`). Implementado:
+      `ViewporterState` + `delegate_viewporter!` no estado/seat; `on_commit_buffer_handler` já valida e comita
+      o `ViewportCachedState` (Smithay viewporter/mod.rs:49-54), sem dupla validação. `render/scene.rs` ganhou
+      `client_logical_size()` = `viewport.dst` ou `buffer ÷ buffer_scale`, com fallback `geo.size`;
+      **`FrameRenderInput.committed` agora usa esse tamanho lógico**, não o buffer cru nem a window geometry,
+      e o `AsRenderElements` do cliente usa `output_scale` (a conversão física). `AeroState::resend_scales()`
+      reenvia `preferred_scale` + `send_configure()` e é chamada nos 3 backends. `FSCALE_FRAME` ampliado com
+      `frame_buffer_scale`, `foot_logical`, `foot_loc`, `viewport_dst`. Harness reforçado com **escalas
+      independentes** (headless: `foot_buffer_scale=1` + `viewport_dst=Some(700x494)` contra preferred 1.5;
+      nested: `buffer_scale=2`) e amostragem com injeção de motion. **Prova:** `VEREDITO: OK` em 1.0/1.25/1.5;
+      em 1.5 `foot_logical=700x494`, `foot_dst=1050x741`, `frame_dst=1068x795` e `SLICE_GEOM` i=5/6/7/8
+      ancorados em x=81/90 e y=120 — **borda colada ao conteúdo, sem gap**. Nested 1.5 com 4
+      `FSCALE_SURFACE`; 6 harnesses vizinhos OK; `check.sh` EXIT=0, clippy bench `-D warnings` 0,
+      `--no-default-features` 0. Amostra transitória sem FSCALE_FRAME válido preservada. **Juiz visual do
+      tty3 (1.5 e 2) segue pendente — F1f não fechado; F1g não aberto.**
 - [x] **F1f — diagnóstico comparativo DRM↔nested e composição forçada no udev (2026-11-22).** Log do
       humano `/home/daniel/aeroshell-udev-20261122-155045.log` analisado por palavras-chave: (1) `UDEV_OUTPUT
       … scale=1.5` — `--scale` chega ao output DRM; (2) `FSCALE_SURFACE … scale=1.5` (várias superfícies) —
@@ -1260,7 +1278,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   script e o backend udev foram corrigidos nesta sessão (§3); antes, o argumento era descartado no script
   e, depois disso, ignorado pelo udev — a tela seguia em 1.0. Confirmar no log `UDEV_OUTPUT … scale=1.5`
   e que frame/conteúdo/painel estão nítidos e alinhados, sem margem preta entre a decoração e o conteúdo
-  (causa corrigida acima: 9-slice com a escala do cliente e composição forçada no DRM, sem scanout).
+  (causas corrigidas acima: 9-slice com o tamanho LÓGICO do cliente via viewport/buffer_scale, composição
+  forçada no DRM e viewporter ligado).
   **Tarefa NÃO fechada e F1g NÃO aberto sem o "ok"** (AGENTS.md §0.9 / §3.1). Não medido: udev/DRM,
   desempenho em GPU real (VM sem 3D).
 - **F1-popups-render — RESOLVIDO PELO JUIZ VISUAL (2026-11-22).** Humano abriu `gedit` no tty3 e, com

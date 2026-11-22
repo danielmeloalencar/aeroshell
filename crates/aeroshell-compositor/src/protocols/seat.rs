@@ -2,7 +2,7 @@
 
 use smithay::{
     delegate_cursor_shape, delegate_data_device, delegate_fractional_scale, delegate_output,
-    delegate_primary_selection, delegate_seat,
+    delegate_primary_selection, delegate_seat, delegate_viewporter,
     input::{pointer::CursorImageStatus, Seat, SeatHandler, SeatState},
     reexports::wayland_server::{protocol::wl_surface::WlSurface, Resource},
     wayland::{
@@ -137,3 +137,4 @@ impl FractionalScaleHandler for AeroState {
     }
 }
 delegate_fractional_scale!(AeroState);
+delegate_viewporter!(AeroState);

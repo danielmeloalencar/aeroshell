@@ -16,9 +16,9 @@ use smithay::{
     },
     utils::{Logical, Point},
     wayland::{
-        compositor::{CompositorClientState, CompositorState},
+        compositor::{with_states, CompositorClientState, CompositorState},
         cursor_shape::CursorShapeManagerState,
-        fractional_scale::FractionalScaleManagerState,
+        fractional_scale::{with_fractional_scale, FractionalScaleManagerState},
         output::OutputManagerState,
         selection::{data_device::DataDeviceState, primary_selection::PrimarySelectionState},
         shell::{
@@ -27,6 +27,7 @@ use smithay::{
         },
         shm::ShmState,
         socket::ListeningSocketSource,
+        viewporter::ViewporterState,
     },
 };
 
@@ -182,6 +183,8 @@ pub struct AeroState {
     pub primary_selection_state: PrimarySelectionState,
     /// F1f: global `wp_fractional_scale_v1`.
     pub fractional_scale_state: FractionalScaleManagerState,
+    /// F1f/E: global `wp_viewporter` (necessário para escala fracionária).
+    pub viewporter_state: ViewporterState,
     /// F1-cursor-shape: global `wp_cursor_shape_v1` e última forma pedida pelo cliente.
     pub cursor_shape_state: CursorShapeManagerState,
     pub cursor_image: CursorImageStatus,
@@ -192,6 +195,30 @@ pub struct AeroState {
 }
 
 impl AeroState {
+    /// F1f: quando a escala do output muda, reenviar `preferred_scale` e
+    /// reconfigurar os toplevels — modelo do domicile (`outputs.rs:224-233`).
+    pub fn resend_scales(&mut self) {
+        let Some(scale) = self
+            .outputs
+            .first()
+            .map(|output| output.current_scale().fractional_scale())
+        else {
+            return;
+        };
+        let surfaces: Vec<_> = self.window_surfaces.values().cloned().collect();
+        for surface in surfaces {
+            with_states(&surface, |states| {
+                with_fractional_scale(states, |fs| fs.set_preferred_scale(scale));
+            });
+        }
+        let windows: Vec<_> = self.space.elements().cloned().collect();
+        for window in windows {
+            if let Some(toplevel) = window.toplevel() {
+                let _ = toplevel.send_configure();
+            }
+        }
+    }
+
     /// Resolve um window_id (atribuído no map) para a Window correspondente.
     /// NUNCA usar `space.elements().nth(window_id)`: `elements()` é ordem z e muda
     /// a cada `raise_element` (input.rs `focus_on_press`), fazendo o id 0 apontar
@@ -241,6 +268,7 @@ impl AeroState {
         let data_device_state = DataDeviceState::new::<Self>(&dh);
         let primary_selection_state = PrimarySelectionState::new::<Self>(&dh);
         let fractional_scale_state = FractionalScaleManagerState::new::<Self>(&dh);
+        let viewporter_state = ViewporterState::new::<Self>(&dh);
         let cursor_shape_state = CursorShapeManagerState::new::<Self>(&dh);
 
         let mut seat: Seat<Self> = seat_state.new_wl_seat(&dh, "aeroshell");
@@ -322,6 +350,7 @@ impl AeroState {
             data_device_state,
             primary_selection_state,
             fractional_scale_state,
+            viewporter_state,
             cursor_shape_state,
             cursor_image: CursorImageStatus::default_named(),
             cursor_images: HashMap::new(),

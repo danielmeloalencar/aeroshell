@@ -6,22 +6,24 @@
 //! (age=0, cor de clear configurável) para não regredir a validação visual F0/F1c.
 
 #[cfg(feature = "bench")]
-use smithay::utils::{Physical, Size};
-#[cfg(feature = "bench")]
-use smithay::wayland::compositor::SurfaceAttributes;
+use smithay::utils::Physical;
 #[cfg(feature = "bench")]
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use smithay::{
     backend::renderer::{
+        buffer_dimensions,
         element::{surface::WaylandSurfaceRenderElement, AsRenderElements, Kind},
         gles::GlesRenderer,
     },
     output::Output,
-    reexports::wayland_server::Resource,
-    utils::{IsAlive, Scale as UtilsScale},
+    reexports::wayland_server::{protocol::wl_surface::WlSurface, Resource},
+    utils::{IsAlive, Logical, Scale as UtilsScale, Size},
     wayland::{
-        compositor::with_states, fractional_scale::with_fractional_scale, shell::wlr_layer::Layer,
+        compositor::{with_states, BufferAssignment, SurfaceAttributes},
+        fractional_scale::with_fractional_scale,
+        shell::wlr_layer::Layer,
+        viewporter::ViewportCachedState,
     },
 };
 
@@ -30,7 +32,7 @@ use crate::{
     state::AeroState,
 };
 
-/// F1f: amostragem baixa (1/120 frames) do diagnóstico de escala, compartilhada
+/// F1f: amostragem baixa (1/10 frames) do diagnóstico de escala, compartilhada
 /// entre nested/headless e udev para comparação direta dos logs.
 #[cfg(feature = "bench")]
 static FSCALE_LOG: AtomicU64 = AtomicU64::new(0);
@@ -38,13 +40,35 @@ static FSCALE_LOG: AtomicU64 = AtomicU64::new(0);
 /// Escala EFETIVA da superfície: a preferida pelo `wp_fractional_scale_v1`, com
 /// fallback para a escala do output. É o que o `AsRenderElements` deve usar —
 /// não somente `output.current_scale()` (F1f).
-fn surface_scale(
-    surface: &smithay::reexports::wayland_server::protocol::wl_surface::WlSurface,
-    output_scale: f64,
-) -> f64 {
+fn surface_scale(surface: &WlSurface, output_scale: f64) -> f64 {
     with_states(surface, |states| {
         with_fractional_scale(states, |fs| fs.preferred_scale().unwrap_or(output_scale))
     })
+}
+
+/// Tamanho LÓGICO do cliente, no modelo do domicile (`logical_size`):
+/// pixels do buffer ÷ `buffer_scale`, substituído por `wp_viewport.dst` quando
+/// o cliente fractional usa o viewport. É ESTE tamanho — não `geo.size` nem o
+/// buffer cru — que ancora o 9-slice do frame, para borda e conteúdo colarem.
+fn client_logical_size(surface: &WlSurface, fallback: Size<i32, Logical>) -> Size<i32, Logical> {
+    with_states(surface, |states| {
+        let mut attrs = states.cached_state.get::<SurfaceAttributes>();
+        let attrs = attrs.current();
+        let buffer_scale = attrs.buffer_scale.max(1);
+        let from_buffer = match &attrs.buffer {
+            Some(BufferAssignment::NewBuffer(buffer)) => buffer_dimensions(buffer).map(|size| {
+                Size::<i32, Logical>::new(size.w / buffer_scale, size.h / buffer_scale)
+            }),
+            _ => None,
+        };
+        let viewport = states
+            .cached_state
+            .get::<ViewportCachedState>()
+            .current()
+            .dst;
+        viewport.or(from_buffer)
+    })
+    .unwrap_or(fallback)
 }
 
 #[cfg(feature = "bench")]
@@ -112,10 +136,16 @@ pub fn collect_output_elements(
             // `render_elements_from_surface_tree` (smithay surface.rs:194-222),
             // executada aqui SOB `bench` e sem alterar a cena.
             let client_surface = window.toplevel().map(|t| t.wl_surface());
-            let client_scale = client_surface
+            let _client_scale = client_surface
                 .as_ref()
                 .map(|s| surface_scale(s, output_scale))
                 .unwrap_or(output_scale);
+            // Modelo domicile: a geometria do cliente vem do buffer/viewport,
+            // não da window geometry configurada. O frame ancora nela.
+            let client_logical = client_surface
+                .as_ref()
+                .map(|s| client_logical_size(s, geo.size))
+                .unwrap_or(geo.size);
             #[cfg(feature = "bench")]
             let probe_loc: smithay::utils::Point<i32, smithay::utils::Physical> =
                 render_loc.to_physical_precise_round(output_scale);
@@ -140,7 +170,7 @@ pub fn collect_output_elements(
                 window,
                 renderer,
                 render_loc.to_physical_precise_round(output_scale),
-                UtilsScale::from(client_scale),
+                UtilsScale::from(output_scale),
                 1.0,
             ));
             #[cfg(feature = "bench")]
@@ -188,10 +218,7 @@ pub fn collect_output_elements(
                     .to_physical_precise_round(output_scale);
 
                 #[cfg(feature = "bench")]
-                if FSCALE_LOG
-                    .fetch_add(1, Ordering::Relaxed)
-                    .is_multiple_of(120)
-                {
+                if FSCALE_LOG.fetch_add(1, Ordering::Relaxed).is_multiple_of(5) {
                     let foot_bs = client_surface
                         .as_ref()
                         .map(|surface| {
@@ -205,20 +232,42 @@ pub fn collect_output_elements(
                         })
                         .unwrap_or(-1);
                     let frame_pref = surface_scale(frame_surface, output_scale);
+                    let frame_bs = with_states(frame_surface, |states| {
+                        states
+                            .cached_state
+                            .get::<SurfaceAttributes>()
+                            .current()
+                            .buffer_scale
+                    });
+                    let viewport_dst = client_surface.as_ref().and_then(|surface| {
+                        with_states(surface, |states| {
+                            states
+                                .cached_state
+                                .get::<ViewportCachedState>()
+                                .current()
+                                .dst
+                        })
+                    });
                     let foot_dst: Size<i32, Physical> =
-                        geo.size.to_physical_precise_round(client_scale);
+                        client_logical.to_physical_precise_round(output_scale);
+                    let foot_loc: smithay::utils::Point<i32, Physical> =
+                        render_loc.to_physical_precise_round(output_scale);
                     let frame_dst: Size<i32, Physical> =
-                        crate::render::elements::frame_target(geo.size, &fgeo)
-                            .to_physical_precise_round(client_scale);
+                        crate::render::elements::frame_target(client_logical, &fgeo)
+                            .to_physical_precise_round(output_scale);
                     let t = crate::frame_diagnostics::now_ns();
                     eprintln!(
-                        "FSCALE_FRAME t={t} backend=scene output={} window_id={} output_scale={} client_scale={} frame_pref={} foot_buffer_scale={} foot_dst={:?} frame_dst={:?} frame_loc={:?}",
+                        "FSCALE_FRAME t={t} backend=scene output={} window_id={} output_scale={} client_scale={} frame_pref={} foot_buffer_scale={} frame_buffer_scale={} foot_logical={:?} viewport_dst={:?} foot_loc={:?} foot_dst={:?} frame_dst={:?} frame_loc={:?}",
                         output.name(),
                         *_window_id,
                         output_scale,
-                        client_scale,
+                        _client_scale,
                         frame_pref,
                         foot_bs,
+                        frame_bs,
+                        client_logical,
+                        viewport_dst,
+                        foot_loc,
                         foot_dst,
                         frame_dst,
                         loc
@@ -234,8 +283,8 @@ pub fn collect_output_elements(
                         loc,
                         #[cfg(feature = "bench")]
                         client_origin: local_loc,
-                        committed: geo.size,
-                        output_scale: client_scale,
+                        committed: client_logical,
+                        output_scale,
                         #[cfg(feature = "bench")]
                         output,
                         window_id: *_window_id,
