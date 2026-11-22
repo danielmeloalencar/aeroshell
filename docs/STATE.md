@@ -571,6 +571,19 @@ F1 anterior revertida em `4307cc4`.
 8. `05-compatibilidade-protocolos.md` — RASCUNHO; 7 mensagens do `foot` registradas em §6. NÃO executar sem ok.
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- F1d3 (ERRO DO HARNESS, corrigido 2026-11-22): `/home/daniel/aeroshell-udev-20261122-051134.log`
+  (4,4 MB / 24.518 linhas) não tem `FOOT_COMMIT` nem `UDEV_FRAME_CB` porque `scripts/run-udev-diag.sh`
+  (usado por `~/u`) compilava `cargo build --workspace` **sem `--features bench`**. Corrigido: agora
+  `cargo build --workspace --features bench`; `strings` do binário com bench = 1/1 para as duas sondas.
+  Nenhuma amostra descartada — o log é prova de que o harness estava cego, não de que o cliente não commitou.
+- F1d3 (MEDIÇÃO do log 051134, 2026-11-22): sessão/DRM/output `active=true`; `FRAME_BUFFER_COMMIT
+  buffer=Some((1932,991)) ok=true` (a decoração chegou); `ordem de render` com `client@…` + `frame@…`;
+  16 `UDEV_FRAME is_empty=false queued=ok` e `UDEV_VBLANK n=3..10 submitted=ok` entre 08:11:36.785 e
+  08:11:37.107 — **a cena com o cliente foi enfileirada e confirmada pelo vblank**. Depois disso
+  `is_empty=true` (idle normal). `PauseSession` às 08:12:01 veio de Ctrl+Alt+F1 (o humano usou F1 em vez
+  de F2/F3 do RUNBOOK) e os 23.762 `DeviceInactive` seguintes são esperados. **Não há pixels do cliente
+  medidos no udev**: ainda não dá para separar "import do buffer falha no renderer GBM" de
+  "composição/direct-scanout/opacidade descarta o cliente".
 - F1d3 (FATO DO HUMANO, 2026-11-22 — prevalece sobre interpretação anterior): `is_empty=true` significa
   "sem damage, nada a submeter", isto é, **idle normal**. Não alterar a lógica de `is_empty`. Input, troca de
   VT e vblank estão provados bons no 4º log; não mexer neles. Cursor é cartão separado.
@@ -1157,11 +1170,11 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **Fase atual: F1.** F1a/F1b/F1c FECHADAS pelo juiz; F1d1/F1d2 FECHADAS no técnico. **F1d3 NÃO FECHADA: juiz negou 3× no tty3.** Push WIP falhou por credencial (`could not read Username`); commits locais `f0da56a`/`a56b85a` + o novo commit desta sessão prontos. Não é push de conclusão.
-- **Fato do humano:** `is_empty=true` = idle normal (sem damage), NÃO bug. Não alterar. Input/VT/vblank provados bons no 4º log; cursor é cartão separado (§6).
-- **Sinal:** `is_empty` fica `true` ~47 s durante interação. Cena/import já provados: `f1d3_headless_client_pixels.py` (`after=483/528`) e `f1d3_client_element_probe.py` (`delta=1`, `err=none`). Falta saber se o cliente recebe frame-callbacks no udev.
-- **Feito agora (código):** sondas SOMENTE sob `bench` em `protocols/compositor.rs::commit` (`FOOT_COMMIT … pending=`) e `udev.rs` timer (`UDEV_FRAME_CB … pending=`), ambas de LEITURA (não drenam). Novo `tests/integration/udev_client_compose_probe.py` escrito antes e visto FALHANDO (`probe-baseline.log`: 0 sondas, EXIT=1).
-- **Provas:** gate `check.sh` EXIT=0 (`/tmp/opencode/f1d3-4exec/gate-final.log`), clippy bench 0, `--no-default-features` 0, fmt 0, `strings` sem bench = 0. Headless real (`headless-14037.log`): 7 `FOOT_COMMIT` em 0,76 s, `pending_seq=0,1,1,0,1,1,0` — callbacks circulam no caminho que funciona. Classificador validado (parser, não produto).
-- **Estado exato para reproduzir:** `git status --short` limpo após o commit; gate em `/tmp/opencode/f1d3-4exec/gate-final.log`; recorte do 4º log em `/tmp/opencode/f1d3-4exec/judge-log-045035-excerpt.txt`.
-- **Próximo passo imediato (NÃO executado):** humano roda `~/u` no tty3 e envia o log; agente roda `python3 tests/integration/udev_client_compose_probe.py <log>`. Se `CALLBACK_NAO_CHEGA`, candidato mínimo: chamar `send_frames_surface_tree` no loop udev (Smithay 0.7.0 `utils.rs:217`). Se `SEM_DAMAGE_FORA_DA_CENA`, investigar composição (`FrameFlags::empty()`)/formato. Só depois: cartão de correção com teste-first + novo juiz visual.
+- **Fase atual: F1.** F1a/F1b/F1c FECHADAS pelo juiz; F1d1/F1d2 FECHADAS no técnico. **F1d3 NÃO FECHADA: juiz negou 3× + nova execução em 2026-11-22 negada.** Push WIP falhou por credencial; commits locais `f0da56a`/`a56b85a`/`9b5db36` + o novo commit prontos. Sem push de conclusão.
+- **Fato do humano:** `is_empty=true` = idle normal (sem damage), NÃO bug. Não alterar. Input/VT/vblank provados bons; cursor é cartão separado (§6).
+- **5º log analisado:** `/home/daniel/aeroshell-udev-20261122-051134.log`. Sessão/DRM/output ativos; decoração commitou `1932x991 ok=true`; `ordem de render` com `client@`+`frame@`; 16 frames `queued=ok` + vblank `submitted=ok` n=3..10 às 08:11:36.785–08:11:37.107. A cena com o cliente foi submetida; o juiz ainda viu só a decoração.
+- **Erro do harness corrigido:** esse log NÃO tem `FOOT_COMMIT`/`UDEV_FRAME_CB` porque `~/u` compilava sem `--features bench`. `scripts/run-udev-diag.sh` agora usa `cargo build --workspace --features bench`; `strings` com bench = 1/1 para as sondas. RUNBOOK atualizado.
+- **Sondas (código já commitado `9b5db36`):** `FOOT_COMMIT`/`UDEV_FRAME_CB` só sob bench, leitura sem drenar; analisador `udev_client_compose_probe.py` escrito antes e visto FALHANDO. Headless real: 7 commits/0,76 s, `pending_seq=0,1,1,0,1,1,0`.
+- **Provas:** gate `check.sh` EXIT=0, clippy bench 0, `--no-default-features` 0, fmt 0, `strings` sem bench = 0.
+- **Próximo passo imediato (NÃO executado):** humano roda `~/u` **novamente** (agora com bench) no tty3, interage ~10 s com o `foot` e envia o log; agente roda `python3 tests/integration/udev_client_compose_probe.py <log>`. Se `CALLBACK_NAO_CHEGA`, candidato: `send_frames_surface_tree` no loop udev (`utils.rs:217`); se `SEM_DAMAGE_FORA_DA_CENA`, investigar import GBM/composição. Só depois: cartão de correção com teste-first + novo juiz visual.
 

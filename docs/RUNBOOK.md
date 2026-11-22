@@ -110,13 +110,23 @@ e grava o log). Equivalente, se quiser ver o comando:
 cd ~/Projetos/aeroshell
 ./scripts/run-udev-diag.sh
 ```
-No log, procurar `UDEV_SESSION`, `UDEV_OUTPUT`, `UDEV_FRAME`, `UDEV_VBLANK`, `UDEV_SESSION_EVENT` e
-`UDEV_VT`. O analisador roda em qualquer máquina com o arquivo de log:
+O script compila o compositor com **`--features bench`** (desde 2026-11-22): é assim que existem as
+sondas `FOOT_COMMIT` (commit do cliente + callbacks pendentes) e `UDEV_FRAME_CB` (callbacks pendentes
+no loop udev). Sem `bench` o log fica sem essas linhas — foi o que aconteceu em
+`/home/daniel/aeroshell-udev-20261122-051134.log`.
+
+No log, procurar `UDEV_SESSION`, `UDEV_OUTPUT`, `UDEV_FRAME`, `UDEV_VBLANK`, `UDEV_SESSION_EVENT`,
+`UDEV_VT`, `CLIENT_ELEMENT_PROBE`, `FOOT_COMMIT` e `UDEV_FRAME_CB`. O analisador roda em qualquer máquina com o arquivo de log:
 ```
 python3 tests/integration/udev_frame_probe.py ~/aeroshell-udev-YYYYMMDD-HHMMSS.log
 ```
 `VEREDITO: OK` exige sessão ativa, CRTC ativo, `UDEV_FRAME ... queued=ok` e `UDEV_VBLANK ... submitted=ok`.
-Ele **não** mede pixels — a imagem na tela continua sendo julgada pelo humano.
+Ele **não** mede pixels — a imagem na tela continua sendo julgada pelo humano. Para medir se o cliente
+está composto, rode também:
+```
+python3 tests/integration/udev_client_compose_probe.py ~/aeroshell-udev-YYYYMMDD-HHMMSS.log
+```
+(distingue `CALLBACK_NAO_CHEGA` de `SEM_DAMAGE_FORA_DA_CENA`; exige ~10 s de interação com o `foot`.)
 
 ## Runtime Bun / SDK (tarefa 03)
 Tipos TS gerados do Rust (não editar à mão):

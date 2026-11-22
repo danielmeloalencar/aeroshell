@@ -22,8 +22,10 @@ echo "=== AeroShell DRM (udev) — diagnóstico F1d3 ==="
 echo "Repositório: $REPO"
 echo
 
-echo "[1/3] Compilando..."
-cargo build --workspace
+echo "[1/3] Compilando (com --features bench: sondas FOOT_COMMIT/UDEV_FRAME_CB)..."
+# F1d3: sem `bench` as sondas de commit/frame-callback NÃO existem no binário e
+# o log fica sem evidência — isso aconteceu em 2026-11-22 (log 051134).
+cargo build --workspace --features bench
 cargo build -p aeroshell-shell --example frame_webview
 
 echo "[2/3] Verificando ambiente..."
