@@ -977,6 +977,15 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **Colisão de `application_id` do `frame_webview` derruba a decoração (2026-11-22, descoberta no juiz da 02r;
+  FORA da 02r):** no tty3 (`/home/daniel/aeroshell-udev-20261122-183642.log`) o shell privilegiado morreu
+  ~40 ms após o launch — `conexão privilegiada do shell caiu reason=ConnectionClosed`, **0 linhas `FRAMEWEB`** —
+  e o painel WebView também não respondeu. Hipótese CONFIRMADA em nested: com outra instância de
+  `frame_webview` viva no mesmo D-Bus, o novo GApplication só reativa a antiga e sai sem log; com
+  `dbus-run-session -- …` o shell nasce (`probe-dbus.log`: 20 `FRAMEWEB`, 0 quedas) e sem ele morre
+  (`probe-bench-ipc.log`, `probe-normal-ipc.log`: 0 `FRAMEWEB`, 1 queda). **Não é causado pela 02r** (o maximize
+  só roda depois do associate; a queda é no startup). Corrigir exige cartão próprio (application_id por
+  sessão ou limpeza de instância antiga) — NÃO mexer aqui. Amostras em `/tmp/opencode/02r/probe-*.log`.
 - **Maximizar não reposicionava a janela (2026-11-22, descoberta do juiz; FORA da 02q) — CORRIGIDO na 02r (§3).**
   Era `window_ipc.rs:128-151`: só trocava `state.size` para o tamanho do output e enviava configure; sem
   `map_element`/update_location nem work area. A janela crescia a partir da cascata (60,80) e vazava pelo
@@ -1401,6 +1410,12 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- **02r — JUIZ VISUAL PARCIAL (2026-11-22): nested OK, tty3 BLOQUEADO.** Humano: *"testei no nested e estava
+  ok, mas ao testar no tty a janela não exibiu decoração pra eu poder clicar no maximizar"*. A causa do tty3
+  é a colisão de D-Bus do `frame_webview` (§6), pré-existente e fora da 02r — **não é regressão do maximize**.
+  Para o juiz do tty3, o humano deve fechar qualquer instância AeroShell/frame_webview ativa antes de rodar
+  `~/u` (ou usar D-Bus privado). Até lá a 02r NÃO está concluída. Instância nested aprovada, deixada aberta;
+  quem fecha é o humano.
 - **02r — JUIZ VISUAL PENDENTE (2026-11-22).** A prova automatizada mede geometria (`zone` do LayerMap,
   `frame configure` e IPC `list`), **não o que aparece na tela**. Instância nested aberta (§4) com painel
   (`exclusive_zone=48`); o humano deve: (1) ver a `foot` maximizada começar no topo da área útil, com a
@@ -1730,7 +1745,8 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **Sessão atual (02r, CÓDIGO/GATE OK): aguarda SÓ o juiz visual.** Instância nested deixada aberta
+- **Sessão atual (02r, CÓDIGO/GATE OK): nested APROVADO pelo humano; tty3 BLOQUEADO por colisão de D-Bus
+  do frame (§6, pré-existente).** Instância nested deixada aberta
   (`wayland-aero-02r-visual`, comp 211541, painel 211563, `/tmp/opencode/02r/visual.log`, PIDs em
   `visual.pids`); conforme §0.9, o humano olha e fecha, o agente não encerra. tty3: `~/u`.
 - **Reproduzir:** `python3 tests/integration/maximize_workarea.py` → `VEREDITO: OK` 3×
