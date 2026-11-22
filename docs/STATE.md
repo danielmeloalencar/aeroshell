@@ -501,7 +501,8 @@ F1 anterior revertida em `4307cc4`.
   **Próximo passo proposto (não executado):** instrumentar `UDEV_FRAME` com `primary_element`/
   `overlay_elements`/`cursor_element` e regiões opacas sob `bench`; humano reexecuta `~/u` no tty3 e envia
   o log para escolher entre composição forçada (`FrameFlags::empty()`) e formato/alpha do GBM. Cursor segue
-  ausente (§6). Push WIP feito a pedido explícito do humano; **não é push de conclusão**.
+  ausente (§6). Push WIP pedido pelo humano falhou por credencial (`could not read Username`); commits locais
+  `f0da56a`/`a56b85a` prontos para o humano empurrar. **Não é push de conclusão**.
 - F1c FECHADA (§3): prova técnica + juiz visual "aprovado visualmente" em 2026-11-21. Aplicação encerrada
   pelo humano (não pelo agente). F1d foi autorizada em 2026-11-21 e F1d1/F1d2 foram executadas (§3);
   F1d3 segue pedindo aprovação separada. Sem push.
@@ -1121,7 +1122,7 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **Fase atual: F1.** F1a/F1b/F1c FECHADAS pelo juiz; F1d1/F1d2 FECHADAS no técnico. **F1d3 NÃO FECHADA: juiz negou 3× no tty3.** Push WIP feito a pedido do humano; não é push de conclusão.
+- **Fase atual: F1.** F1a/F1b/F1c FECHADAS pelo juiz; F1d1/F1d2 FECHADAS no técnico. **F1d3 NÃO FECHADA: juiz negou 3× no tty3.** Commits WIP locais `f0da56a`/`a56b85a`; `git push origin master` FALHOU (`could not read Username for 'https://github.com'`), sem conflito — credencial ausente neste ambiente. Não é push de conclusão.
 - F1d3: `render/scene.rs` unifica a cena; `backend/udev.rs` faz libseat → udev → DRM/GBM → EGL → `DrmOutputManager` → libinput → vblank → render por timer. Diagnóstico antigo: `UDEV_SESSION`/`UDEV_OUTPUT`/`UDEV_FRAME`/`UDEV_VBLANK`/`UDEV_VT` + `Ctrl+Alt+F1..F4` via `change_vt`. Cursor invisível é dívida (§6).
 - **Prova nova:** `python3 tests/integration/f1d3_headless_client_pixels.py` → `baseline=0`, `after=483/528`, OK; `python3 tests/integration/f1d3_client_element_probe.py` → `delta=1 from_surface=Some err=none`, OK. Ambos escritos antes e vistos FALHANDO sem instrumentação. Cena/import NÃO são a causa.
 - Gate final `bash scripts/check.sh` EXIT=0 (`/tmp/opencode/f1d3-pixels/gate-final2.log`); clippy bench 0; `--no-default-features` 0; s1_nested 0; multi 0; headless_render_damage 0 só em D-Bus privado (colisão com a sessão udev viva registrada).
