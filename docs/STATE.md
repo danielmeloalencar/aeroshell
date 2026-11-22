@@ -21,6 +21,31 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **F1-cursor-shape — CORREÇÃO APÓS VEREDITO NEGATIVO DO JUIZ (2026-11-22, novo teste pendente).**
+      Humano: *"apareceu uma seta mal feita e que passa por trás das janelas e do painel"*. **Dado visual
+      prevalece** (AGENTS.md §0.4); a implementação anterior NÃO foi aceita. Causas:
+      (1) `udev.rs` fazia `elements.push(cursor)` numa cena **frente→trás** (`render/scene.rs:50-245`) — sem
+      cursor plane livre o Smithay compõe o elemento no primary plane **por último = atrás** de janelas/painel.
+      Correção: `elements.insert(0, cursor)`. `FrameFlags::DEFAULT` já inclui `ALLOW_CURSOR_PLANE_SCANOUT`
+      (`compositor/mod.rs:1036-1038`), então a flag NÃO era o problema. Log `UDEV_CURSOR_PLANE crtc=…
+      cursor_planes=<n> cursor_size=<w>x<h>` sob `bench` para provar no próximo log do tty3.
+      (2) bitmap 12×18 desenhado à mão. Referência do domicile: `drm_cursor_factory.h:24-45` — a imagem vem do
+      **tema XCursor da mesa**, carregada uma vez por tamanho; changeset `null-cursor-is-the-themes-arrow.md`.
+      Correção: `render/cursor.rs` agora usa `xcursor::CursorTheme::load` + `parse_xcursor`, mapeia
+      `CursorIcon::name()` (CSS) → nomes Xcursor (`left_ptr`, `xterm`, `hand2`, …), escolhe o tamanho nominal
+      mais próximo de `XCURSOR_SIZE`/24, converte RGBA→BGRA (`gles/format.rs:21`: `Argb8888` = GL_BGRA) e usa
+      o **hotspot real** do arquivo (`xhot`/`yhot`) com fallback para a seta padrão. Cache por forma em
+      `AeroState::cursor_images: HashMap<String, Option<CursorImage>>`. Log `CURSOR_RENDER … source=theme
+      shape=… xcursor=… size=… hotspot=(…,…)` sob bench.
+      **Dependência aprovada pelo humano (AGENTS.md §3.10):** `xcursor = "=0.3.11"`, MIT, já transitiva no
+      `Cargo.lock` (a mudança foi 1 linha no grafo do compositor); motivo: tema real com hotspot;
+      alternativa preterida: bytes RGBA embutidos (um formato/tema/DPI fixos).
+      **Prova objetiva:** `cargo test -p aeroshell-compositor cursor::tests -- --nocapture` → 3 passed,
+      com `TEMA_XCURSO size=24x24 hotspot=(3,1)` (tema real carregado, não bitmap). Gate `check.sh` EXIT=0;
+      clippy default/bench `-D warnings` 0; `--no-default-features` 0; 4 harnesses vizinhos OK.
+      Amostras falhas preservadas em `/tmp/opencode/f1-cursor2/` (clippy `chunks_exact`→`array_chunks`
+      indisponível na toolchain 1.86 → loop manual; `xcursor_name(&_icon)` no log bench).
+      **Ainda NÃO há ok visual do novo cursor no tty3 (§7): tarefa NÃO fechada.**
 - [x] **F1-cursor-shape, etapa 2 (d) — elemento `Kind::Cursor` no udev (2026-11-22, juiz visual PENDENTE).**
       **Correção de premissa confirmada na fonte:** o cursor plane JÁ está habilitado — `backend/udev.rs:146-153`
       passa `Some(gbm)` ao `DrmOutputManager`, e `smithay/backend/drm/output.rs:258-271` passa `cursor_size`
@@ -1072,15 +1097,16 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- **F1-cursor-shape — JUIZ VISUAL PENDENTE (2026-11-22).** Protocolo e elemento `Kind::Cursor` implementados
-  (§3), gate/clippy/`--no-default-features`/harnesses verdes, bitmap provado por teste unitário — mas
-  **nenhum pixel do cursor no tty3 foi medido por mim e o humano ainda não deu o "ok"**. Esta VM não tem VT
-  (`session.open()` → `EAGAIN`), então o agente não abriu/fechou aplicação nem trocou VT. Para julgar:
-  `~/u` no tty3, mover o mouse e confirmar que a seta aparece e acompanha o ponteiro; o log do script
-  (compilado com `--features bench`) deve conter `CURSOR_RENDER t=… source=named shape=… size=12x18`.
-  **Tarefa NÃO concluída sem o veredito do humano** (AGENTS.md §0.9). Fora disso, o cursor permanece
-  tematizado com bitmap embutido: trocar por tema Xcursor (`xcursor 0.3.11`, MIT, já transitivo no lock)
-  exigiria declaração de dependência direta e aprovação (AGENTS.md §3.10).
+- **F1-cursor-shape — 1º JUIZ VISUAL NEGOU (2026-11-22, dado do humano, prevalece):** *"apareceu uma seta
+  mal feita e que passa por trás das janelas e do painel"*. Causas e correções em §3. Corrigido: seta do
+  tema XCursor (24×24, hotspot 3,1 medido no teste) e `insert(0, …)` na cena frente→trás.
+  **2º JUIZ VISUAL PENDENTE:** nenhum pixel do cursor corrigido foi medido por mim (VM sem VT,
+  `session.open()` → `EAGAIN`); o agente não abriu/fechou aplicação nem trocou VT. No tty3, `~/u`, mover o
+  mouse e confirmar que a seta do tema aparece **acima** do `foot` e do painel, acompanha o ponteiro e a
+  ponta fica sob ele. O log (bench) deve conter `CURSOR_RENDER … source=theme shape=… size=24x24
+  hotspot=(3,1)` e `UDEV_CURSOR_PLANE … cursor_planes=<n> cursor_size=<w>x<h>` — este último diz se o
+  hardware cursor plane existe (se `cursor_planes=0`, o z-order `insert(0,…)` é o que garante o "acima").
+  **Tarefa NÃO concluída sem o novo "ok" do humano** (AGENTS.md §0.9).
 - **GAP ANALYSIS F1 (2026-11-22) — nesta seção, "~ parcial" e "❌ faltando" significam AUSÊNCIA DE CÓDIGO
   no item do plano-mestre §5, não falha de teste. Nada disso foi implementado.** Fonte: `grep` nos crates +
   código do Smithay 0.7.0 fixado (todos os módulos citados existem sob `wayland_frontend`, já ativo).
@@ -1357,11 +1383,11 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **Fase atual: F1; F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS pelo juiz.** **F1-cursor-shape NÃO FECHADA: falta o "ok" visual no tty3 (§7).** Sem push (credencial ausente). **PARAR: não avançar de fase sem aprovação (AGENTS.md §3.1).**
-- **Nesta sessão (2026-11-22):** cartões `F1-gap-protocolos.md` (mãe) e `F1-cursor-shape.md` criados; etapas (a)/(b)/(c) e (d) implementadas e commitadas separadamente (`57d1639`, `1043df8`). Cursor plane JÁ existia; só faltava o elemento `Kind::Cursor`.
-- **Prova do protocolo:** aviso do `foot` presente no baseline (`/tmp/opencode/f1-cursor/foot-baseline.log`) e AUSENTE depois (`foot-after2.log`, `foot-bench.log`, `foot-head.log`); sonda `CURSOR_SHAPE t=… source=named shape=text` sob bench (`comp-head.log`, 1 linha com motion sintético); bitmap testado por `cargo test -p aeroshell-compositor bitmap_seta` (1 passed).
-- **Como reproduzir:** `git log --oneline -5`; `bash scripts/check.sh` → `OK`, `CHECK_EXIT=0`; `cargo clippy --workspace --all-targets -- -D warnings` e `--features bench` → 0; `cargo check --workspace --no-default-features` → 0; 4 harnesses vizinhos OK (`/tmp/opencode/f1-cursor/`). Amostras falhas de fmt e de clippy bench preservadas, não descartadas.
-- **Próximo passo imediato (NÃO executado): o HUMANO roda `~/u` no tty3, move o mouse e diz se a seta aparece; se sim, dá o "ok" e só então a tarefa fecha.** O log (bench) deve mostrar `CURSOR_RENDER … size=12x18`. Agente não trocou VT, não usou sudo e não encerrou aplicação.
-- **Dívidas/cartões seguintes:** cursor tematizado via Xcursor (dependência directa a aprovar), outros 6 avisos do foot, hotplug, multi-GPU, presentation-time, Plano B, 02f/02n/02q. Plano em `docs/plano-mestre.md`.
-- **Contexto F1d3 preservado:** `udev.rs` chama `send_frame`; `~/u` lança o painel e define `AERO_WINDOW_IPC_SOCK`. Nada disso foi alterado nesta sessão; conteúdo do `foot` segue aprovado pelo juiz.
+- **Fase atual: F1; F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS pelo juiz.** **F1-cursor-shape NÃO FECHADA: 1º juiz negou; 2º juiz pendente (§7).** Sem push. **PARAR: não avançar de fase sem aprovação (AGENTS.md §3.1).**
+- **Nesta sessão (2026-11-22):** humano negou a 1ª implementação ("seta mal feita e passando por trás das janelas e do painel"). Corrigido: `insert(0, cursor)` na cena frente→trás + log `UDEV_CURSOR_PLANE`; seta do **tema XCursor** com hotspot real, mapeada dos nomes CSS, cache por forma, dependência `xcursor =0.3.11` (MIT) aprovada e documentada em §3.
+- **Prova:** `cargo test -p aeroshell-compositor cursor::tests -- --nocapture` → 3 passed, `TEMA_XCURSO size=24x24 hotspot=(3,1)`. Avanço do protocolo preservado: aviso do `foot` ausente em `foot-after2.log`/`foot-bench.log`/`foot-head.log`, `CURSOR_SHAPE … shape=text` em `comp-head.log`.
+- **Como reproduzir:** `git log --oneline -5`; `bash scripts/check.sh` → `OK`, `CHECK_EXIT=0`; clippy default/bench `-D warnings` → 0; `--no-default-features` → 0; 4 harnesses vizinhos OK. Amostras falhas (clippy `chunks_exact`/`array_chunks`, `xcursor_name(&_icon)`) preservadas em `/tmp/opencode/f1-cursor2/`, não descartadas.
+- **Próximo passo imediato (NÃO executado): o HUMANO roda `~/u` no tty3, move o mouse e confirma que a seta do tema aparece ACIMA do `foot` e do painel e que a ponta fica sob o ponteiro; só com o "ok" a tarefa fecha.** Log (bench): `CURSOR_RENDER … source=theme size=24x24 hotspot=(3,1)` e `UDEV_CURSOR_PLANE … cursor_planes=<n>`. Agente não trocou VT, não usou sudo e não encerrou aplicação.
+- **Dívidas seguintes:** outros 6 avisos do foot, hotplug, multi-GPU, presentation-time, Plano B, 02f/02n/02q. Plano em `docs/plano-mestre.md`.
+- **Contexto F1d3 preservado:** `udev.rs` chama `send_frame`; `~/u` lança o painel e define `AERO_WINDOW_IPC_SOCK`. Conteúdo do `foot` segue aprovado pelo juiz; nada disso foi alterado.
 
