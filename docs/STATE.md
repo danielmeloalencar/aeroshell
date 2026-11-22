@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-22 · **Fase atual: F1** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · **F1i+ código/teste/gate verdes, juiz visual PENDENTE (§3/§7)** · cursor invisível no udev segue em cartão separado · 02q REABERTA E FECHADA PELO JUIZ em 2026-11-22 (sem adiamento, spike 12×36 eliminado; harness de 300 ms segue como limitação de VM registrada) · **02r FECHADA PELO JUIZ (nested + tty3) e 02s FECHADA PELO JUIZ (duas instâncias no mesmo D-Bus, "ok aprovado")**
+Última atualização: 2026-11-22 · **Fase atual: F1** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · **F1i+ FECHADA PELO JUIZ VISUAL (digitação normal; só aviso de toplevel-icon, fora de escopo)** · cursor invisível no udev segue em cartão separado · 02q REABERTA E FECHADA PELO JUIZ em 2026-11-22 (sem adiamento, spike 12×36 eliminado; harness de 300 ms segue como limitação de VM registrada) · **02r FECHADA PELO JUIZ (nested + tty3) e 02s FECHADA PELO JUIZ (duas instâncias no mesmo D-Bus, "ok aprovado")**
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -21,7 +21,7 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
-- [~] **F1i+ — text_input/input_method (F1) + xdg_activation (F7) implementados e provados (2026-11-22); juiz visual PENDENTE (§7).**
+- [x] **F1i+ — text_input/input_method (F1) + xdg_activation (F7) FECHADA PELO JUIZ VISUAL (2026-11-22).**
       Cartão `docs/tasks/F1i-text-input-im-xdg-activation.md`, rascunho aprovado pelo humano ("ok"). **Decisão registrada:**
       `text_input/input_method` = F1i; `xdg_activation` **puxado da F7 por decisão do humano**.
       APIs lidas no Smithay 0.7.0 fixado antes de editar: `text_input/mod.rs:87,177`, `text_input_handle.rs:96-131`,
@@ -45,7 +45,11 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
       Regressões: `headless_render_damage`, `frame_buttons`, `frame_reopen`, `frame_window_id`, `frame_resize_glue`
       OK; `udev_drm_probe.py` EXIT=0 e `udev_frame_probe.py --self-test` EXIT=0 (`reg-udev-*.log`).
       `multi_output_damage.py` segue FALHANDO no mesmo ponto do HEAD sem minhas mudanças (§6); só o regex defasado
-      do harness foi ajustado para enxergar `OUTPUT_FRAME t=…`. **Nenhuma fase/cartão novo aberto.**
+      do harness foi ajustado para enxergar `OUTPUT_FRAME t=…`.
+      **JUIZ VISUAL: humano operou a nested e relatou, ao abrir outro `foot` no socket, que apareceu *"apenas
+      compositor does not implement XDG toplevel icon protocol"* (fora de escopo, intocado); questionado sobre a
+      digitação, respondeu *"Sim, digitou normal — fechar"*. O compositor (PID 243367) continuou vivo após a ativação.
+      Instância deixada aberta de propósito — quem fecha é o humano. Nenhuma fase/cartão novo aberto.**
 - [x] **02s — duas instâncias AeroShell no mesmo D-Bus não roubam a decoração (2026-11-22; FECHADA PELO JUIZ).**
       Cartão `docs/tasks/02s-frame-application-id.md`. Causa: `frame_webview.rs:806` usava
       `application_id("dev.aeroshell.frame-webview")` fixo; com outra instância dona do nome, o novo
@@ -945,9 +949,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
-- **F1i+ (2026-11-22): código, teste-first, globals, ativação, avisos do `foot` e gates prontos (§3). Falta APENAS o
-  juiz visual: `foot` digitando normal e bell/urgent/ativação sem derrubar o compositor (§7). Não abrir o próximo
-  cartão antes do "ok" do humano, conforme o próprio cartão.**
+- **F1i+ FECHADA PELO JUIZ (2026-11-22) — ver §3.** Humano confirmou digitação normal e que só restou o aviso de
+  `xdg toplevel icon` (fora de escopo); compositor seguiu vivo. Nenhuma instância encerrada pelo agente. Não reabrir
+  sem novo pedido. **Não abrir o próximo cartão sem cartão próprio e "ok" do humano.**
 - **02s FECHADA (2026-11-22) — ver §3.** Juiz aprovou com a nested aberta e `~/u` no tty3. Nenhuma
   instância ficou aberta pelo agente; o humano julgou e fecha. Não reabrir sem novo pedido.
 - **02r FECHADA (2026-11-22) — ver §3.** Juiz aprovou no nested e no tty3. A instância nested foi fechada
@@ -993,7 +997,7 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. **NENHUMA AUTORIZADA — PARAR.** F1i+ aguarda o juiz visual (§4/§7); o próximo cartão SÓ depois do "ok".
+0. **NENHUMA AUTORIZADA — PARAR.** F1i+ FECHADA PELO JUIZ (§3/§4); o próximo cartão SÓ com autorização explícita.
    02s FECHADA pelo juiz (§3), 02r FECHADA pelo juiz (§3),
    F1d3 FECHADA pelo juiz (§3).
    02r FECHADA pelo juiz (§3); F1d3 FECHADA pelo juiz (§3).
@@ -1474,11 +1478,11 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- **F1i+ — JUIZ VISUAL PENDENTE (2026-11-22):** pré-filtro automatizado provou globals, serial/token/ativação e a
-  ausência dos 2 avisos do `foot`, mas **não** mediu o que aparece na tela. Falta o humano operar `foot` no nested e
-  confirmar (a) digitação normal com `text_input`/IME anunciados e (b) bell/urgent/ativação sem derrubar o compositor.
-  Sem o "ok", o item NÃO está concluído. **Não medido:** pixels/desempenho em GPU real (VM sem 3D); IME real
-  (fcitx/ibus) — fora de escopo.
+- **F1i+ — JUIZ VISUAL OBTIDO (2026-11-22): humano confirmou digitação normal no `foot` e que, ao abrir outro
+  `foot` no socket, restou apenas o aviso de `xdg toplevel icon` (fora de escopo).** Compositor seguiu vivo após a
+  ativação (PID 243367). O pré-filtro automatizado mediu globals, serial/token/ativação e a ausência dos 2 avisos;
+  a sentença final foi do humano. **Não medido:** pixels/desempenho em GPU real (VM sem 3D); IME real (fcitx/ibus) —
+  fora de escopo.
 - **02s — JUIZ VISUAL OBTIDO (2026-11-22): humano aprovou ("ok aprovado") com a instância nested aberta e
   `~/u` no tty3.** A prova automatizada mede apenas logs/IPC (`FRAMEWEB`, `frame_painted`, quedas do shell,
   `list`); a aparência da decoração nas duas instâncias foi julgada pelo humano. **Não medido:** pixels do
@@ -1817,15 +1821,15 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **Sessão atual: F1i+ (2026-11-22) — código/teste/gates verdes (§3); JUIZ VISUAL PENDENTE (§7).** Instância nested
-  deixada aberta de propósito: compositor PID 243367, `foot` 243376, shell 243372, socket
+- **Sessão atual: F1i+ FECHADA PELO JUIZ VISUAL (2026-11-22) — ver §3.** Instância nested deixada aberta para o
+  julgamento: compositor PID 243367, `foot` 243376, shell 243372, socket
   `wayland-aero-f1i-1795386555`, IPC `/tmp/opencode/f1i/visual-ipc-1795386555.sock`, log
-  `/tmp/opencode/f1i/visual.log`. Quem fecha é o humano; o agente não encerrou app.
+  `/tmp/opencode/f1i/visual.log`. Quem fecha é o humano; o agente não encerrou app. Sem push (commits locais).
 - **Reproduzir:** `cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-compositor --example f1i_client && cargo build -p aeroshell-shell --example frame_webview && python3 tests/integration/f1i_protocols.py`
   → `VEREDITO: OK` (4× em `/tmp/opencode/f1i/final{3,4,5,6}.log`); baseline FALHA em `baseline1.log`.
   Gate `gate-final2.log` EXIT=0; clippy bench `clippy-bench.log` 0; `--no-default-features` `nodefault.log` 0.
-- **Próximo passo imediato:** obter o "ok" visual do humano no nested (digitação + ativação). Só depois fechar o
-  cartão F1i+ e abrir o próximo com cartão/ok próprios. Não avançar de fase nem reabrir xdg_toplevel_icon/hangup.
+- **Próximo passo: NENHUM AUTORIZADO — PARAR (AGENTS.md §3.1).** F1i+ fechada pelo juiz; não avançar de fase,
+  não reabrir `xdg_toplevel_icon`/`hangup` e não abrir o próximo cartão sem decisão explícita do humano.
 - **Sessão atual: 02s FECHADA PELO JUIZ (2026-11-22, "ok aprovado") — nested aberta + `~/u` no tty3.**
   Nenhuma instância aberta pelo agente. Sem push (commits locais até `047bc47` + fechamento).
 - **Reproduzir 02s:** `python3 tests/integration/frame_two_instances.py` → 3× `VEREDITO: OK`

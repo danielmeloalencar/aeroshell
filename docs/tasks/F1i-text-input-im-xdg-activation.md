@@ -1,5 +1,9 @@
-# Tarefa F1i+ — text_input/input_method (F1) + xdg_activation (puxado da F7) (RASCUNHO — aguarda "ok")
+# Tarefa F1i+ — text_input/input_method (F1) + xdg_activation (puxado da F7)
 
+> **FECHADA PELO JUIZ VISUAL em 2026-11-22.** Humano operou a nested (`WAYLAND_DISPLAY=wayland-aero-f1i-1795386555 foot`)
+> e relatou: *"apareceu apenas compositor does not implement XDG toplevel icon protocol"* (fora de escopo) e,
+> questionado sobre o teclado: *"Sim, digitou normal — fechar"*. O compositor (PID 243367) seguiu vivo após o
+> teste de ativação. Nenhuma instância foi encerrada pelo agente; quem fecha é o humano.
 > Um cartão por sessão. Se o objetivo mudar no meio, PARE e pergunte.
 > `xdg_toplevel_icon` JÁ está implementado (foot confirma) e `slave exited… hangup` NÃO é protocolo: NÃO tocar.
 
