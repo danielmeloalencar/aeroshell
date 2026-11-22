@@ -41,6 +41,15 @@ pub struct CalloopData {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    let opts = cli::parse();
+
+    // F1d2: modo de sonda GBM. Sai ANTES de qualquer tracing/display/socket para
+    // que o stdout contenha SOMENTE o JSON. Não troca VT, não pede master, não
+    // abre sessão libseat — apenas um nó de renderização em modo diagnose.
+    if let Some(node) = &opts.probe_gbm {
+        return backend::udev::probe_gbm(node);
+    }
+
     if let Ok(filter) = tracing_subscriber::EnvFilter::try_from_default_env() {
         tracing_subscriber::fmt()
             .compact()
@@ -50,7 +59,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         tracing_subscriber::fmt().compact().init();
     }
 
-    let opts = cli::parse();
     let selected_backend = backend::current(&opts);
     tracing::info!(
         backend = selected_backend.name(),

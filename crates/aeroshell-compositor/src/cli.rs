@@ -2,6 +2,9 @@
 
 use std::env;
 
+/// Nó de renderização usado por padrão pela sonda GBM (F1d2).
+pub const DEFAULT_RENDER_NODE: &str = "/dev/dri/renderD128";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BackendKind {
     Winit,
@@ -41,6 +44,8 @@ pub struct Options {
     pub shell_args: Vec<String>,
     /// Env exclusivo do filho privilegiado, `CHAVE=VALOR` (repetível).
     pub shell_env: Vec<String>,
+    /// F1d2: modo de sonda GBM (caminho do nó DRM). `None` = modo normal.
+    pub probe_gbm: Option<String>,
 }
 
 impl Default for Options {
@@ -56,6 +61,7 @@ impl Default for Options {
             shell: None,
             shell_args: Vec::new(),
             shell_env: Vec::new(),
+            probe_gbm: None,
         }
     }
 }
@@ -149,6 +155,10 @@ pub fn parse() -> Options {
                         .unwrap_or_else(|| die("--shell-env requer CHAVE=VALOR")),
                 );
             }
+            "--probe-gbm" => opts.probe_gbm = Some(DEFAULT_RENDER_NODE.to_owned()),
+            other if other.starts_with("--probe-gbm=") => {
+                opts.probe_gbm = Some(other["--probe-gbm=".len()..].to_owned());
+            }
             "--help" | "-h" => {
                 println!("{}", usage());
                 std::process::exit(0);
@@ -174,6 +184,7 @@ Uso: aeroshell-compositor [OPÇÕES]
   --shell CAMINHO                 Shell privilegiado lançado pelo supervisor
   --shell-arg ARG                 Argumento do shell (repetível)
   --shell-env CHAVE=VALOR         Env exclusivo do shell (repetível)
+  --probe-gbm[=NO]                Sonda GBM em NO (padrão: /dev/dri/renderD128), sem VT/master; imprime JSON
 "
 }
 
@@ -193,6 +204,7 @@ mod tests {
         assert_eq!(opts.outputs, 1);
         assert_eq!(opts.scale, 1.0);
         assert_eq!(opts.mod_key, ModKey::Alt);
+        assert_eq!(opts.probe_gbm, None, "sonda GBM é opt-in");
     }
 
     #[test]
@@ -213,6 +225,7 @@ mod tests {
             "--scale",
             "--mod",
             "--shell",
+            "--probe-gbm",
         ] {
             assert!(usage.contains(flag), "falta documentar {flag}");
         }
