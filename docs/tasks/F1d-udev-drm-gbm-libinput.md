@@ -15,7 +15,7 @@ F1d é executada em **três sub-cartões independentes**, cada um com gate verde
 |---|---|---|
 | **F1d1** (este arquivo, §critério) | features do Smithay, `doctor`, `ci.yml`, RUNBOOK, deps no `Cargo.lock` | gate + nested + opt-out |
 | **F1d2** (executada 2026-11-22, ok do humano) | sonda GBM em `renderD128` (GbmDevice → GbmAllocator) + enumerate de modos DRM, sem trocar VT/master | saída da sonda registrada em STATE.md §7 |
-| **F1d3** (sessão seguinte, só após ok) | backend udev completo + extração da cena de `backend/headless.rs:126-255` para `render/scene.rs` | juiz visual em tty3 (humano troca o VT e fecha) |
+| **F1d3** (implementada 2026-11-22, **juiz visual PENDENTE**) | backend udev (libseat/udev/DRM/GBM/EGL/libinput) + cena compartilhada em `render/scene.rs` | humano troca o VT no tty3, olha e fecha; sem o ok não é FECHADA |
 
 ## Contexto mínimo (arquivos que importam)
 - `Cargo.toml:21-26` — `smithay = { version = "=0.7.0", default-features = false, features = [...] }` do workspace.
@@ -83,13 +83,28 @@ F1d é executada em **três sub-cartões independentes**, cada um com gate verde
    `--no-default-features` recusa a sonda com mensagem explícita (`EXIT=1`) e o build padrão é restaurado em seguida.
 8. **Nenhum critério visual:** sonda roda dentro do compositor host, sem VT/master/sessão. Nada foi aberto/fechado.
 
+## F1d3 — critério de aceite (código pronto, validação visual PENDENTE)
+1. `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`
+   (e `--features bench`), `cargo check --workspace --no-default-features` → `EXIT=0`.
+2. `bash tests/integration/s1_nested.sh`, `python3 tests/integration/headless_render_damage.py`,
+   `dbus-run-session -- python3 tests/integration/multi_output_damage.py` → verdes (sem regressão do
+   refactor `render/scene.rs`); `python3 tests/integration/udev_drm_probe.py` → verde.
+3. `bash scripts/check.sh` → verde numa única execução.
+4. `env -u WAYLAND_DISPLAY -u DISPLAY target/debug/aeroshell-compositor --backend udev …` nesta VM →
+   abre libseat (`seat0`), descobre `/dev/dri/card0` e falha **graciosamente** em `session.open()` com `EAGAIN`
+   (sem VT ativo). **Não é prova de funcionamento em DRM** — apenas de que a cadeia até a abertura do device está correta.
+5. **Critério visual NÃO executado pelo agente** (AGENTS.md §0.9): no tty3, humano troca o VT, confirma
+   painel/`foot`/arrasto/sem piscar/retomada após VT, dá o ok e fecha. **Sem esse ok a tarefa não é FECHADA.**
+6. Cursor no backend udev **não renderizado** (dívida conhecida); ponteiro relativo do libinput passou a ser
+   tratado em `input.rs` (antes era no-op) — sem teste automatizado próprio, coberto só pelo juiz visual.
+
 ## Fora de escopo (NÃO faça, mesmo que pareça relacionado)
-- Implementar `init_udev`, `DrmDevice`/`DrmSurface`/`DrmCompositor`, `LibinputInputBackend`,
-  `LibseatSession`, notificador de sessão (`DrmDeviceNotifier`) — é **F1d3**.
-- `EGLDevice`/`EGLDisplay`/`ElesRenderer` (o trecho EGL do plano de F1d2 não foi necessário: a sonda GBM +
-  `GbmAllocator` + enumeração DRM já mede formats/modifiers/modos e fecha a lacuna `DT_NEEDED`). Fica para F1d3,
-  onde o renderer é efetivamente usado.
-- Extração da cena de `backend/headless.rs:126-255` para `render/scene.rs` — é **F1d3**.
+- Hotplug de DRM (adicionar/remover GPU em runtime) — F1d3 só **loga** o evento e pede reinício.
+- Cursor no backend udev (já registrado em §6; exige `cursor-icon` 1.2 + `MemoryRenderBufferRenderElement`).
+- Multi-GPU, `GpuManager`/dmabuf feedback, DRM lease, presentation-time, XWayland — o anvil faz, mas exigiria
+  `smithay_drm_extras` (dependência nova, não aprovada) e está fora do cartão.
+- `EGLDevice`/`EGLDisplay` são usados em F1d3 (`init_udev` cria o renderer EGL sobre GBM); a sonda F1d2 não
+  precisava deles. `ElesRenderer` não foi usado — o caminho é `DrmOutputManager` + `GlesRenderer`.
 - Cursor no backend udev (`PointerRenderElement`/`SoftwareCursor` não existem no Smithay 0.7.0; exige
   `cursor-icon` 1.2 + `MemoryRenderBufferRenderElement`) — registrar em STATE.md §6, não corrigir.
 - Adicionar `renderer_pixman`, `renderer_multi`, `renderer_test`, `xwayland`, `use_system_lib`,
@@ -131,4 +146,5 @@ equivalente em build padrão e mantém o nested leve. Reverta se discordar.
 ## Entrega (relatório curto, AGENTS.md §8)
 O que foi feito · comando → saída crua → interpretação · o que **não** foi testado (validação em DRM real:
 pendente do humano em F1d3) · descobertas laterais (STATE.md §6) · STATE.md §3/§4/§5/§6/§7/§9 atualizado ·
-commit local (sem push) · **PARAR**: F1d1 e F1d2 executadas; não iniciar F1d3 sem novo ok do humano.
+commit local (sem push) · **PARAR**: F1d1/F1d2 FECHADAS e F1d3 com código pronto; **não encerrar F1d3 sem o
+ok visual do humano no tty3** (AGENTS.md §0.9).

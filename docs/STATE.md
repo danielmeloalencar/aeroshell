@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-22 · **Fase atual: F1** · **F1d1 e F1d2 FECHADAS no critério técnico** (sem critério visual: o backend udev segue stub) · F1c FECHADA pelo juiz visual · 02q FECHADA pelo juiz (harness de 300 ms segue como lacuna registrada)
+Última atualização: 2026-11-22 · **Fase atual: F1** · **F1d1 e F1d2 FECHADAS; F1d3 com código pronto e JUIZ VISUAL PENDENTE no tty3** · F1c FECHADA pelo juiz visual · 02q FECHADA pelo juiz (harness de 300 ms segue como lacuna registrada)
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -15,10 +15,28 @@ lock, login) é TSX renderizado por WebKitGTK; runtime de política em Bun. Dev 
 decoração HTML funcional e painel React/TSX; fechamento formal em `docs/f0-relatorio-go-no-go.md` (quadro
 S1–S5, ratificação registrada dos ADRs, S4→F2/F9 e S5→F5/F6 deferidos com justificativa).
 F1 em andamento por cartões pequenos: F1a, F1b e F1c FECHADAS (juiz visual OK nas três; F1c em 2026-11-21);
-F1d autorizada pelo humano em 2026-11-21: **F1d1 e F1d2 FECHADAS no critério técnico (§3)**; F1d3 só após novo ok.
+F1d autorizada pelo humano em 2026-11-21: **F1d1 e F1d2 FECHADAS no critério técnico (§3); F1d3 implementada
+com gate verde, mas NÃO FECHADA — falta o ok visual do humano no tty3 (§7)**.
 F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [ ] **F1d3 — backend udev completo + cena compartilhada (código pronto, juiz visual PENDENTE)**, 2026-11-22.
+      `render/scene.rs` novo: `collect_output_elements` (antes em `winit.rs`) agora é usado por headless, winit
+      N>1 e udev — mesma ordem, offsets por `output_geometry`, filtro `frame_has_mapped_client` e log. O log
+      `RENDER_SHARED` do headless sob `bench` foi preservado por parâmetro explícito (winit N>1 não o emite);
+      o caminho N=1 do winit ficou intacto. `backend/udev.rs::init_udev` (antes stub) agora: `LibSeatSession`
+      → `UdevMonitor` → `AERO_DRM_DEVICE`/`primary_gpu`/`all_gpus` → `session.open` → `DrmDeviceFd`/
+      `DrmDevice` → `GbmDevice` → `EGLDisplay`/`EGLContext`/`GlesRenderer` → `GbmAllocator` +
+      `GbmFramebufferExporter` → `DrmOutputManager` → conectores/CRTCs/modos via `drm::control` (sem
+      `smithay_drm_extras`) → `Output` globals → evento libinput → notificadores de sessão/DRM/udev →
+      render por timer de 16 ms com `render_frame`/`queue_frame`/`frame_submitted`. `input.rs`: movimento
+      RELATIVO do libinput deixou de ser no-op (antes só absoluto/injeção sintética).
+      **Provas (VM sem 3D):** fmt/clippy/bench/`--no-default-features` EXIT=0; `s1_nested.sh`,
+      `headless_render_damage.py` (VEREDITO OK, RENDER_SHARED=22) e `multi_output_damage.py` (VEREDITO OK,
+      `{0:20,1:0}`) verdes após o refactor; sonda F1d2 verde; gate `check.sh` EXIT=0 (29 Rust + 9 Bun).
+      `--backend udev` nesta VM: `sessão libseat aberta seat0` + `dispositivo DRM selecionado /dev/dri/card0`
+      e falha graciosa em `session.open()` com `EAGAIN` (sem VT ativo) — **não prova DRM funcionando**.
+      **NÃO FECHADA**: AGENTS.md §0.9 exige o "ok" do humano olhando o tty3; nada foi aberto/fechado por mim.
 - [x] **F1d2 — sonda GBM em `renderD128` + enumeração de modos DRM**, 2026-11-22. Escrito primeiro
       `tests/integration/udev_drm_probe.py` e visto falhando (`EXIT=1`: `argumento desconhecido: --probe-gbm=…`).
       Implementado `--probe-gbm[=NO]` em `cli.rs` (default `/dev/dri/renderD128`), despacho em `main.rs` ANTES do
@@ -433,11 +451,11 @@ F1 anterior revertida em `4307cc4`.
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
-- **F1d1 e F1d2 CONCLUÍDAS no critério técnico (§3), sem critério visual** (o backend udev segue stub: nada
-  aparece na tela). Cartão `docs/tasks/F1d-udev-drm-gbm-libinput.md`. A lacuna de `DT_NEEDED` de F1d1 foi
-  **fechada** por F1d2 (`libgbm.so.1` medido em `readelf -d`). **F1d3** (backend udev completo + extração da
-  cena de `backend/headless.rs:126-255` para `render/scene.rs`) **NÃO iniciada** — aguarda o ok do humano
-  (juiz visual em tty3: humano troca o VT e fecha). Sem push.
+- **F1d3 CÓDIGO PRONTO, JUIZ VISUAL PENDENTE (§3).** Cartão `docs/tasks/F1d-udev-drm-gbm-libinput.md`.
+  Gate e todos os harnesses automatizados verdes; `--backend udev` nesta VM para em `session.open()` com
+  `EAGAIN` (sem VT ativo) — ambiente não permite julgar a renderização DRM. **Próximo passo é do humano:**
+  abrir no tty3 com o comando do RUNBOOK, trocar/voltar VT, olhar painel/`foot`/arrasto, dar o ok e fechar.
+  Até lá a tarefa **NÃO está FECHADA** (AGENTS.md §0.9). Cursor no udev segue ausente (§6). Sem push.
 - F1c FECHADA (§3): prova técnica + juiz visual "aprovado visualmente" em 2026-11-21. Aplicação encerrada
   pelo humano (não pelo agente). F1d foi autorizada em 2026-11-21 e F1d1/F1d2 foram executadas (§3);
   F1d3 segue pedindo aprovação separada. Sem push.
@@ -469,10 +487,10 @@ F1 anterior revertida em `4307cc4`.
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. `F1d3` (backend udev completo + `render/scene.rs`) — definida no cartão
-   `docs/tasks/F1d-udev-drm-gbm-libinput.md`. **NÃO iniciar sem o ok do humano.** F1d1 e F1d2 estão FECHADAS
-   no critério técnico (§3); `git push` é feito pelo humano. Não reabrir 02q pela divergência do cronômetro
-   sem pedido explícito.
+0. **F1d3 (AGUARDANDO JUIZ VISUAL):** humano executa o comando do RUNBOOK no tty3, troca o VT e volta,
+   observa painel/`foot`/arrasto/sem piscar, dá o ok e fecha. Só então marcar FECHADA em §3/§9. Se o juiz
+   negar: registrar o sintoma em §7 e PARAR (regra das duas tentativas; plano B dumb+legacy exige aprovação).
+   `git push` é feito pelo humano. Não reabrir 02q pela divergência do cronômetro sem pedido explícito.
 1. `02o` — SUBSTITUÍDA: a 02p criou sonda full-res que reproduziu o flicker (2×1.910 pixels) e depois
    comprovou canvas fixo sem transiente. A grade antiga não é mais critério; não reabrir sem novo pedido.
 2. `02n` — JUIZ NEGOU ("problema ainda ocorre"); instância já não existe. NÃO abrir 5ª correção sem decisão.
@@ -486,6 +504,16 @@ F1 anterior revertida em `4307cc4`.
 8. `05-compatibilidade-protocolos.md` — RASCUNHO; 7 mensagens do `foot` registradas em §6. NÃO executar sem ok.
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- F1d3 (CURSOR, confirmado no código): `init_udev` não adiciona elemento de cursor — o ponteiro **anda e clica**
+  (movimento relativo implementado em `input.rs`), mas é **invisível** no DRM. Caminho: `cursor-icon` 1.2 +
+  `MemoryRenderBufferRenderElement` (`element/memory.rs:463`). Exige cartão próprio; o juiz visual foi avisado.
+- F1d3 (HOTPLUG): eventos `UdevEvent::Added/Changed/Removed` só são **logados** ("reinicie para usar"); não há
+  `DrmScanner` nem adição/remoção dinâmica de outputs. `smithay_drm_extras` seria dependência nova (não aprovada).
+- F1d3 (MULTI-GPU/dmabuf/presentation-time): implementado apenas 1 GPU, 1 conector por CRTC, `queue_frame(())`
+  sem `OutputPresentationFeedback`. O anvil usa `DrmOutputManager`/`GpuManager`/dmabuf feedback — fora do cartão.
+- F1d3 (INPUT relativo): `PointerMotion` passou a mover o ponteiro, mas **não há teste automatizado próprio** —
+  nenhum backend automatizado emite evento relativo (headless usa `AERO_TEST_INPUT_SOCK`; winit usa absoluto).
+  Cobertura fica com o juiz visual no tty3.
 - F1d1 (CURSOR no backend udev): o Smithay 0.7.0 fixado **não tem** `PointerRenderElement` nem
   `SoftwareCursor` (`grep -rn "PointerRenderElement|SoftwareCursor" ~/.cargo/registry/src/*/smithay-0.7.0/src`
   → 0 ocorrências). O caminho é `cursor-icon` 1.2 + `MemoryRenderBufferRenderElement`
@@ -783,6 +811,17 @@ F1 anterior revertida em `4307cc4`.
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- F1d3 (JUIZ VISUAL **PENDENTE** — bloqueia o fechamento): nenhuma renderização DRM foi julgada. O comando do
+  RUNBOOK no tty3 ainda precisa ser executado **pelo humano**, que troca o VT, olha e fecha (AGENTS.md §0.9).
+  O agente NÃO trocou VT, NÃO abriu sessão real no tty3 e NÃO encerrou aplicação alguma nesta etapa.
+- F1d3 (LACUNA DE AMBIENTE, amostra preservada em `/tmp/opencode/f1d3/validate.log`): `--backend udev` nesta VM
+  (sem VT ativo) loga `sessão libseat aberta seat0`, `dispositivo DRM selecionado /dev/dri/card0` e termina
+  com `Error: "abrir \"/dev/dri/card0\" via libseat: Failed to open device: Resource temporarily unavailable
+  (os error 11)"`, `EXIT=1`. Diagnóstico (`estou supondo`): a seat não está ativa sem VT, então libseat concede
+  a sessão mas não o device. Isso NÃO é evidência de que o backend funciona ou falha em DRM real — só de que a
+  cadeia até a abertura do device compila e falha graciosamente (sem panic).
+- F1d3 (NÃO MEDIDO): formats/modifiers negociados com o EGL renderer, modo/CRTC efetivamente aplicado, vblank,
+  damage, ausência de flicker, retomada após VT switch, desempenho/RAM em GPU real (VM sem 3D).
 - F1d1 (LACUNA **FECHADA** por F1d2, amostra preservada): o plano pedia
   `ldd … | grep -E "gbm|libdrm|libinput|libseat|libudev"` → 5 linhas; em F1d1 mediu **0** (`readelf -d` só
   libxkbcommon/libgcc_s/libc/ld-linux) porque nada chamava as funções C (`udev.rs` era stub) e `--as-needed`
@@ -968,22 +1007,10 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **Fase atual: F1.** F1a/F1b/F1c FECHADAS pelo juiz visual. **F1d1 e F1d2 FECHADAS no critério técnico
-  (2026-11-22, sem critério visual).** F1d3 exige ok do humano. Sem push (`git push` é do humano).
-- F1d1: aliases `backend_*` + `default` em `crates/aeroshell-compositor/Cargo.toml:[features]`; doctor/CI com as
-  libs; opt-out `--no-default-features` medido. F1d2: `--probe-gbm[=NO]` em `cli.rs` → `backend/udev.rs::probe_gbm`
-  (cfg `backend_gbm`, fallback explícito), despacho em `main.rs` antes do tracing; harness
-  `tests/integration/udev_drm_probe.py`; RUNBOOK documenta o comando. Backend udev segue **stub** (`init_udev`).
-- Sonda medida (VM sem 3D): `backend_name=drm`, 4 formats RENDERING|SCANOUT, 64×64 Xrgb8888/Linear stride 256
-  com dmabuf nas duas alocações, card0 com 8 conectores (`Virtual-1` conectado, 35 modos). `DT_NEEDED` agora tem
-  `libgbm.so.1` (lacuna de F1d1 fechada); `libinput`/`libseat`/`libudev` só em F1d3. Modifiers `[]` = lacuna da
-  API, não ausência real (§6).
-- Gate final `check-final.log` EXIT=0 (29 Rust + 9 Bun); clippy normal/bench, fmt, `--no-default-features`,
-  `s1_nested.sh` e sonda (3×, SHA idêntico) todos EXIT=0. Amostra de `fmt` falhado em `validate.log` preservada.
-- Winit N>1 (F1c): textura/tracker por output (`age=1`), host `Normal` + `request_inner_size` 1280×480, N=1 `age=0`;
-  arrasto por união das geometrias; fallback N>1 pula frames com cliente mapeado. JUIZ F1c: "aprovado visualmente".
-- Reproduzir: `bash scripts/check.sh` · `python3 tests/integration/udev_drm_probe.py` ·
-  `bash tests/integration/s1_nested.sh` · `readelf -d target/debug/aeroshell-compositor | grep NEEDED`.
-- Próximo passo imediato (NÃO executado): **F1d3** — backend udev completo (libseat + udev + DrmDevice/Surface/
-  Compositor + libinput + notificadores) e extrair a cena de `backend/headless.rs:126-255` para `render/scene.rs`;
-  instância aberta no tty3, juiz humano troca o VT, olha e fecha. Requer ok novo. Sem 3D: desempenho não medido.
+- **Fase atual: F1.** F1a/F1b/F1c FECHADAS pelo juiz visual; F1d1/F1d2 FECHADAS no técnico. **F1d3 CÓDIGO PRONTO, NÃO FECHADA — falta ok visual no tty3 (2026-11-22).** Sem push.
+- F1d3: `render/scene.rs` unifica a cena (headless/winit-N>1/udev); `backend/udev.rs::init_udev` faz libseat → udev → DRM/GBM → EGL/GLES → `DrmOutputManager` → libinput → vblank → render por timer; `input.rs` trata movimento relativo. Cursor invisível e hotplug logado são dívidas (§6); sem `smithay_drm_extras`.
+- Prova (VM sem 3D): fmt/clippy/bench/`--no-default-features` EXIT=0; headless e multi-output VEREDITO OK; s1_nested e sonda F1d2 verdes; gate `check.sh` EXIT=0 (29 Rust + 9 Bun). `--backend udev` aqui: libseat seat0 + card0 descoberto, falha graciosa `EAGAIN` em `session.open()` (sem VT) — NÃO valida DRM (§7).
+- F1d2 (fechada): `--probe-gbm[=NO]` em `cli.rs` → `backend/udev.rs::probe_gbm`; sonda medida: `backend_name=drm`, 4 formats RENDERING|SCANOUT, 64×64 Linear stride 256 com dmabuf, card0 com 8 conectores (`Virtual-1`, 35 modos). `DT_NEEDED` tem `libgbm.so.1`.
+- Winit N>1 (F1c): textura/tracker por output (`age=1`), arrasto por união das geometrias; JUIZ F1c aprovou. Refactor F1d3 preservou os harnesses (RENDER_SHARED=22, `{0:20,1:0}`).
+- Reproduzir: `bash scripts/check.sh` · `python3 tests/integration/udev_drm_probe.py` · `bash tests/integration/s1_nested.sh` · `dbus-run-session -- python3 tests/integration/multi_output_damage.py`.
+- **Próximo passo (DO HUMANO, não executado):** no tty3, rodar o comando do RUNBOOK, trocar/voltar VT, olhar painel/`foot`/arrasto/sem piscar, dar o ok e fechar. Só então marcar F1d3 FECHADA no cartão/§3/§9. Se negar: registrar §7 e parar (plano B dumb+legacy exige aprovação). Sem 3D: desempenho não medido.

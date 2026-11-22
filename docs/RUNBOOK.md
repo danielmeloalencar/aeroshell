@@ -62,14 +62,12 @@ Imprime JSON com `backend_name`, formats RENDERING|SCANOUT, modifiers, uma aloca
 Requer acesso de leitura/escrita aos nós `/dev/dri/*` (no ambiente de dev há ACL `user:daniel:rw-`).
 
 ## Rodar em DRM (udev) — sessão real no VT
-**Status medido em F1d1:** o backend udev é **stub** — `crates/aeroshell-compositor/src/backend/udev.rs:20-26`
-devolve `Err("backend udev: implementação na F1 (requer libgbm/libseat e sessão real)")`. Desde F1d1 os crates
-do backend de sessão real estão no grafo e no binário
-(`cargo tree -p aeroshell-compositor | grep -cE "(gbm|drm|drm-ffi|input|udev|libseat) v"` → 6;
-`nm -a --defined-only target/debug/aeroshell-compositor | grep -E " a (gbm|libseat|udev|input|drm)\."` → CGUs
-dos 5 crates), **mas `ldd` não lista as `.so`** (medido: `DT_NEEDED` só tem libxkbcommon/libgcc/libc), porque
-nenhum código as chama ainda. Nada aparece na tela com `--backend udev`; a implementação chega em **F1d3**.
-Em F1d1 este comando termina com o erro do stub — registre a saída crua, não a interprete como regressão.
+**Status em F1d3:** o backend udev está **implementado** (`backend/udev.rs::init_udev`): libseat + udev +
+DRM/GBM + EGL/GLES + libinput + `DrmOutputManager`, com a cena compartilhada de `render/scene.rs`.
+F1d2 já havia provado `libgbm.so.1` em `DT_NEEDED`. Nesta VM (sem VT ativo) a inicialização chega até
+`sessão libseat aberta` e `dispositivo DRM selecionado = /dev/dri/card0`, e falha em `session.open()` com
+`EAGAIN` — **esperado**: sem VT ativo a seat não concede o device. Isso NÃO é regressão; é o limite do
+ambiente. A renderização real só pode ser julgada no tty3, pelo humano.
 
 Comando exato a partir do **tty3** (executado, olhado e **fechado pelo humano**):
 ```
@@ -86,9 +84,11 @@ XDG_RUNTIME_DIR=/run/user/$(id -u) MESA_DEBUG=1 LIBGL_ALWAYS_SOFTWARE=1 \
   ausentes) a autodetecção já escolhe udev (`src/cli.rs:63-70`).
 - **Trocar o VT (`Ctrl+Alt+F3`) e fechar a sessão é tarefa do humano** (AGENTS.md §0.9). O agente não troca
   VT, não usa `sudo`, não toca em `/etc` (AGENTS.md §3.8).
-- **Validação visual exigida em F1d3** (juiz humano, não teste headless): "no tty3 aparecem o painel e a
-  janela `foot`; arrastar a barra move só a janela dona; não há cursor fantasma; a tela não pisca no resize"
-  → o humano dá o ok e fecha.
+- **Validação visual PENDENTE (juiz humano, não teste headless)**: no tty3, confirmar que aparecem o painel e
+  a janela `foot`, que arrastar a barra move só a janela dona, que a tela não pisca no resize e que trocar
+  para outro VT e voltar retoma a imagem. **Cursor ainda NÃO é renderizado no backend udev** (Smithay 0.7.0
+  não tem `PointerRenderElement`/`SoftwareCursor`; STATE.md §6) — o ponteiro move e clica, mas é invisível.
+  O humano dá o ok e fecha; o agente não encerra o processo.
 - VM VirtualBox **sem 3D**: `LIBGL_ALWAYS_SOFTWARE=1` é o caminho em dev; tempo/RAM medidos aqui **não**
   valem como desempenho (GPU real pendente, STATE.md §7).
 
