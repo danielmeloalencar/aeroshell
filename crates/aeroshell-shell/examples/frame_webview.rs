@@ -10,6 +10,7 @@ use gdk4_wayland::prelude::*;
 use gdk4_wayland::{wayland_client, WaylandSurface};
 use gtk4::glib;
 use gtk4::prelude::*;
+use gtk4::{IconLookupFlags, IconTheme, TextDirection};
 use gtk4_layer_shell::LayerShell;
 use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
@@ -76,6 +77,8 @@ struct FrameEntry {
     window_id: u32,
     /// Último título aplicado ao HTML; evita reenviar JS a cada poll do IPC.
     last_title: Option<String>,
+    /// Assinatura (base64) do último ícone aplicado; ícone ausente = None.
+    last_icon: Option<String>,
 }
 
 struct PoolItem {
@@ -453,7 +456,74 @@ fn ipc_title(window_id: u32) -> Option<String> {
     None
 }
 
-/// Aplica ao DOM o título vindo do IPC. Chamado no associate e a cada 1 s.
+/// Fonte do ícone: pixels crus do protocolo ou nome do tema (ex.: `foot` envia nome).
+enum IconSource {
+    Pixels {
+        w: i32,
+        h: i32,
+        format: String,
+        b64: String,
+    },
+    Name(String),
+}
+
+/// Resolve um nome do tema GTK para uma data URI SVG/PNG. Nenhuma dependência
+/// nova: `gtk4::IconTheme` já é dependência do shell e `glib::base64_encode` vem
+/// do glib. Same invariant as the reference project: bytes on the wire in
+/// base64, decoded into a data URI that the WebView can draw without fetching.
+fn theme_icon_uri(name: &str) -> Option<String> {
+    let display = gtk4::gdk::Display::default()?;
+    let theme = IconTheme::for_display(&display);
+    let paintable = theme.lookup_icon(
+        name,
+        &[],
+        16,
+        1,
+        TextDirection::Ltr,
+        IconLookupFlags::empty(),
+    );
+    let path = paintable.file()?.path()?;
+    let mime = match path.extension().and_then(|ext| ext.to_str()) {
+        Some("svg") => "image/svg+xml",
+        Some("png") => "image/png",
+        _ => return None,
+    };
+    let bytes = std::fs::read(&path).ok()?;
+    Some(format!(
+        "data:{mime};base64,{}",
+        glib::base64_encode(&bytes)
+    ))
+}
+
+/// Lê `icon <id>` (uma linha, sem `.`) do IPC. O compositor responde com pixels
+/// (`ICON <id> <w> <h> <scale> <formato> <base64>`) ou nome (`ICON <id> NAME <json>`).
+fn ipc_icon(window_id: u32) -> Option<IconSource> {
+    let path = std::env::var_os("AERO_WINDOW_IPC_SOCK")?;
+    let mut stream = UnixStream::connect(path).ok()?;
+    writeln!(stream, "icon {window_id}").ok()?;
+    stream.flush().ok()?;
+    stream.shutdown(Shutdown::Write).ok()?;
+    let line = BufReader::new(stream).lines().next()?.ok()?;
+    let mut parts = line.splitn(7, ' ');
+    if parts.next() != Some("ICON") {
+        return None;
+    }
+    if parts.next()?.parse::<u32>().ok()? != window_id {
+        return None;
+    }
+    let first = parts.next()?;
+    if first == "NAME" {
+        return Some(IconSource::Name(serde_json::from_str(parts.next()?).ok()?));
+    }
+    let w = first.parse().ok()?;
+    let h = parts.next()?.parse().ok()?;
+    let _scale = parts.next()?; // informativo; o JS desenha na resolução recebida
+    let format = parts.next()?.to_owned();
+    let b64 = parts.next()?.to_owned();
+    Some(IconSource::Pixels { w, h, format, b64 })
+}
+
+/// Aplica título e ícone vindos do IPC. Chamado no associate e a cada 1 s.
 fn refresh_titles() {
     if std::env::var_os("AERO_WINDOW_IPC_SOCK").is_none() {
         return;
@@ -471,8 +541,51 @@ fn refresh_titles() {
             .unwrap_or_default()
     });
     for (window_id, webview) in targets {
-        let Some(title) = ipc_title(window_id) else {
-            continue;
+        if let Some(title) = ipc_title(window_id) {
+            let changed = RUNTIME.with(|cell| {
+                let mut borrow = cell.borrow_mut();
+                let Some(rt) = borrow.as_mut() else {
+                    return false;
+                };
+                let Some(entry) = rt
+                    .state
+                    .entries
+                    .iter_mut()
+                    .find(|e| e.window_id == window_id)
+                else {
+                    return false;
+                };
+                if entry.last_title.as_deref() == Some(title.as_str()) {
+                    return false;
+                }
+                entry.last_title = Some(title.clone());
+                true
+            });
+            if changed {
+                let quoted = serde_json::to_string(&title).unwrap_or_else(|_| "\"\"".to_owned());
+                let script = format!("window.aeroSetTitle && window.aeroSetTitle({quoted});");
+                webview.evaluate_javascript(
+                    &script,
+                    None,
+                    None,
+                    None::<&webkit6::gio::Cancellable>,
+                    |result| {
+                        if let Err(err) = result {
+                            eprintln!("FRAMEWEB: aeroSetTitle falhou: {err}");
+                        }
+                    },
+                );
+                eprintln!("FRAMEWEB: title_set window_id={window_id} titulo={title}");
+            }
+        }
+
+        // Ícone: assinatura = bytes (ou nome) atualmente publicados pelo
+        // compositor. Relido a cada poll; só reenviamos ao DOM quando muda.
+        let icon = ipc_icon(window_id);
+        let signature = match &icon {
+            Some(IconSource::Pixels { b64, .. }) => Some(b64.clone()),
+            Some(IconSource::Name(name)) => Some(format!("name:{name}")),
+            None => None,
         };
         let changed = RUNTIME.with(|cell| {
             let mut borrow = cell.borrow_mut();
@@ -487,17 +600,50 @@ fn refresh_titles() {
             else {
                 return false;
             };
-            if entry.last_title.as_deref() == Some(title.as_str()) {
+            if entry.last_icon == signature {
                 return false;
             }
-            entry.last_title = Some(title.clone());
+            entry.last_icon = signature;
             true
         });
         if !changed {
             continue;
         }
-        let quoted = serde_json::to_string(&title).unwrap_or_else(|_| "\"\"".to_owned());
-        let script = format!("window.aeroSetTitle && window.aeroSetTitle({quoted});");
+        let (script, log) = match icon {
+            Some(IconSource::Pixels { w, h, format, b64 }) => {
+                let payload = serde_json::json!({
+                    "w": w, "h": h, "format": format, "b64": b64,
+                });
+                let payload = serde_json::to_string(&payload).unwrap_or_else(|_| "null".to_owned());
+                (
+                    format!("window.aeroSetIcon && window.aeroSetIcon({payload});"),
+                    format!(
+                        "FRAMEWEB: titlebar_icon window_id={window_id} w={w} h={h} source=protocolo"
+                    ),
+                )
+            }
+            Some(IconSource::Name(name)) => match theme_icon_uri(&name) {
+                Some(uri) => {
+                    let payload = serde_json::json!({ "uri": uri });
+                    let payload =
+                        serde_json::to_string(&payload).unwrap_or_else(|_| "null".to_owned());
+                    (
+                        format!("window.aeroSetIcon && window.aeroSetIcon({payload});"),
+                        format!(
+                            "FRAMEWEB: titlebar_icon window_id={window_id} source=nome name={name}"
+                        ),
+                    )
+                }
+                None => (
+                    "window.aeroSetIcon && window.aeroSetIcon(null);".to_owned(),
+                    format!("FRAMEWEB: titlebar_icon window_id={window_id} source=fallback"),
+                ),
+            },
+            None => (
+                "window.aeroSetIcon && window.aeroSetIcon(null);".to_owned(),
+                format!("FRAMEWEB: titlebar_icon window_id={window_id} source=fallback"),
+            ),
+        };
         webview.evaluate_javascript(
             &script,
             None,
@@ -505,11 +651,11 @@ fn refresh_titles() {
             None::<&webkit6::gio::Cancellable>,
             |result| {
                 if let Err(err) = result {
-                    eprintln!("FRAMEWEB: aeroSetTitle falhou: {err}");
+                    eprintln!("FRAMEWEB: aeroSetIcon falhou: {err}");
                 }
             },
         );
-        eprintln!("FRAMEWEB: title_set window_id={window_id} titulo={title}");
+        eprintln!("{log}");
     }
 }
 
@@ -523,8 +669,12 @@ const TITLEBAR_HTML: &str = r#"<!doctype html>
     align-items:center;background:#2b2b2b;color:#eee;}
   /* 02l: largura FIXA do texto; o intervalo até os botões fica em branco e
      é a única parte da barra que o compositor pode esticar no resize. */
-  #title{flex:0 0 120px;width:120px;padding:0 8px;font-size:13px;
+  #title{flex:1 1 auto;min-width:0;font-size:13px;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  /* 16px dentro da zona de texto já reservada: sem mudar insets/slices. */
+  #icon{width:16px;height:16px;margin-right:6px;display:none;flex:0 0 16px;}
+  #slot{display:flex;align-items:center;flex:0 0 120px;width:120px;padding:0 8px;
+    font-size:13px;white-space:nowrap;overflow:hidden;}
   #max{margin-left:auto;}
   button{width:30px;height:30px;border:0;background:transparent;color:#eee;
     font-size:14px;cursor:pointer;}
@@ -534,7 +684,7 @@ const TITLEBAR_HTML: &str = r#"<!doctype html>
 <body>
   <div id="border"></div>
   <div id="bar" data-aero-interactive>
-    <span id="title">janela</span>
+    <div id="slot"><img id="icon" alt=""><span id="title">janela</span></div>
     <button id="max" title="maximizar">&#9633;</button>
     <button id="close" title="fechar">&#10005;</button>
   </div>
@@ -548,6 +698,51 @@ const TITLEBAR_HTML: &str = r#"<!doctype html>
       el.title = title;
       window.webkit.messageHandlers.aero.postMessage({
         action: 'title_applied', title: el.textContent
+      });
+    };
+    // Pixels vêm do IPC em base64 (o compositor não tem encoder de imagem).
+    // O canvas faz a conversão para PNG e o browser gera a data URI: sem
+    // dependência nova e sem rede — o WebView continua só em aero:// + data:.
+    window.aeroSetIcon = (payload) => {
+      const img = document.getElementById('icon');
+      if (payload && payload.uri) {
+        img.src = payload.uri;
+        img.style.display = 'block';
+        window.webkit.messageHandlers.aero.postMessage({
+          action: 'icon_applied', src: img.src.slice(0, 22), visible: 'block'
+        });
+        return;
+      }
+      if (!payload || !payload.b64) {
+        img.removeAttribute('src');
+        img.style.display = 'none';
+      } else {
+        const raw = Uint8Array.from(atob(payload.b64), (c) => c.charCodeAt(0));
+        const canvas = document.createElement('canvas');
+        canvas.width = payload.w;
+        canvas.height = payload.h;
+        const ctx = canvas.getContext('2d');
+        const image = ctx.createImageData(payload.w, payload.h);
+        for (let i = 0; i < image.data.length; i += 4) {
+          if (payload.format === 'Argb8888') {
+            image.data[i] = raw[i + 2];
+            image.data[i + 1] = raw[i + 1];
+            image.data[i + 2] = raw[i];
+            image.data[i + 3] = raw[i + 3];
+          } else if (payload.format === 'Xrgb8888') {
+            image.data[i] = raw[i + 2];
+            image.data[i + 1] = raw[i + 1];
+            image.data[i + 2] = raw[i];
+            image.data[i + 3] = 255;
+          }
+        }
+        ctx.putImageData(image, 0, 0);
+        img.src = canvas.toDataURL('image/png');
+        img.style.display = 'block';
+      }
+      // Devolvemos só o prefixo (o base64 do PNG é grande) como prova do DOM.
+      window.webkit.messageHandlers.aero.postMessage({
+        action: 'icon_applied', src: img.src.slice(0, 22), visible: img.style.display
       });
     };
     window.aeroFramePainted = (serial) => {
@@ -643,6 +838,7 @@ fn associate_frame(
             presented: false,
             window_id,
             last_title: None,
+            last_icon: None,
         });
         eprintln!("FRAMEWEB: associate(window_id={window_id}) + set_insets({BORDER},{TITLEBAR_H},{BORDER},{BORDER}) \
                    + set_titlebar_slices({TITLE_TEXT_W},{RIGHT_CONTROLS}) t={}", bench_t());
@@ -781,6 +977,16 @@ fn prewarm_frame() {
                     return;
                 };
                 eprintln!("FRAMEWEB: title_applied window_id={window_id} titulo={title}");
+            }
+            Some("icon_applied") => {
+                let src = parsed.get("src").and_then(|v| v.as_str()).unwrap_or("");
+                let visible = parsed.get("visible").and_then(|v| v.as_str()).unwrap_or("");
+                let Some(window_id) = callback_window_id.get() else {
+                    return;
+                };
+                eprintln!(
+                    "FRAMEWEB: icon_applied window_id={window_id} src={src} visible={visible}"
+                );
             }
             Some("frame_painted") => {
                 let Some(serial) = parsed
