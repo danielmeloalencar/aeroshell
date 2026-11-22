@@ -79,6 +79,30 @@ pub fn collect_output_elements(
             // (0,0), então cada output precisa da sua posição local.
             let local_loc = geo.loc - output_origin;
             let render_loc = local_loc - window.geometry().loc;
+            // F1d3: a linha `ordem de render … client@…` abaixo é empurrada
+            // incondicionalmente; só esta sonda prova que o elemento do cliente
+            // foi realmente criado. `from_surface` é a mesma chamada usada por
+            // `render_elements_from_surface_tree` (smithay surface.rs:194-222),
+            // executada aqui SOB `bench` e sem alterar a cena.
+            let client_surface = window.toplevel().map(|t| t.wl_surface());
+            #[cfg(feature = "bench")]
+            let probe_loc: smithay::utils::Point<i32, smithay::utils::Physical> =
+                render_loc.to_physical_precise_round(output_scale);
+            #[cfg(feature = "bench")]
+            let client_probe = client_surface.map(|surface| {
+                with_states(surface, |states| {
+                    WaylandSurfaceRenderElement::from_surface(
+                        renderer,
+                        surface,
+                        states,
+                        probe_loc.to_f64(),
+                        1.0,
+                        Kind::Unspecified,
+                    )
+                })
+            });
+            #[cfg(feature = "bench")]
+            let before = elements.len();
             elements.extend(AsRenderElements::render_elements::<
                 AeroRenderElements<GlesRenderer>,
             >(
@@ -88,9 +112,28 @@ pub fn collect_output_elements(
                 UtilsScale::from(output_scale),
                 1.0,
             ));
+            #[cfg(feature = "bench")]
+            {
+                let after = elements.len();
+                let (state, err) = match &client_probe {
+                    Some(Ok(Some(_))) => ("Some", "none".to_owned()),
+                    Some(Ok(None)) => ("None", "none".to_owned()),
+                    Some(Err(err)) => ("Err", err.to_string().replace([' ', '\n', '\t'], "_")),
+                    None => ("no_toplevel", "none".to_owned()),
+                };
+                let surface = match client_surface {
+                    Some(surface) => format!("{:?}", surface.id()),
+                    None => "none".to_owned(),
+                };
+                let t = crate::frame_diagnostics::now_ns();
+                eprintln!(
+                    "CLIENT_ELEMENT_PROBE t={t} surface={surface} from_surface={state} \
+                     err={err} before={before} after={after} delta={}",
+                    after - before
+                );
+            }
 
             // Frame deste cliente: depois do cliente = abaixo dele.
-            let client_surface = window.toplevel().map(|t| t.wl_surface());
             render_order.push(format!("client@{:?}", client_surface.map(|s| s.id())));
             if let Some((frame_surface, _, _window_id, _)) = state
                 .associated_frames
