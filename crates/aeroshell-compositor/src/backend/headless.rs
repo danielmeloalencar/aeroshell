@@ -15,24 +15,15 @@ use smithay::{
         egl::{native::EGLSurfacelessDisplay, EGLContext, EGLDisplay},
         renderer::{
             damage::OutputDamageTracker,
-            element::{surface::WaylandSurfaceRenderElement, AsRenderElements, Kind},
             gles::{GlesRenderbuffer, GlesRenderer},
             Bind, Offscreen,
         },
     },
     output::{Mode, Output, PhysicalProperties, Subpixel},
-    utils::{Buffer as BufferCoord, IsAlive, Scale as UtilsScale, Size, Transform},
-    wayland::{compositor::with_states, shell::wlr_layer::Layer},
+    utils::{Buffer as BufferCoord, IsAlive, Size, Transform},
 };
 
-use crate::{
-    cli::Options,
-    render::elements::{AeroRenderElements, FrameRenderInput},
-    CalloopData,
-};
-
-#[cfg(feature = "bench")]
-use crate::render::elements::FrameRenderKind;
+use crate::{cli::Options, CalloopData};
 
 pub struct HeadlessBackend;
 
@@ -124,135 +115,8 @@ fn render_headless(
     age: &mut usize,
 ) {
     let state = &mut data.state;
-    let output_scale = output.current_scale().fractional_scale();
-    let mut elements: Vec<AeroRenderElements<GlesRenderer>> = Vec::new();
-
-    {
-        let layer_map = smithay::desktop::layer_map_for_output(output);
-        let (lower, upper): (Vec<_>, Vec<_>) = layer_map
-            .layers()
-            .rev()
-            .partition(|s| matches!(s.layer(), Layer::Background | Layer::Bottom));
-
-        for layer in upper {
-            if let Some(geo) = layer_map.layer_geometry(layer) {
-                elements.extend(AsRenderElements::render_elements::<
-                    AeroRenderElements<GlesRenderer>,
-                >(
-                    layer,
-                    renderer,
-                    geo.loc.to_physical_precise_round(output_scale),
-                    UtilsScale::from(output_scale),
-                    1.0,
-                ));
-            }
-        }
-
-        let mut placed_frames = Vec::new();
-        for window in state.space.elements_for_output(output).rev() {
-            let Some(geo) = state.space.element_geometry(window) else {
-                continue;
-            };
-            // Mesma regra do winit: render_location = location - geometry.loc.
-            let render_loc = geo.loc - window.geometry().loc;
-            elements.extend(AsRenderElements::render_elements::<
-                AeroRenderElements<GlesRenderer>,
-            >(
-                window,
-                renderer,
-                render_loc.to_physical_precise_round(output_scale),
-                UtilsScale::from(output_scale),
-                1.0,
-            ));
-
-            let client_surface = window.toplevel().map(|t| t.wl_surface());
-            if let Some((frame_surface, _, _window_id, _)) = state
-                .associated_frames
-                .iter()
-                .find(|(_, _, _, cs)| cs.as_ref() == client_surface)
-            {
-                let fgeo = state
-                    .frame_geometries
-                    .get(frame_surface)
-                    .copied()
-                    .unwrap_or_default();
-                let (dx, dy) = fgeo.offset();
-                let loc: smithay::utils::Point<i32, smithay::utils::Physical> =
-                    smithay::utils::Point::<i32, smithay::utils::Logical>::new(
-                        geo.loc.x + dx,
-                        geo.loc.y + dy,
-                    )
-                    .to_physical_precise_round(output_scale);
-                let result = crate::render::elements::push_frame_elements(
-                    renderer,
-                    &mut elements,
-                    FrameRenderInput {
-                        surface: frame_surface,
-                        fgeo,
-                        loc,
-                        #[cfg(feature = "bench")]
-                        client_origin: geo.loc,
-                        committed: geo.size,
-                        output_scale,
-                        #[cfg(feature = "bench")]
-                        output,
-                        window_id: *_window_id,
-                        #[cfg(feature = "bench")]
-                        resize_active: state.resize_grab_active == Some(*_window_id),
-                    },
-                    #[cfg(feature = "bench")]
-                    &mut state.frame_diag,
-                );
-                if let Some(_result) = result {
-                    placed_frames.push(frame_surface.clone());
-                    // Prova do render compartilhado (F1b): o `kind` vem do MESMO
-                    // `push_frame_elements` usado pelo winit. Log só sob `bench`.
-                    #[cfg(feature = "bench")]
-                    {
-                        let kind = match _result.kind {
-                            FrameRenderKind::Frame => "frame",
-                            FrameRenderKind::Placeholder => "placeholder",
-                        };
-                        eprintln!("RENDER_SHARED window_id={_window_id} kind={kind}");
-                    }
-                }
-            }
-        }
-
-        // Frames sem cliente mapeado: abaixo de todas as janelas.
-        for layer in &state.frame_layer_surfaces {
-            if !layer.alive() || placed_frames.contains(layer.wl_surface()) {
-                continue;
-            }
-            let f = smithay::utils::Point::<f64, smithay::utils::Physical>::from((0.0, 0.0));
-            if let Ok(Some(el)) = with_states(layer.wl_surface(), |states| {
-                WaylandSurfaceRenderElement::from_surface(
-                    renderer,
-                    layer.wl_surface(),
-                    states,
-                    f,
-                    1.0,
-                    Kind::Unspecified,
-                )
-            }) {
-                elements.push(AeroRenderElements::Surface(el));
-            }
-        }
-
-        for layer in lower {
-            if let Some(geo) = layer_map.layer_geometry(layer) {
-                elements.extend(AsRenderElements::render_elements::<
-                    AeroRenderElements<GlesRenderer>,
-                >(
-                    layer,
-                    renderer,
-                    geo.loc.to_physical_precise_round(output_scale),
-                    UtilsScale::from(output_scale),
-                    1.0,
-                ));
-            }
-        }
-    }
+    let (elements, _probe) =
+        crate::render::scene::collect_output_elements(state, output, renderer, true);
 
     let mut target = match renderer.bind(renderbuffer) {
         Ok(target) => target,

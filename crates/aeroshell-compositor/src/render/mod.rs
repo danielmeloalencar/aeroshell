@@ -5,3 +5,4 @@
 //! mesmo caminho de 9-slice/placeholder do nested.
 
 pub mod elements;
+pub mod scene;
