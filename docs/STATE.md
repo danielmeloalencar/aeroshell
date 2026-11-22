@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-22 · **Fase atual: F1** · **F1d1/F1d2 FECHADAS; F1d3 NÃO FECHADA (juiz negou 2×); diagnóstico instrumentado, aguardando log do tty3** · F1c FECHADA pelo juiz visual · 02q FECHADA pelo juiz (harness de 300 ms segue como lacuna registrada)
+Última atualização: 2026-11-22 · **Fase atual: F1** · **F1d1/F1d2 FECHADAS; F1d3 NÃO FECHADA (juiz negou 3×); cena/import provados no headless, falha localizada no caminho udev** · F1c FECHADA pelo juiz visual · 02q FECHADA pelo juiz (harness de 300 ms segue como lacuna registrada)
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -16,11 +16,25 @@ decoração HTML funcional e painel React/TSX; fechamento formal em `docs/f0-rel
 S1–S5, ratificação registrada dos ADRs, S4→F2/F9 e S5→F5/F6 deferidos com justificativa).
 F1 em andamento por cartões pequenos: F1a, F1b e F1c FECHADAS (juiz visual OK nas três; F1c em 2026-11-21);
 F1d autorizada pelo humano em 2026-11-21: **F1d1 e F1d2 FECHADAS no critério técnico (§3); F1d3 implementada,
-mas NÃO FECHADA — juiz visual negou no tty3 em 2026-11-22 (§7). Cartão de diagnóstico instrumentado (§3);
-próxima decisão depende do log com `RUST_LOG=debug` enviado pelo humano.**
+mas NÃO FECHADA — juiz visual negou 3× no tty3 em 2026-11-22 (§7). O diagnóstico novo provou que a cena e o
+import do cliente funcionam no headless; o elo que falta é a apresentação GBM/DRM do udev (§3/§7).**
 F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **F1d3-diagnóstico (cena/import provados), 2026-11-22** — juiz negou 3× no tty3; o 3º log
+      (`/home/daniel/aeroshell-udev-20261122-040108.log`, transcrito na mensagem; arquivo sumiu depois)
+      mostrou `UDEV_SESSION/DRM/OUTPUT active=true`, `UDEV_FRAME … queued="ok"` e `UDEV_VBLANK … submitted="ok"`
+      com `foot` mapeado, mas o juiz viu só a decoração vazia. Dois harnesses novos, escritos ANTES e vistos
+      FALHANDO sem instrumentação (`/tmp/opencode/f1d3-pixels/{headless-client-baseline,element-baseline}.log`):
+      `tests/integration/f1d3_headless_client_pixels.py` → `baseline_non_clear_max=0`,
+      `after_non_clear_median=483/528`, `VEREDITO: OK` (cores de `foot` como `(36,36,36)/(38,38,38)`);
+      `tests/integration/f1d3_client_element_probe.py` → `CLIENT_ELEMENT_PROBE … from_surface=Some err=none
+      delta=1`, 68/68 linhas, `VEREDITO: OK`. A sonda `CLIENT_ELEMENT_PROBE` foi adicionada SÓ sob `bench`
+      em `render/scene.rs`, sem mudar ordem/geometria/cores/cadência. Conclusão: **cena compartilhada e
+      import do cliente NÃO são a causa**; o defeito está no caminho específico do udev depois da cena.
+      Gate `check.sh` EXIT=0 (`gate-final2.log`), clippy bench 0, `--no-default-features` 0, s1_nested 0,
+      multi_output 0, headless_render_damage 0 em D-Bus privado (`reg-headless-private.log`). Nenhum pixel do
+      tty3 medido pelo agente (sem VT); nenhum juiz visual novo.
 - [x] **F1d3-diagnóstico (2ª iteração, evidência de apresentação), 2026-11-22** — no log do tty3 do humano
       (`/tmp/opencode/f1d3-rediag/judge-log-032739-excerpt.txt`, recorte do texto colado): `UDEV_SESSION
       active=true`, `UDEV_OUTPUT active=true`, `UDEV_FRAME seq=1/2 queued="ok"`, `UDEV_VBLANK n=1/2/60
@@ -480,13 +494,14 @@ F1 anterior revertida em `4307cc4`.
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
-- **F1d3 NÃO FECHADA — juiz negou 2× (§7); diagnóstico instrumentado pronto (§3).**
-  Cartões: `F1d-udev-drm-gbm-libinput.md` e `F1d3-diagnostico-visual.md`. Gate e regressões verdes;
-  nesta VM (sem VT) `--backend udev` falha em `session.open()` com `EAGAIN`, então **não posso medir pixels**.
-  O humano já entregou o 2º log: heartbeat vivo, input vivo, tela sem imagem e `Ctrl+Alt+F*` sem efeito.
-  **Próximo passo é do humano:** reexecutar com `RUST_LOG=debug ~/run-aeroshell-udev.sh` no tty3, usar
-  `Ctrl+Alt+F2/F3` (agora implementado) e enviar o log. Até o ok visual, F1d3 **NÃO está FECHADA**.
-  Cursor no udev segue ausente (§6). Sem push.
+- **F1d3 NÃO FECHADA — juiz negou 3×; diagnóstico separou cena/import de apresentação (§3/§7).**
+  Cartões: `F1d-udev-drm-gbm-libinput.md` e `F1d3-diagnostico-visual.md`. Headless prova que o cliente vira
+  elemento e aparece em pixels; udev aceita frames/vblank, mas o juiz vê só a moldura. Nesta VM (sem VT)
+  `--backend udev` falha em `session.open()` com `EAGAIN`: **não posso medir pixels do tty3**.
+  **Próximo passo proposto (não executado):** instrumentar `UDEV_FRAME` com `primary_element`/
+  `overlay_elements`/`cursor_element` e regiões opacas sob `bench`; humano reexecuta `~/u` no tty3 e envia
+  o log para escolher entre composição forçada (`FrameFlags::empty()`) e formato/alpha do GBM. Cursor segue
+  ausente (§6). Push WIP feito a pedido explícito do humano; **não é push de conclusão**.
 - F1c FECHADA (§3): prova técnica + juiz visual "aprovado visualmente" em 2026-11-21. Aplicação encerrada
   pelo humano (não pelo agente). F1d foi autorizada em 2026-11-21 e F1d1/F1d2 foram executadas (§3);
   F1d3 segue pedindo aprovação separada. Sem push.
@@ -518,11 +533,12 @@ F1 anterior revertida em `4307cc4`.
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. **F1d3-diagnóstico (AGUARDANDO LOG DO HUMANO):** humano reexecuta no tty3 com `RUST_LOG=debug`,
-   envia o log; agente roda `udev_frame_probe.py`, escolhe UMA causa e abre cartão de correção (com ok).
-   Depois, novo juiz visual: painel/`foot`/arrasto/VT, dá o ok e fecha. Só então marcar F1d3 FECHADA.
-   Plano B (dumb+legacy+pixman) continua exigindo aprovação explícita.
-   `git push` é feito pelo humano. Não reabrir 02q pela divergência do cronômetro sem pedido explícito.
+0. **F1d3 (PRÓXIMO PASSO, NÃO EXECUTADO):** sonda `primary_element`/overlay/opaque no `UDEV_FRAME` sob
+   `bench`, humano roda `~/u` no tty3 e envia o log; só então abrir cartão de correção com ok. Se Confirmado
+   direct-scanout/opaco, candidato mínimo é `FrameFlags::empty()` em `udev.rs` (forçar composição); se for
+   formato/alpha, trocar a ordem de `color_formats` exige decisão (transparência do painel/frame). Depois,
+   novo juiz visual: painel/`foot`/arrasto/VT, dá o ok e fecha. Plano B exige aprovação explícita.
+   Não reabrir 02q pela divergência do cronômetro sem pedido explícito.
 1. `02o` — SUBSTITUÍDA: a 02p criou sonda full-res que reproduziu o flicker (2×1.910 pixels) e depois
    comprovou canvas fixo sem transiente. A grade antiga não é mais critério; não reabrir sem novo pedido.
 2. `02n` — JUIZ NEGOU ("problema ainda ocorre"); instância já não existe. NÃO abrir 5ª correção sem decisão.
@@ -544,6 +560,14 @@ F1 anterior revertida em `4307cc4`.
 - F1d3-diagnóstico (ERRO MEU, corrigido): os keycodes do atalho de VT foram escritos como evdev crus;
   o Smithay soma 8 (XKB) no libinput. Sintoma: `UDEV_VT` nunca apareceu no log. Correção em `udev.rs`,
   com `UDEV_KEY` para auditar os códigos reais no próximo log.
+- F1d3-diagnóstico (AMOSTRA, arquivo original sumiu 3×): `/home/daniel/aeroshell-udev-20261122-040108.log`
+  não existe mais; o 3º veredito negativo vem do texto colado pelo humano. Nenhuma amostra foi inventada.
+- F1d3-diagnóstico (ERROS DO HARNESS, corrigidos e preservados): a 1ª execução do pixel harness morreu por
+  colisão do `application_id` do `frame_webview` com a sessão udev viva (`headless-client-baseline.log`);
+  a 2ª amostrava a região errada porque não aplicava `Flipped180`; a 3ª usava regex sem `t=` e não separava
+  baseline/depois. Logs crus em `/tmp/opencode/f1d3-pixels/headless-client-{baseline,run1,run2,run3}.log`.
+  Correção: D-Bus privado, `buffer_y=955-80-494=381`, classificação por `toplevel mapeado`. A regressão
+  antiga `headless_render_damage.py` também falhou 1× pela mesma colisão e passou em D-Bus privado.
 - F1d3-diagnóstico (AMOSTRA, arquivo original sumiu): o arquivo `/home/daniel/aeroshell-udev-20261122-023701.log`
   não existe mais em `/home/daniel` após o reboot do humano; o recorte literal colado na mensagem foi preservado
   em `/tmp/opencode/f1d3-rediag/judge-log-excerpt.txt` (NÃO é o arquivo original — as linhas `\00` finais
@@ -868,6 +892,13 @@ F1 anterior revertida em `4307cc4`.
   `UDEV_FRAME` escondia exatamente esses frames (agora registra todo não-vazio). Também não houve
   `UDEV_VT`/`UDEV_SESSION_EVENT`: o atalho estava com keycode errado (§6), corrigido mas **não validado**.
   Causa da imagem ausente **AINDA NÃO identificada**; não escolher hipótese sem o próximo log.
+- F1d3 (**EVIDÊNCIA NOVA, 2026-11-22 — medição do agente, não juiz visual**): no headless com o MESMO
+  `render/scene.rs`, a região de conteúdo `(60,80,696,494)` passou de `0/528` células fora do clear para
+  `483/528` após o `foot` mapear (`headless-client-final.log`), e a sonda `CLIENT_ELEMENT_PROBE` registrou
+  `delta=1`, `from_surface=Some`, `err=none` em 68/68 linhas (`element-final-afterfmt.log`). Portanto a
+  afirmação antiga "não provamos que o elemento do cliente foi criado" está **fechada**: foi criado e
+  renderizado. O que segue **NÃO medido** é o framebuffer de scanout do udev (sem VT aqui) — a causa final
+  dentro do `DrmCompositor`/GBM (direct-scanout/opaco vs. formato/alpha) continua em hipótese.
 - F1d3 (**2º JUIZ VISUAL NEGOU — 2026-11-22, dado do humano**): rodou `~/run-aeroshell-udev.sh` no tty3.
   Relato cru: *"o mouse funciona, mas nao aparece cursor, consegui mover a janela as cegas e tambem digitei
   exit no terminal e dei enter, a janela fechou, mesmo sem ter renderizado o foot nela. Nao deu pra sair do
@@ -1090,9 +1121,9 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **Fase atual: F1.** F1a/F1b/F1c FECHADAS pelo juiz visual; F1d1/F1d2 FECHADAS no técnico. **F1d3 NÃO FECHADA: juiz negou 2× no tty3 em 2026-11-22 (§7).** Sem push.
-- F1d3: `render/scene.rs` unifica a cena; `backend/udev.rs` faz libseat → udev → DRM/GBM → EGL → `DrmOutputManager` → libinput → vblank → render por timer. Diagnóstico: `UDEV_SESSION`/`UDEV_OUTPUT`/`UDEV_FRAME`/`UDEV_VBLANK`/`UDEV_SESSION_EVENT`/`UDEV_VT` + `Ctrl+Alt+F1..F4` via `change_vt`. Cursor invisível/hotplug logado são dívidas (§6).
-- Prova desta sessão: `check.sh` CHECK=0, clippy bench 0, `--no-default-features` 0, sonda 0, fmt 0; s1_nested=0, headless OK, multi=0 (`/tmp/opencode/f1d3-rediag/{gate-final,regressions}.log`). Analisador: baseline FALHA (0 linhas), self-test OK (fixture sintética). Nenhum pixel/juiz executado pelo agente: sem VT aqui, `--backend udev` falha com `EAGAIN`.
-- F1d2 (fechada): sonda GBM em `renderD128` medida (4 formats RENDERING|SCANOUT, dmabuf, 8 conectores/35 modos); `libgbm.so.1` em `DT_NEEDED`.
-- **Próximo passo (DO HUMANO):** no tty3 digitar só **`~/u`** e Enter (já fixa `RUST_LOG=debug`); usar `Ctrl+Alt+F2` (sair) e `F3` (voltar) — agora com keycode XKB corrigido; enviar o log novo (copie para `/tmp` antes de reiniciar, se possível). Agente roda `python3 tests/integration/udev_frame_probe.py <log>` e lê os frames NÃO-vazios após o `foot` mapear para escolher UMA hipótese. Plano B (dumb+legacy+pixman) exige aprovação explícita.
+- **Fase atual: F1.** F1a/F1b/F1c FECHADAS pelo juiz; F1d1/F1d2 FECHADAS no técnico. **F1d3 NÃO FECHADA: juiz negou 3× no tty3.** Push WIP feito a pedido do humano; não é push de conclusão.
+- F1d3: `render/scene.rs` unifica a cena; `backend/udev.rs` faz libseat → udev → DRM/GBM → EGL → `DrmOutputManager` → libinput → vblank → render por timer. Diagnóstico antigo: `UDEV_SESSION`/`UDEV_OUTPUT`/`UDEV_FRAME`/`UDEV_VBLANK`/`UDEV_VT` + `Ctrl+Alt+F1..F4` via `change_vt`. Cursor invisível é dívida (§6).
+- **Prova nova:** `python3 tests/integration/f1d3_headless_client_pixels.py` → `baseline=0`, `after=483/528`, OK; `python3 tests/integration/f1d3_client_element_probe.py` → `delta=1 from_surface=Some err=none`, OK. Ambos escritos antes e vistos FALHANDO sem instrumentação. Cena/import NÃO são a causa.
+- Gate final `bash scripts/check.sh` EXIT=0 (`/tmp/opencode/f1d3-pixels/gate-final2.log`); clippy bench 0; `--no-default-features` 0; s1_nested 0; multi 0; headless_render_damage 0 só em D-Bus privado (colisão com a sessão udev viva registrada).
+- **Próximo passo (NÃO executado):** sob `bench`, logar `primary_element`/`overlay_elements`/`cursor_element` e opacidades no `UDEV_FRAME`; humano roda `~/u` no tty3 e envia o log. Com o dado, abrir cartão: se direct-scanout/opaco, candidato mínimo `FrameFlags::empty()` em `udev.rs`; se formato/alpha, decidir troca de `color_formats`. Plano B exige aprovação explícita.
 
