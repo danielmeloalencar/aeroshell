@@ -14,7 +14,7 @@ F1d é executada em **três sub-cartões independentes**, cada um com gate verde
 | Sub-cartão | O que entrega | Validação final |
 |---|---|---|
 | **F1d1** (este arquivo, §critério) | features do Smithay, `doctor`, `ci.yml`, RUNBOOK, deps no `Cargo.lock` | gate + nested + opt-out |
-| **F1d2** (sessão seguinte, só após ok) | sonda GBM em `renderD128` (EGL → GbmAllocator) sem trocar VT, harness novo | saída da sonda registrada em STATE.md §7 |
+| **F1d2** (executada 2026-11-22, ok do humano) | sonda GBM em `renderD128` (GbmDevice → GbmAllocator) + enumerate de modos DRM, sem trocar VT/master | saída da sonda registrada em STATE.md §7 |
 | **F1d3** (sessão seguinte, só após ok) | backend udev completo + extração da cena de `backend/headless.rs:126-255` para `render/scene.rs` | juiz visual em tty3 (humano troca o VT e fecha) |
 
 ## Contexto mínimo (arquivos que importam)
@@ -65,10 +65,30 @@ F1d é executada em **três sub-cartões independentes**, cada um com gate verde
 11. **Nenhum critério visual nesta sessão.** O backend udev continua sendo stub (`udev.rs:20-26` devolve `Err`):
     nada aparece na tela em F1d1. O juiz visual humano só é exigido em F1d3.
 
+## F1d2 — critério de aceite (executada em 2026-11-22)
+1. **Teste primeiro:** `python3 tests/integration/udev_drm_probe.py` escrito e executado **antes** da sonda →
+   `exit 2`, `argumento desconhecido: --probe-gbm=/dev/dri/renderD128` (amostra em `/tmp/opencode/f1d2/probe-run.log`).
+2. `cargo build -p aeroshell-compositor` → `EXIT=0`, sem warnings.
+3. `python3 tests/integration/udev_drm_probe.py` → `EXIT=0`, `OK: sonda GBM em renderD128 passou`.
+   Medições registradas em STATE.md §7: `backend_name=drm`, 4 formats RENDERING|SCANOUT, alocação direta e via
+   `GbmAllocator` com dmabuf, 8 conectores em card0 (`Virtual-1` conectado, 35 modos).
+4. `readelf -d target/debug/aeroshell-compositor | grep NEEDED` → **`libgbm.so.1` presente**, fechando a lacuna
+   de F1d1 (medida: 0 linhas antes da sonda). `ldd` mostra `libgbm.so.1` e `libdrm.so.2` carregados.
+5. `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings` (e `--features bench`),
+   `cargo check --workspace --no-default-features`, `bash tests/integration/s1_nested.sh`,
+   `bash scripts/check.sh` → todos `EXIT=0` (amostra falhada de `fmt` preservada em `/tmp/opencode/f1d2/validate.log`,
+   corrigida por `cargo fmt` e reprovada em `/tmp/opencode/f1d2/validate2.log`).
+6. Repetibilidade: 3 execuções da sonda → 3× `EXIT=0`, mesmo SHA-256 (`3095005fe352…`), 8935 bytes cada.
+7. Casos de borda: `--probe-gbm` sem valor usa `/dev/dri/renderD128`; `--help` documenta a flag;
+   `--no-default-features` recusa a sonda com mensagem explícita (`EXIT=1`) e o build padrão é restaurado em seguida.
+8. **Nenhum critério visual:** sonda roda dentro do compositor host, sem VT/master/sessão. Nada foi aberto/fechado.
+
 ## Fora de escopo (NÃO faça, mesmo que pareça relacionado)
 - Implementar `init_udev`, `DrmDevice`/`DrmSurface`/`DrmCompositor`, `LibinputInputBackend`,
   `LibseatSession`, notificador de sessão (`DrmDeviceNotifier`) — é **F1d3**.
-- Sonda GBM/EGL em `renderD128` e harness `tests/integration/udev_drm_probe.py` — é **F1d2**.
+- `EGLDevice`/`EGLDisplay`/`ElesRenderer` (o trecho EGL do plano de F1d2 não foi necessário: a sonda GBM +
+  `GbmAllocator` + enumeração DRM já mede formats/modifiers/modos e fecha a lacuna `DT_NEEDED`). Fica para F1d3,
+  onde o renderer é efetivamente usado.
 - Extração da cena de `backend/headless.rs:126-255` para `render/scene.rs` — é **F1d3**.
 - Cursor no backend udev (`PointerRenderElement`/`SoftwareCursor` não existem no Smithay 0.7.0; exige
   `cursor-icon` 1.2 + `MemoryRenderBufferRenderElement`) — registrar em STATE.md §6, não corrigir.
@@ -111,4 +131,4 @@ equivalente em build padrão e mantém o nested leve. Reverta se discordar.
 ## Entrega (relatório curto, AGENTS.md §8)
 O que foi feito · comando → saída crua → interpretação · o que **não** foi testado (validação em DRM real:
 pendente do humano em F1d3) · descobertas laterais (STATE.md §6) · STATE.md §3/§4/§5/§6/§7/§9 atualizado ·
-commit local (sem push) · **PARAR**: não iniciar F1d2 sem o ok do humano.
+commit local (sem push) · **PARAR**: F1d1 e F1d2 executadas; não iniciar F1d3 sem novo ok do humano.

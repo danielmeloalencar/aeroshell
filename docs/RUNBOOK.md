@@ -49,6 +49,18 @@ Em outro terminal, com o mesmo D-Bus privado: `WAYLAND_DISPLAY=wayland-aero-demo
 Arraste a titlebar do `foot` da direita para o segundo tile e de volta: o ponteiro cobre a janela host
 inteira (1280×480), cada output desenha só o seu cliente e nenhum frame aparece ocupando a metade da tela.
  
+## Sonda GBM fora do VT (F1d2)
+Diagnóstico sem trocar VT, sem master, sem sessão libseat e sem socket Wayland — pode rodar dentro do host:
+```
+cargo build --workspace
+python3 tests/integration/udev_drm_probe.py
+```
+Ou direto: `target/debug/aeroshell-compositor --probe-gbm=/dev/dri/renderD128` (valor padrão se omitido).
+Imprime JSON com `backend_name`, formats RENDERING|SCANOUT, modifiers, uma alocação `gbm_bo_create` e outra via
+`GbmAllocator` (ambas exportadas como dmabuf), mais conectores/modos de `/dev/dri/card0` (variável
+`AERO_DRM_CARD_NODE` sobrescreve o caminho). O `--no-default-features` recusa a sonda com mensagem explícita.
+Requer acesso de leitura/escrita aos nós `/dev/dri/*` (no ambiente de dev há ACL `user:daniel:rw-`).
+
 ## Rodar em DRM (udev) — sessão real no VT
 **Status medido em F1d1:** o backend udev é **stub** — `crates/aeroshell-compositor/src/backend/udev.rs:20-26`
 devolve `Err("backend udev: implementação na F1 (requer libgbm/libseat e sessão real)")`. Desde F1d1 os crates
