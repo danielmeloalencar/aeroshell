@@ -1852,6 +1852,9 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
 - **Sessão atual: título real na titlebar (2026-11-22) — código/teste/gate verdes (§3); JUIZ VISUAL PENDENTE (§7).**
+  Instância nested deixada aberta: compositor PID 248731, shell 248736, `foot -T 'Titulo Real AeroShell'` PID 248740,
+  socket `wayland-aero-title-1795388310`, IPC `/tmp/opencode/f1-title/visual-ipc-1795388310.sock`, log
+  `/tmp/opencode/f1-title/visual.log` (já contém `title_applied ... Titulo Real AeroShell`). Quem fecha é o humano.
   Pré-requisito do harness: `cargo build -p aeroshell-compositor && cargo build -p aeroshell-shell --example frame_webview`.
 - **Reproduzir:** `python3 tests/integration/frame_title.py` → `VEREDITO: OK` 3× (`/tmp/opencode/f1-title/final{2,3,4}.log`);
   baseline FALHA em `baseline3.log`. Gate `gate-final.log` EXIT=0. Próximo passo: obter o "ok" visual do humano;
