@@ -70,7 +70,8 @@ F1d2 já havia provado `libgbm.so.1` em `DT_NEEDED`. Nesta VM (sem VT ativo) a i
 ambiente. A renderização real só pode ser julgada no tty3, pelo humano.
 
 Script versionado: **`scripts/run-udev-diag.sh`**. Para quem não consegue copiar/colar no tty, existe o
-atalho **`~/u`** (uma linha, fora do repo): no tty3 basta digitar `~/u` e Enter. O `~/run-aeroshell-udev.sh`
+atalho **`~/u`** (uma linha, fora do repo): no tty3 basta digitar `~/u` e Enter. Argumentos são repassados
+ao compositor — ex.: `~/u --scale 1.5` (F1f). O `~/run-aeroshell-udev.sh`
 antigo agora só repassa para o script versionado. O script faz build incremental, pré-checagens (binários,
 `/dev/dri/*`, `XDG_RUNTIME_DIR`), limpa `DISPLAY`/`WAYLAND_DISPLAY`, fixa `RUST_LOG=debug` e
 `LIBGL_ALWAYS_SOFTWARE=1`, grava `~/aeroshell-udev-YYYYMMDD-HHMMSS.log` via `tee` e imprime o que observar.

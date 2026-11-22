@@ -21,6 +21,11 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **Repasse de args no `~/u` / `run-udev-diag.sh` (2026-11-22).** Humano relatou que `./u --scale 1.5`
+      abria em 1.0. Causa confirmada: `~/u` já fazia `exec ... "$@"`, mas `scripts/run-udev-diag.sh:70-80`
+      montava o comando fixo sem repassar args. Correção: `"$@"` ao final da invocação do compositor +
+      comentário de uso e RUNBOOK (`~/u --scale 1.5`). `bash -n` → OK; `bash scripts/check.sh` → `OK`,
+      `CHECK_EXIT=0`. Não é regressão do F1f (a implementação responde a `--scale`, provada no nested/headless).
 - [x] **F1f — fractional-scale (2026-11-22) — código/teste/gates verdes; juiz visual PENDENTE.**
       Cartão `docs/tasks/F1f-fractional-scale.md` aprovado e commitado (`4ecef8f`). APIs lidas no Smithay
       0.7.0 fixado antes de editar: `FractionalScaleManagerState::new` (`fractional_scale/mod.rs:76-94`),
@@ -1214,7 +1219,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
 ## 7. Não medido / não validado (não trate como fato)
 - **F1f — JUIZ VISUAL PENDENTE (2026-11-22).** Pixelmedição headless (borda colada, titlebar/borda
   escalando em 1.0/1.25/1.5) e nested 1.5 sem erros estão provados (§3), mas **nenhum humano julgou a
-  aparência em escala fracionária no tty3**. O juiz deve abrir `~/u` com `--scale 1.5` (ou command equivalente)
+  aparência em escala fracionária no tty3**. O juiz deve abrir `~/u --scale 1.5` — o repasse de args no
+  script foi corrigido nesta sessão (§3); antes, o argumento era descartado e a abertura parecia 1.0,
   e confirmar que frame/conteúdo/painel estão nítidos e alinhados, sem gap ou borda desproporcional.
   **Tarefa NÃO fechada e F1g NÃO aberto sem o "ok"** (AGENTS.md §0.9 / §3.1). Não medido: udev/DRM,
   desempenho em GPU real (VM sem 3D).

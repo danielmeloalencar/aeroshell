@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # AeroShell em sessão real (backend udev/DRM/GBM/libseat) com diagnóstico ligado.
-# Uso no tty3:  cd ~/Projetos/aeroshell && ./scripts/run-udev-diag.sh
-# Ou, mais curto (atalho criado em $HOME/u):  ~/u
+# Uso no tty3:  cd ~/Projetos/aeroshell && ./scripts/run-udev-diag.sh [args do compositor]
+# Ou, mais curto (atalho criado em $HOME/u):  ~/u [args do compositor]
+# Exemplo: ~/u --scale 1.5  (F1f: os args são repassados ao compositor)
 #
 # Encerre com Ctrl+C. Trocar de VT e fechar a aplicação são ações do humano.
 # O log fica em $HOME/aeroshell-udev-YYYYMMDD-HHMMSS.log — envie-o após reiniciar.
@@ -77,7 +78,8 @@ env \
     --socket "$SOCKET" \
     --shell "$SHELL_BIN" \
     --shell-env LD_PRELOAD=libgtk4-layer-shell.so.0 \
-    --command foot &
+    --command foot \
+    "$@" &
 comp_pid=$!
 
 # O painel TSX e um cliente PUBLICO (nao o --shell do compositor): espera o
