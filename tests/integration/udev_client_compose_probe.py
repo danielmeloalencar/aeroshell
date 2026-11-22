@@ -61,7 +61,13 @@ def analyze(commits, callbacks, min_span_ns):
     if reasons:
         return "FALHA", reasons, span, "INDETERMINADO"
 
-    pendings = [p for _, _, p in commits]
+    pendings_commits = [p for _, _, p in commits]
+    # As amostras UDEV_FRAME_CB são a observação DIRETA do loop: é nelas que o
+    # pending deve zerar quando o callback é enviado. As commits do cliente são
+    # o sinal indireto (o cliente para de pedir quando não recebe o done()).
+    # Preferir CB evita rotular "PENDENTE_ACUMULANDO" quando o foot mantém 1
+    # callback em voo mas o loop já drenou o anterior.
+    pendings = [p for _, _, p in callbacks] or pendings_commits
     seen_positive = False
     zeroed_after_positive = False
     for pending in pendings:
@@ -74,7 +80,7 @@ def analyze(commits, callbacks, min_span_ns):
         diagnosis = "CALLBACK_NAO_CHEGA"
     elif seen_positive and not zeroed_after_positive:
         diagnosis = "PENDENTE_ACUMULANDO"
-    elif zeroed_after_positive or max(pendings) == 0:
+    elif zeroed_after_positive or max(pendings) == 0 or (callbacks and callbacks[0][2] == 0):
         diagnosis = "SEM_DAMAGE_FORA_DA_CENA"
     else:
         diagnosis = "INDETERMINADO"

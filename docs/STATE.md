@@ -21,6 +21,23 @@ import do cliente funcionam no headless; o elo que falta é a apresentação GBM
 F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **F1d3 — JUIZ VISUAL: CONTEÚDO DO `foot` APARECEU (2026-11-22).** Humano, após a correção de
+      `send_frame` no udev: *"Agora abriu o conteudo do foot na janela"*. Prova objetiva no 6º log
+      `/home/daniel/aeroshell-udev-20261122-052933.log`: **68 `FOOT_COMMIT`** (contra 2 antes),
+      115 `UDEV_FRAME_CB` com `pending=0` na 1ª e na última amostra, span 124,32 s;
+      `udev_client_compose_probe.py --require-circulating` → `SEM_DAMAGE_FORA_DA_CENA`, `VEREDITO: OK`,
+      EXIT=0 (o mesmo comando no log anterior `052249` → `CALLBACK_NAO_CHEGA`, EXIT=1).
+      Classificador ajustado para usar as amostras `UDEV_FRAME_CB` como observação direta do loop
+      (as commits do cliente mantêm 1 callback em voo, o que gerava `PENDENTE_ACUMULANDO` falso).
+      **Ainda NÃO há ok visual completo**: falta painel (ver §4/§7), arrasto e retorno de VT; a F1d3
+      NÃO fecha com este veredito parcial.
+- [x] **F1d3 — PAINEL no udev: não é Renderização, é escopo do `~/u` (2026-11-22).** O painel React TSX
+      é o binário **`aeroshell-shell`**, criado em `crates/aeroshell-shell/src/main.rs:96,145` via
+      `host::panel_window` (`host.rs:8`, namespace `aeroshell-panel`) e servido por `aero://panel/index.html`
+      (`scheme.rs:8-32`). `scripts/run-udev-diag.sh:29` lança **somente** `frame_webview` (a decoração),
+      que nunca cria o painel — por isso o juiz não o vê. Nos testes, o painel é lançado à parte
+      (`tests/integration/react_panel.py:72`, `s2_panel.sh:30`, `launch_manual.py:15`). Não é bug do
+      backend udev; incluir o painel no `~/u` é decisão pendente do humano.
 - [x] **F1d3 — CAUSA RAÍZ DA TELA SEM CONTEÚDO ENCONTRADA E CORRIGIDA (2026-11-22, juiz visual pendente).**
       Log `/home/daniel/aeroshell-udev-20261122-052249.log` (com as sondas já ativas): **2 `FOOT_COMMIT`
       (`pending=0,1`) e 15 `UDEV_FRAME_CB` com `pending=1` em TODAS ao longo de 15,59 s** → analisador
@@ -528,7 +545,7 @@ F1 anterior revertida em `4307cc4`.
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
-- **F1d3 NÃO FECHADA — juiz negou 3×; diagnóstico separou cena/import de apresentação (§3/§7).**
+- **F1d3 NÃO FECHADA — juiz viu o `foot` pela 1ª vez (2026-11-22), mas falta ok completo (painel/arrasto/VT).**
   Cartões: `F1d-udev-drm-gbm-libinput.md` e `F1d3-diagnostico-visual.md`. Headless prova que o cliente vira
   elemento e aparece em pixels; udev aceita frames/vblank, mas o juiz vê só a moldura. Fato novo do humano:
   `is_empty=true` é idle normal, **não** é bug e não deve ser alterado; input/VT/vblank estão provados bons.
@@ -956,6 +973,11 @@ F1 anterior revertida em `4307cc4`.
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- F1d3 (**JUIZ VISUAL PARCIAL, 2026-11-22**): humano confirmou que o **conteúdo do `foot` apareceu** na
+  janela — primeiro veredito visual positivo da F1d3. **Não foi validado**: painel TSX (o `~/u` não lança
+  o `aeroshell-shell`, §3), arrasto da barra e retorno de VT. Sem esses itens e sem o "ok" explícito do
+  humano olhando a tela, a F1d3 permanece NÃO FECHADA (AGENTS.md §0.9). Nenhum processo foi encerrado
+  pelo agente; nenhuma troca de VT foi feita por mim.
 - F1d3 (**PENDENTE NO 2026-11-22 — sondas instaladas, sem log do tty3**): `FOOT_COMMIT` e `UDEV_FRAME_CB`
   existem sob `bench` e o analisador `udev_client_compose_probe.py` distingue os cenários, mas **nenhum valor
   de `pending` do backend udev foi medido** (VM sem VT). O headless que funciona mediu 7 commits em 0,76 s
@@ -1199,10 +1221,10 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **Fase atual: F1.** F1a/F1b/F1c FECHADAS pelo juiz; F1d1/F1d2 FECHADAS no técnico. **F1d3 NÃO FECHADA: juiz negou 3× + 2 execuções em 2026-11-22.** Push WIP falhou por credencial; commits locais `f0da56a`/`a56b85a`/`9b5db36`/`e7bad99` + o novo commit prontos. Sem push de conclusão.
-- **Fato do humano:** `is_empty=true` = idle normal (sem damage), NÃO bug. Não alterar. Input/VT/vblank provados bons; cursor é cartão separado (§6).
-- **CAUSA ENCONTRADA (6º log `052249`):** só 2 `FOOT_COMMIT` e `UDEV_FRAME_CB pending=1` em 15/15 amostras/15,59 s, enquanto `CLIENT_ELEMENT_PROBE` = `Some err=none` em 898/898. O udev não enviava `wl_surface.frame`; o headless sim (`headless.rs:165-179`). Antes: `--require-circulating` → `CALLBACK_NAO_CHEGA`, EXIT=1. Depois (código): `udev.rs` chama `send_frame` para windows/layers/frame-layers por output.
-- **Gui do domicile (§6):** quem detém ack/present responde o frame callback; `queued=ok` é enqueue, não apresentação. Hipóteses não verificadas se a correção não bastar: geometria vs CRTC, decoração opaca, GBM/modifiers do render node.
-- **Provas:** gate `check.sh` EXIT=0 (`gate-callback-fix.log`), clippy bench 0, `--no-default-features` 0, fmt 0. Nenhuma mudança em `is_empty`/input/VT/vblank/cursor/protocolo. **Juiz visual do tty3 ainda pendente.**
-- **Próximo passo imediato (NÃO executado):** humano roda `~/u` no tty3 (já compila com bench), interage ~10 s com o `foot` e envia o log; agente roda `python3 tests/integration/udev_client_compose_probe.py --require-circulating <log>` — deve passar (pending zera, mais commits). Se ainda falhar, aplicar hipóteses do §6 em cartão novo. Só com juiz visual OK a F1d3 fecha.
+- **Fase atual: F1.** F1a/F1b/F1c FECHADAS pelo juiz; F1d1/F1d2 FECHADAS no técnico. **F1d3 NÃO FECHADA — juiz confirmou o `foot` na tela (2026-11-22), mas faltam painel/arrasto/VT e o ok completo.** Push WIP falhou por credencial; commits locais `f0da56a`/`a56b85a`/`9b5db36`/`e7bad99`/`35b173b` + o novo commit prontos. Sem push de conclusão.
+- **Causa + correção (commit `35b173b`):** o udev não enviava `wl_surface.frame`, o cliente parava após 2 commits. `udev.rs` agora chama `send_frame` como o headless. Gui do domicile: quem detém ack/present responde o callback. `is_empty=true` é idle normal (fato do humano), intocável.
+- **Veredito visual POSITIVO PARCIAL:** humano: *"Agora abriu o conteudo do foot na janela"*. Prova objetiva no 7º log `052933`: 68 `FOOT_COMMIT` (antes 2), `UDEV_FRAME_CB pending=0` na 1ª/última amostra, 124,32 s; `--require-circulating` → `SEM_DAMAGE_FORA_DA_CENA`, EXIT=0 (no 6º log → `CALLBACK_NAO_CHEGA`, EXIT=1). Classificador corrigido para usar as amostras CB.
+- **Painel NÃO é bug do udev:** é o binário `aeroshell-shell` (`main.rs:96,145`), que o `~/u` não lança (só `frame_webview`). Incluí-lo no script é decisão do humano (§3).
+- **Provas:** gate `check.sh` EXIT=0 (`gate-callback-fix.log`), clippy bench 0, `--no-default-features` 0, fmt 0. Nada mexido em `is_empty`/input/VT/vblank/cursor/protocolo.
+- **Próximo passo (NÃO executado):** humano decide se quer painel no `~/u` (lançar `aeroshell-shell`) e faz o teste visual completo: painel, arrastar barra, Ctrl+Alt+F2/F3 e voltar. Com o "ok" olhando a tela, fechar F1d3; sem ele, item fica em §7. Agente não encerrou nem trocou VT.
 
