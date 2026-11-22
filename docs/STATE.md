@@ -1149,9 +1149,14 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
 - **GAP ANALYSIS F1 (2026-11-22) — nesta seção, "~ parcial" e "❌ faltando" significam AUSÊNCIA DE CÓDIGO
   no item do plano-mestre §5, não falha de teste. Nada disso foi implementado.** Fonte: `grep` nos crates +
   código do Smithay 0.7.0 fixado (todos os módulos citados existem sob `wayland_frontend`, já ativo).
-  - **~ popups** — `xdg_shell.rs:85-102,149-209` faz track/unconstrain/reposition/configure e `state.rs:179,309`
-    tem `PopupManager` (cleanup nos 3 backends), mas **nenhum elemento de popup entra na cena**
-    (`render/scene.rs` só `space.elements()` + layers) e `grab()` é no-op (`xdg_shell.rs:117`).
+  - **~ popups (MAPA ORIGINAL — CORREÇÃO 2026-11-22: renderização NÃO falta).**
+    `xdg_shell.rs:85-102,149-209` faz track/unconstrain/reposition/configure e `state.rs:179,309` tem
+    `PopupManager` (cleanup nos 3 backends). **O mapa original dizia que nenhum elemento de popup entrava
+    na cena — estava ERRADO:** o Smithay 0.7.0 renderiza popups dentro do próprio `Window` e da
+    `LayerSurface` (`desktop/space/wayland/window.rs:106-121` e `layer.rs:31-48`, via
+    `PopupManager::popups_for_surface`), e o nosso `render/scene.rs:60-114` já usa `AsRenderElements`
+    nesses dois tipos. O que **realmente falta** é o `grab()` no-op (`xdg_shell.rs:117`) — ver cartão
+    `F1-popups-render.md`.
   - **~ data-device ✅ / primary-selection ❌** — data-device em `state.rs:230` + `seat.rs:53-66`;
     **0** `PrimarySelectionState` (Smithay `wayland/selection/primary_selection/mod.rs:98,395`). Aviso 1 do foot.
   - **❌ viewporter** — 0 `ViewporterState`/`delegate_viewporter!`; Smithay `wayland/viewporter/mod.rs:70,81,433`.
