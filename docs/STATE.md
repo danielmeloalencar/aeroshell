@@ -21,6 +21,24 @@ import do cliente funcionam no headless; o elo que falta é a apresentação GBM
 F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **F1d3 — CAUSA RAÍZ DA TELA SEM CONTEÚDO ENCONTRADA E CORRIGIDA (2026-11-22, juiz visual pendente).**
+      Log `/home/daniel/aeroshell-udev-20261122-052249.log` (com as sondas já ativas): **2 `FOOT_COMMIT`
+      (`pending=0,1`) e 15 `UDEV_FRAME_CB` com `pending=1` em TODAS ao longo de 15,59 s** → analisador
+      `--require-circulating` → `diagnostico=CALLBACK_NAO_CHEGA`, `VEREDITO: FALHA`, EXIT=1
+      (`/tmp/opencode/f1d3-4exec/circulating-baseline.log`). Em paralelo, `CLIENT_ELEMENT_PROBE` =
+      `from_surface=Some err=none delta=1` em 898/898 — **o import do cliente NÃO falha**. Código:
+      `headless.rs:165-179` chama `window.send_frame(...)` / `layer.send_frame(...)`; `udev.rs` só chamava
+      `space.refresh()` — o `wl_surface.frame` do `foot` nunca recebia o `done()`, então ele parava de
+      desenhar após 2 commits. Correção mínima: mesmo bloco `send_frame` do headless no loop udev, por
+      output (windows + `layer_surfaces` + `frame_layer_surfaces`), com `IsAlive` importado. Nenhuma
+      mudança em `is_empty`/input/VT/vblank/cursor/geometria/protocolo. Fonte: Smithay 0.7.0
+      `desktop/wayland/window.rs:224-239` e `layer.rs:624-639` (`send_frame` → `send_frames_surface_tree`).
+      **Gui arquitetural (não receita): `/home/daniel/Projetos/domicile-engine`** — "quem detém o
+      ack/present é quem responde `wl_surface.frame`", nunca responder no commit só porque deu `ok`;
+      `queued=ok/submitted=ok` mede enqueue, não apresentação (domicile limita a 16 submits pendentes e
+      usa deadline de 250 ms). Insights transferíveis e não portáveis registrados em §6.
+      Gate `check.sh` EXIT=0 (`gate-callback-fix.log`), clippy bench 0, `--no-default-features` 0, fmt 0.
+      **Não provado no tty3**: o novo juiz visual e o `pending` zerando após a correção exigem nova execução.
 - [x] **F1d3-diagnóstico (sonda de composição do cliente), 2026-11-22** — humano corrigiu fato: `is_empty=true`
       é "sem damage, nada a submeter" (idle normal); input/VT/vblank provados bons no 4º log
       (`/home/daniel/aeroshell-udev-20261122-045035.log`, sumiu — recorte literal em
@@ -571,6 +589,17 @@ F1 anterior revertida em `4307cc4`.
 8. `05-compatibilidade-protocolos.md` — RASCUNHO; 7 mensagens do `foot` registradas em §6. NÃO executar sem ok.
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- F1d3 (GUI DO DOMICILE — usado como guia, NÃO copiado): `/home/daniel/Projetos/domicile-engine` confirma
+  que quem detém o ack/present é quem deve responder `wl_surface.frame`; responder no commit só porque
+  "deu ok" não sincroniza o cliente. `queued=ok`/`submitted=ok` medem **enqueue**, não apresentação — no
+  domicile há teto de 16 submits pendentes (`surface_submits.h:89-126`) e deadline de 250 ms
+  (`frame_callbacks.rs:23-25`). O log 052249 teve exatamente 16 frames `queued=ok`, compatível com backlog.
+- F1d3 (GUI DO DOMICILE — hipóteses ainda NÃO verificadas no AeroShell, se a correção de callbacks não
+  bastar): (a) geometria do cliente tem que casar com o retângulo do CRTC — sem match, page flips são
+  descartados com log limpo (`A-DESKTOP-ON-A-TTY.md:182-190`); (b) decoração opaca pode ocluir o cliente
+  (`surface_alpha.h:11-15`); (c) render node udev precisa GBM/modifiers equivalentes ao surfaceless do
+  headless (`dmabuf_import.rs:26-30`). Não portável: `cc::SurfaceLayer`, `viz::SurfaceId`,
+  `CompositorFrame`, Ozon DRM — o fork existe justamente para expor a layer tree do Chromium.
 - F1d3 (ERRO DO HARNESS, corrigido 2026-11-22): `/home/daniel/aeroshell-udev-20261122-051134.log`
   (4,4 MB / 24.518 linhas) não tem `FOOT_COMMIT` nem `UDEV_FRAME_CB` porque `scripts/run-udev-diag.sh`
   (usado por `~/u`) compilava `cargo build --workspace` **sem `--features bench`**. Corrigido: agora
@@ -1170,11 +1199,10 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **Fase atual: F1.** F1a/F1b/F1c FECHADAS pelo juiz; F1d1/F1d2 FECHADAS no técnico. **F1d3 NÃO FECHADA: juiz negou 3× + nova execução em 2026-11-22 negada.** Push WIP falhou por credencial; commits locais `f0da56a`/`a56b85a`/`9b5db36` + o novo commit prontos. Sem push de conclusão.
+- **Fase atual: F1.** F1a/F1b/F1c FECHADAS pelo juiz; F1d1/F1d2 FECHADAS no técnico. **F1d3 NÃO FECHADA: juiz negou 3× + 2 execuções em 2026-11-22.** Push WIP falhou por credencial; commits locais `f0da56a`/`a56b85a`/`9b5db36`/`e7bad99` + o novo commit prontos. Sem push de conclusão.
 - **Fato do humano:** `is_empty=true` = idle normal (sem damage), NÃO bug. Não alterar. Input/VT/vblank provados bons; cursor é cartão separado (§6).
-- **5º log analisado:** `/home/daniel/aeroshell-udev-20261122-051134.log`. Sessão/DRM/output ativos; decoração commitou `1932x991 ok=true`; `ordem de render` com `client@`+`frame@`; 16 frames `queued=ok` + vblank `submitted=ok` n=3..10 às 08:11:36.785–08:11:37.107. A cena com o cliente foi submetida; o juiz ainda viu só a decoração.
-- **Erro do harness corrigido:** esse log NÃO tem `FOOT_COMMIT`/`UDEV_FRAME_CB` porque `~/u` compilava sem `--features bench`. `scripts/run-udev-diag.sh` agora usa `cargo build --workspace --features bench`; `strings` com bench = 1/1 para as sondas. RUNBOOK atualizado.
-- **Sondas (código já commitado `9b5db36`):** `FOOT_COMMIT`/`UDEV_FRAME_CB` só sob bench, leitura sem drenar; analisador `udev_client_compose_probe.py` escrito antes e visto FALHANDO. Headless real: 7 commits/0,76 s, `pending_seq=0,1,1,0,1,1,0`.
-- **Provas:** gate `check.sh` EXIT=0, clippy bench 0, `--no-default-features` 0, fmt 0, `strings` sem bench = 0.
-- **Próximo passo imediato (NÃO executado):** humano roda `~/u` **novamente** (agora com bench) no tty3, interage ~10 s com o `foot` e envia o log; agente roda `python3 tests/integration/udev_client_compose_probe.py <log>`. Se `CALLBACK_NAO_CHEGA`, candidato: `send_frames_surface_tree` no loop udev (`utils.rs:217`); se `SEM_DAMAGE_FORA_DA_CENA`, investigar import GBM/composição. Só depois: cartão de correção com teste-first + novo juiz visual.
+- **CAUSA ENCONTRADA (6º log `052249`):** só 2 `FOOT_COMMIT` e `UDEV_FRAME_CB pending=1` em 15/15 amostras/15,59 s, enquanto `CLIENT_ELEMENT_PROBE` = `Some err=none` em 898/898. O udev não enviava `wl_surface.frame`; o headless sim (`headless.rs:165-179`). Antes: `--require-circulating` → `CALLBACK_NAO_CHEGA`, EXIT=1. Depois (código): `udev.rs` chama `send_frame` para windows/layers/frame-layers por output.
+- **Gui do domicile (§6):** quem detém ack/present responde o frame callback; `queued=ok` é enqueue, não apresentação. Hipóteses não verificadas se a correção não bastar: geometria vs CRTC, decoração opaca, GBM/modifiers do render node.
+- **Provas:** gate `check.sh` EXIT=0 (`gate-callback-fix.log`), clippy bench 0, `--no-default-features` 0, fmt 0. Nenhuma mudança em `is_empty`/input/VT/vblank/cursor/protocolo. **Juiz visual do tty3 ainda pendente.**
+- **Próximo passo imediato (NÃO executado):** humano roda `~/u` no tty3 (já compila com bench), interage ~10 s com o `foot` e envia o log; agente roda `python3 tests/integration/udev_client_compose_probe.py --require-circulating <log>` — deve passar (pending zera, mais commits). Se ainda falhar, aplicar hipóteses do §6 em cartão novo. Só com juiz visual OK a F1d3 fecha.
 

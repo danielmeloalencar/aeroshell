@@ -68,6 +68,7 @@ pub fn init_udev(
         utils::DeviceFd,
     };
 
+    use smithay::utils::IsAlive;
     #[cfg(feature = "bench")]
     use smithay::wayland::compositor::{with_states, SurfaceAttributes};
 
@@ -445,6 +446,30 @@ pub fn init_udev(
                                 "UDEV_FRAME"
                             );
                         }
+                    }
+                }
+                // F1d3: o headless envia `wl_surface.frame` (headless.rs:165-179),
+                // o udev NÃO enviava. Sem o `done()` o foot parou após 2 commits
+                // (log 052249: pending=1 em 15/15 amostras por 15,59 s).
+                // Mesmo mecanismo do headless, por output: quem apresenta responde.
+                let now = data.state.start_time.elapsed();
+                data.state.space.elements().for_each(|window| {
+                    window.send_frame(&slot.wl_output, now, Some(Duration::ZERO), |_, _| {
+                        Some(slot.wl_output.clone())
+                    });
+                });
+                for layer in &data.state.layer_surfaces {
+                    if layer.alive() {
+                        layer.send_frame(&slot.wl_output, now, Some(Duration::ZERO), |_, _| {
+                            Some(slot.wl_output.clone())
+                        });
+                    }
+                }
+                for layer in &data.state.frame_layer_surfaces {
+                    if layer.alive() {
+                        layer.send_frame(&slot.wl_output, now, Some(Duration::ZERO), |_, _| {
+                            Some(slot.wl_output.clone())
+                        });
                     }
                 }
             }

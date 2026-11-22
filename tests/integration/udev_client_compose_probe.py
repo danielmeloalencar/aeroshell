@@ -17,6 +17,9 @@ A tendência do `pending` é o discriminador: no headless que funciona, mediu-se
 Uso:
   python3 tests/integration/udev_client_compose_probe.py <arquivo-de-log>
   python3 tests/integration/udev_client_compose_probe.py --min-span 0 <log>  # validação local
+  python3 tests/integration/udev_client_compose_probe.py --require-circulating <log>
+      # critério de correção: falha se o diagnóstico for CALLBACK_NAO_CHEGA.
+      # Antes da correção no udev (log 052249) este modo DEVE falhar.
 """
 
 import re
@@ -81,6 +84,10 @@ def analyze(commits, callbacks, min_span_ns):
 def main():
     args = sys.argv[1:]
     min_span_ns = MIN_SPAN_NS
+    require_circulating = False
+    if args and args[0] == "--require-circulating":
+        require_circulating = True
+        args = args[1:]
     if args and args[0] == "--min-span":
         if len(args) != 3:
             print("Uso: --min-span SEGUNDOS <log>", file=sys.stderr)
@@ -122,6 +129,10 @@ def main():
         for reason in reasons:
             print(f"  - {reason}")
     print(f"diagnostico: {diagnosis}")
+    if result == "OK" and require_circulating and diagnosis == "CALLBACK_NAO_CHEGA":
+        print("FALHA: callbacks do cliente ainda nao circulam (pending nunca zera)")
+        print("VEREDITO: FALHA")
+        return 1
     print(f"VEREDITO: {result}")
     return 0 if result == "OK" else 1
 
