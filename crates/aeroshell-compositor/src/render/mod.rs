@@ -4,5 +4,6 @@
 //! domínio. Criada na F1a para que futuros backends reutilizem exatamente o
 //! mesmo caminho de 9-slice/placeholder do nested.
 
+pub mod cursor;
 pub mod elements;
 pub mod scene;

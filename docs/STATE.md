@@ -21,6 +21,23 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **F1-cursor-shape, etapa 2 (d) — elemento `Kind::Cursor` no udev (2026-11-22, juiz visual PENDENTE).**
+      **Correção de premissa confirmada na fonte:** o cursor plane JÁ está habilitado — `backend/udev.rs:146-153`
+      passa `Some(gbm)` ao `DrmOutputManager`, e `smithay/backend/drm/output.rs:258-271` passa `cursor_size`
+      + `gbm.clone()` ao `DrmCompositor::new`. Não houve BO/plane novo: só faltava um elemento `Kind::Cursor`
+      na cena. Código: `render/cursor.rs` novo (seta 12×18 ARGB8888 embutida, sem dependência nova,
+      `MemoryRenderBuffer` → `MemoryRenderBufferRenderElement::from_buffer(..., Kind::Cursor)`, api confirmada
+      em `memory.rs:463-489` e `drm/compositor/mod.rs:3005-3033`), variante `Cursor` em
+      `render/elements.rs`, campo `cursor_buffer` em `state.rs`, chamada em `backend/udev.rs` logo após
+      `collect_output_elements` (não altera ordem z nem 9-slice); `Surface(WlSurface)` com hotspot também
+      é tratado. Log `CURSOR_RENDER t=… source=… shape=… size=… loc=… output=…` **só sob `bench`**.
+      **Prova objetiva:** `cargo test -p aeroshell-compositor bitmap_seta` → 1 passed (contorno preto,
+      interior branco, transparência fora da seta); não há udev render nesta VM para medir o scanout.
+      Gate `check.sh` EXIT=0, clippy default/bench `-D warnings` EXIT=0, `--no-default-features` EXIT=0.
+      Vizinhos: `headless_render_damage.py` (`VEREDITO: OK`), `frame_buttons.py`, `frame_window_id.py`,
+      `frame_fixed_canvas_hygiene.py` (`VEREDITO: OK`) — o bug do conteúdo F1d3 não regrediu.
+      Amostra de clippy bench falha por `Resource` importado só sob bench foi corrigida e preservada em
+      `clippy-bench-step2.log`. **FALTA o "ok" visual do humano no tty3 (§7); NÃO fechar sem ele.**
 - [x] **F1-cursor-shape, etapa 1 (a)+(b)+(c) — global `wp_cursor_shape_v1` (2026-11-22).** Cartões
       `F1-gap-protocolos.md` (mãe) e `F1-cursor-shape.md` (subcartão) criados e commitados (`1043df8`).
       Código: `state.rs` ganha `CursorShapeManagerState` + campo `cursor_image` (default `Named(Default)`);
@@ -1055,6 +1072,15 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- **F1-cursor-shape — JUIZ VISUAL PENDENTE (2026-11-22).** Protocolo e elemento `Kind::Cursor` implementados
+  (§3), gate/clippy/`--no-default-features`/harnesses verdes, bitmap provado por teste unitário — mas
+  **nenhum pixel do cursor no tty3 foi medido por mim e o humano ainda não deu o "ok"**. Esta VM não tem VT
+  (`session.open()` → `EAGAIN`), então o agente não abriu/fechou aplicação nem trocou VT. Para julgar:
+  `~/u` no tty3, mover o mouse e confirmar que a seta aparece e acompanha o ponteiro; o log do script
+  (compilado com `--features bench`) deve conter `CURSOR_RENDER t=… source=named shape=… size=12x18`.
+  **Tarefa NÃO concluída sem o veredito do humano** (AGENTS.md §0.9). Fora disso, o cursor permanece
+  tematizado com bitmap embutido: trocar por tema Xcursor (`xcursor 0.3.11`, MIT, já transitivo no lock)
+  exigiria declaração de dependência direta e aprovação (AGENTS.md §3.10).
 - **GAP ANALYSIS F1 (2026-11-22) — nesta seção, "~ parcial" e "❌ faltando" significam AUSÊNCIA DE CÓDIGO
   no item do plano-mestre §5, não falha de teste. Nada disso foi implementado.** Fonte: `grep` nos crates +
   código do Smithay 0.7.0 fixado (todos os módulos citados existem sob `wayland_frontend`, já ativo).
@@ -1071,7 +1097,7 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
     é GBM/dmabuf **interno do backend**. Smithay `wayland/dmabuf/mod.rs:580,588,1037`.
   - **❌ presentation-time** — 0 `PresentationState`; `udev.rs:401-413` usa `queue_frame(())` sem feedback
     (dívida já em §6). Smithay `wayland/presentation/mod.rs:88,97,351`.
-  - **❌ cursor-shape** — 0 `CursorShapeManagerState`; Smithay `wayland/cursor_shape.rs:124,130,362`.
+  - **❌ cursor-shape (MAPA ORIGINAL; item IMPLEMENTADO nesta sessão — ver §3 e o item acima)** — 0 `CursorShapeManagerState`; Smithay `wayland/cursor_shape.rs:124,130,362`.
     **Pré-requisitos:** `delegate_cursor_shape!` exige `D: SeatHandler + TabletSeatHandler`
     (`cursor_shape.rs:243`) e `AeroState` **não** implementa `TabletSeatHandler` (método default em
     `tablet_manager/tablet_seat.rs:42-44` → impl vazia basta); `SeatHandler::cursor_image` é no-op
@@ -1331,11 +1357,11 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **Fase atual: F1 — TODOS OS CARTÕES AUTORIZADOS FECHADOS.** F1a/F1b/F1c/F1d1/F1d2 (§3) e **F1d3 FECHADA pelo juiz em 2026-11-22: "ok. Aprovado"**. Sem push (credencial ausente). **PARAR: não avançar de fase sem aprovação (AGENTS.md §3.1).**
-- **Nesta sessão (2026-11-22): GAP ANALYSIS F1, SOMENTE LEITURA** — 15 itens de `plano-mestre.md:176` mapeados: 6 ✅ (§3), 2 ~ e 7 ❌ (§7). Nenhuma implementação, protocolo XML, ADR, dependência ou cartão alterado.
-- **Como reproduzir o estado:** `git log --oneline -1` (commit `docs(state): mapa de gaps da F1`); `grep -rnE 'ViewporterState|FractionalScaleManagerState|DmabufState|PresentationState|CursorShapeManagerState|TextInputManagerState|InputMethodManagerState|PrimarySelectionState' crates/aeroshell-compositor/src` → 0 ocorrências; `grep -n 'GAP ANALYSIS F1' docs/STATE.md` → §3/§4/§5/§7/§9.
-- **Gate:** `bash scripts/check.sh` → `OK: scripts/check.sh passou`, `CHECK_EXIT=0` (29 Rust + 9 Bun) nesta sessão; fmt/clippy/doctor verdes na mesma execução.
-- **Próximo passo proposto (NÃO executado):** decisão do humano sobre a ordem em §7 e sobre usar `05-compatibilidade-protocolos.md` como cartão-mãe; só então abrir o 1º cartão (`cursor-shape`; pré-req: `impl TabletSeatHandler for AeroState {}` + destino de `cursor_image`, hoje no-op).
-- **Dívidas em cartão separado (NÃO executar sem pedido):** cursor invisível no udev, hotplug, multi-GPU, presentation-time, Plano B, 02f/02n/02q. Plano mestre em `docs/plano-mestre.md`.
-- **Contexto F1d3 preservado:** (1) `udev.rs` passou a chamar `send_frame` — o `foot` parava após 2 commits sem o `wl_surface.frame` done; (2) `~/u` lança o `aeroshell-shell`; (3) `~/u` define `AERO_WINDOW_IPC_SOCK`, sem o qual o painel fica transparente. Aplicação foi operada e fechada pelo humano; agente não encerrou processos nem trocou VT.
+- **Fase atual: F1; F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS pelo juiz.** **F1-cursor-shape NÃO FECHADA: falta o "ok" visual no tty3 (§7).** Sem push (credencial ausente). **PARAR: não avançar de fase sem aprovação (AGENTS.md §3.1).**
+- **Nesta sessão (2026-11-22):** cartões `F1-gap-protocolos.md` (mãe) e `F1-cursor-shape.md` criados; etapas (a)/(b)/(c) e (d) implementadas e commitadas separadamente (`57d1639`, `1043df8`). Cursor plane JÁ existia; só faltava o elemento `Kind::Cursor`.
+- **Prova do protocolo:** aviso do `foot` presente no baseline (`/tmp/opencode/f1-cursor/foot-baseline.log`) e AUSENTE depois (`foot-after2.log`, `foot-bench.log`, `foot-head.log`); sonda `CURSOR_SHAPE t=… source=named shape=text` sob bench (`comp-head.log`, 1 linha com motion sintético); bitmap testado por `cargo test -p aeroshell-compositor bitmap_seta` (1 passed).
+- **Como reproduzir:** `git log --oneline -5`; `bash scripts/check.sh` → `OK`, `CHECK_EXIT=0`; `cargo clippy --workspace --all-targets -- -D warnings` e `--features bench` → 0; `cargo check --workspace --no-default-features` → 0; 4 harnesses vizinhos OK (`/tmp/opencode/f1-cursor/`). Amostras falhas de fmt e de clippy bench preservadas, não descartadas.
+- **Próximo passo imediato (NÃO executado): o HUMANO roda `~/u` no tty3, move o mouse e diz se a seta aparece; se sim, dá o "ok" e só então a tarefa fecha.** O log (bench) deve mostrar `CURSOR_RENDER … size=12x18`. Agente não trocou VT, não usou sudo e não encerrou aplicação.
+- **Dívidas/cartões seguintes:** cursor tematizado via Xcursor (dependência directa a aprovar), outros 6 avisos do foot, hotplug, multi-GPU, presentation-time, Plano B, 02f/02n/02q. Plano em `docs/plano-mestre.md`.
+- **Contexto F1d3 preservado:** `udev.rs` chama `send_frame`; `~/u` lança o painel e define `AERO_WINDOW_IPC_SOCK`. Nada disso foi alterado nesta sessão; conteúdo do `foot` segue aprovado pelo juiz.
 

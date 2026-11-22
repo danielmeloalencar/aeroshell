@@ -396,8 +396,17 @@ pub fn init_udev(
             let mut borrowed = slots.borrow_mut();
             for slot in borrowed.iter_mut() {
                 frame_seq += 1;
-                let (elements, _) =
+                let (mut elements, _) =
                     collect_output_elements(&mut data.state, &slot.wl_output, &mut renderer, false);
+                // F1-cursor-shape: o cursor plane já está habilitado pelo DrmOutputManager;
+                // falta só o elemento com Kind::Cursor (não altera a ordem z da cena).
+                if let Some(cursor) = crate::render::cursor::cursor_element(
+                    &mut renderer,
+                    &mut data.state,
+                    &slot.wl_output,
+                ) {
+                    elements.push(cursor);
+                }
                 match slot.drm_output.render_frame(
                     &mut renderer,
                     &elements,

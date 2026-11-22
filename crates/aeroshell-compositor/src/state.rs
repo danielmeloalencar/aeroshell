@@ -3,6 +3,7 @@
 use std::{collections::HashMap, ffi::OsString, sync::Arc, time::Instant};
 
 use smithay::{
+    backend::renderer::element::memory::MemoryRenderBuffer,
     desktop::{PopupManager, Space, Window, WindowSurfaceType},
     input::{pointer::CursorImageStatus, Seat, SeatState},
     output::Output,
@@ -180,6 +181,8 @@ pub struct AeroState {
     /// F1-cursor-shape: global `wp_cursor_shape_v1` e última forma pedida pelo cliente.
     pub cursor_shape_state: CursorShapeManagerState,
     pub cursor_image: CursorImageStatus,
+    /// Bitmap da seta, criado uma vez e reutilizado pelo cursor plane.
+    pub cursor_buffer: Option<MemoryRenderBuffer>,
     pub popups: PopupManager,
     pub seat: Seat<Self>,
 }
@@ -313,6 +316,7 @@ impl AeroState {
             data_device_state,
             cursor_shape_state,
             cursor_image: CursorImageStatus::default_named(),
+            cursor_buffer: None,
             popups: PopupManager::default(),
             seat,
         })

@@ -12,6 +12,7 @@
 use smithay::{
     backend::renderer::{
         element::{
+            memory::MemoryRenderBufferRenderElement,
             solid::{SolidColorBuffer, SolidColorRenderElement},
             surface::WaylandSurfaceRenderElement,
             utils::{CropRenderElement, Relocate, RelocateRenderElement, RescaleRenderElement},
@@ -44,6 +45,8 @@ smithay::backend::renderer::element::render_elements! {
     Rescaled = RescaleRenderElement<WaylandSurfaceRenderElement<R>>,
     Slice = FrameSlice<R>,
     Solid = SolidColorRenderElement,
+    /// F1-cursor-shape: o `kind` do elemento é `Kind::Cursor` para o cursor plane do DRM.
+    Cursor = MemoryRenderBufferRenderElement<R>,
 }
 
 /// Alvo = conteúdo JÁ COMMITADO + insets/shadow (canvas fixo, ADR 0007).
