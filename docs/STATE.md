@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-22 · **Fase atual: F1** · **F1d1/F1d2 FECHADAS; F1d3 NÃO FECHADA (juiz negou 3×); cena/import provados no headless, `is_empty=true` é idle normal (fato do humano), falta medir frame-callbacks no udev** · F1c FECHADA pelo juiz visual · 02q FECHADA pelo juiz (harness de 300 ms segue como lacuna registrada)
+Última atualização: 2026-11-22 · **Fase atual: F1** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · cursor invisível no udev segue em cartão separado · 02q FECHADA pelo juiz (harness de 300 ms segue como lacuna registrada)
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -15,12 +15,22 @@ lock, login) é TSX renderizado por WebKitGTK; runtime de política em Bun. Dev 
 decoração HTML funcional e painel React/TSX; fechamento formal em `docs/f0-relatorio-go-no-go.md` (quadro
 S1–S5, ratificação registrada dos ADRs, S4→F2/F9 e S5→F5/F6 deferidos com justificativa).
 F1 em andamento por cartões pequenos: F1a, F1b e F1c FECHADAS (juiz visual OK nas três; F1c em 2026-11-21);
-F1d autorizada pelo humano em 2026-11-21: **F1d1 e F1d2 FECHADAS no critério técnico (§3); F1d3 implementada,
-mas NÃO FECHADA — juiz visual negou 3× no tty3 em 2026-11-22 (§7). O diagnóstico novo provou que a cena e o
-import do cliente funcionam no headless; o elo que falta é a apresentação GBM/DRM do udev (§3/§7).**
-F1 anterior revertida em `4307cc4`.
+F1d autorizada pelo humano em 2026-11-21: **F1d1, F1d2 e F1d3 FECHADAS**. F1d3 teve 3 vereditos negativos
+no tty3, foi diagnosticada por camadas (cena/import no headless → callbacks no udev → IPC do painel),
+corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. Aprovado")**. Cursor
+invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **F1d3 FECHADA PELO JUIZ VISUAL (2026-11-22).** Humano, após rodar `~/u` no tty3 com as três
+      correções (frame callbacks no udev, painel lançado, IPC do painel), respondeu **"ok. Aprovado"**.
+      Isso cobre o critério visual do cartão `F1d3-diagnostico-visual.md`: painel/`foot`/arrasto/VT no
+      tty3, com o humano operando e fechando a aplicação. Causas corrigidas, em ordem: (1) `udev.rs`
+      não enviava `wl_surface.frame` → `foot` parava após 2 commits (log `052249`: 2 commits,
+      `pending=1` em 15/15); (2) `~/u` não lançava o `aeroshell-shell` (o painel); (3) `~/u` não
+      definia `AERO_WINDOW_IPC_SOCK` → bridge com `lista=` vazia (log `053838`). Provas objetivas:
+      log `052933` (68 commits, `pending=0`), log `053838` (layer surface `1920×48`, WebView carregada),
+      gate final `check.sh` EXIT=0 (`gate-panel-ipc.log`). Nenhuma mudança em `is_empty`/input/VT/vblank/
+      cursor/protocolo/ADR/dependências. Sem push (credencial ausente); commits locais até `a90c534`.
 - [x] **F1d3 — PAINEL INVISÍVEL: CAUSA ENCONTRADA (8º log `053838`, 2026-11-22).** O painel FOI lançado
       (`painel TSX iniciado pid=30256`), conectou (`cliente Wayland conectado`), criou a layer surface
       `namespace=aeroshell-panel` (`Top`, `BOTTOM|LEFT|RIGHT`, `exclusive_zone=48`), teve geometria final
@@ -569,19 +579,12 @@ F1 anterior revertida em `4307cc4`.
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
-- **F1d3 NÃO FECHADA — juiz viu o `foot` pela 1ª vez (2026-11-22), mas falta ok completo (painel/arrasto/VT).**
-  Cartões: `F1d-udev-drm-gbm-libinput.md` e `F1d3-diagnostico-visual.md`. Headless prova que o cliente vira
-  elemento e aparece em pixels; udev aceita frames/vblank, mas o juiz vê só a moldura. Fato novo do humano:
-  `is_empty=true` é idle normal, **não** é bug e não deve ser alterado; input/VT/vblank estão provados bons.
-  Sinal em aberto: `is_empty` fica `true` ~47 s durante interação com o cliente. Instaladas as sondas
-  `FOOT_COMMIT`/`UDEV_FRAME_CB` (§3); **falta o log do tty3 com elas** para classificar
-  `CALLBACK_NAO_CHEGA` vs `SEM_DAMAGE_FORA_DA_CENA`. Nesta VM (sem VT) `--backend udev` falha em
-  `session.open()` com `EAGAIN`: **não posso medir o pending do udev**. Cursor segue ausente (§6).
-  Push WIP pedido pelo humano falhou por credencial (`could not read Username`); commits locais
-  `f0da56a`/`a56b85a` prontos para o humano empurrar. **Não é push de conclusão**.
+- **F1d3 FECHADA (2026-11-22) — ver §3.** Não há trabalho em andamento na F1d3. Cursor invisível no udev
+  é dívida de cartão separado (§6); não reabrir sem pedido. Push WIP falhou por credencial
+  (`could not read Username`); commits locais até `a90c534` prontos para o humano empurrar.
 - F1c FECHADA (§3): prova técnica + juiz visual "aprovado visualmente" em 2026-11-21. Aplicação encerrada
-  pelo humano (não pelo agente). F1d foi autorizada em 2026-11-21 e F1d1/F1d2 foram executadas (§3);
-  F1d3 segue pedindo aprovação separada. Sem push.
+  pelo humano (não pelo agente). F1d1/F1d2/F1d3 executadas e fechadas; F1 como fatia está concluída nos
+  cartões autorizados. Sem push. **AGENTS.md §3.1: não avançar de fase sem aprovação.**
 - A 02p foi concluída com pixels, vizinhos, gate/clippy e juiz visual positivos (§3).
 - 02o SUBSTITUÍDA pela medição/correção 02p; não ajustar sua grade antiga nem reabrir sem novo pedido.
 - 02n: **JUIZ VISUAL NEGOU (2026-11-20)** — humano: "problema ainda ocorre". Técnica/gate/clippy provados 3× (§3),
@@ -610,13 +613,9 @@ F1 anterior revertida em `4307cc4`.
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. **F1d3 (PRÓXIMO PASSO, NÃO EXECUTADO):** humano roda `~/u` no tty3 (já com as sondas `FOOT_COMMIT`/
-   `UDEV_FRAME_CB` compiladas) e envia o log; `python3 tests/integration/udev_client_compose_probe.py <log>`
-   classifica. Se `CALLBACK_NAO_CHEGA`, candidato mínimo é chamar `send_frames_surface_tree` no loop udev
-   (API real Smithay 0.7.0 `utils.rs:217`); se `SEM_DAMAGE_FORA_DA_CENA`, investigar composição/`FrameFlags`
-   (candidato `FrameFlags::empty()`) e formato/alpha do GBM — trocar `color_formats` exige decisão. Só então
-   abrir cartão de correção com teste ANTES visto falhando, e novo juiz visual: painel/`foot`/arrasto/VT.
-   Cursor é cartão separado; Plano B exige aprovação explícita. Não reabrir 02q sem pedido.
+0. **NENHUMA AUTORIZADA — PARAR.** F1d3 FECHADA pelo juiz (§3). Cursor invisível no udev, hotplug,
+   multi-GPU, presentation-time e Plano B são dívidas/cartões separados — abrir só com decisão explícita.
+   Não avançar de fase sem aprovação (AGENTS.md §3.1). Não reabrir 02q/02f/02n sem pedido.
 1. `02o` — SUBSTITUÍDA: a 02p criou sonda full-res que reproduziu o flicker (2×1.910 pixels) e depois
    comprovou canvas fixo sem transiente. A grade antiga não é mais critério; não reabrir sem novo pedido.
 2. `02n` — JUIZ NEGOU ("problema ainda ocorre"); instância já não existe. NÃO abrir 5ª correção sem decisão.
@@ -1011,12 +1010,11 @@ F1 anterior revertida em `4307cc4`.
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- F1d3 (**JUIZ VISUAL PARCIAL, 2026-11-22**): humano confirmou que o **conteúdo do `foot` apareceu** na
-  janela — primeiro veredito visual positivo da F1d3. **Não foi validado**: painel TSX (o `~/u` não lança
-  o `aeroshell-shell`, §3), arrasto da barra e retorno de VT. Sem esses itens e sem o "ok" explícito do
-  humano olhando a tela, a F1d3 permanece NÃO FECHADA (AGENTS.md §0.9). Nenhum processo foi encerrado
-  pelo agente; nenhuma troca de VT foi feita por mim.
-- F1d3 (**PENDENTE NO 2026-11-22 — sondas instaladas, sem log do tty3**): `FOOT_COMMIT` e `UDEV_FRAME_CB`
+- F1d3 (**RESOLVIDO — antes era JUIZ VISUAL PARCIAL, 2026-11-22**): o conteúdo do `foot` apareceu, depois
+  o painel (faltava `AERO_WINDOW_IPC_SOCK` no `~/u`), e o humano deu **"ok. Aprovado"** cobrindo o teste
+  visual completo. Item histórico preservado; F1d3 está FECHADA (§3). Nenhum processo foi encerrado pelo
+  agente; nenhuma troca de VT foi feita por mim — humano operou e fechou a aplicação.
+- F1d3 (**RESOLVIDO — era PENDENTE, sondas instaladas sem log do tty3**): `FOOT_COMMIT` e `UDEV_FRAME_CB`
   existem sob `bench` e o analisador `udev_client_compose_probe.py` distingue os cenários, mas **nenhum valor
   de `pending` do backend udev foi medido** (VM sem VT). O headless que funciona mediu 7 commits em 0,76 s
   com `pending_seq=0,1,1,0,1,1,0`; não é evidência do udev. Nenhuma causa foi escolhida e nenhuma correção
@@ -1259,10 +1257,9 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **Fase atual: F1.** F1a/F1b/F1c FECHADAS pelo juiz; F1d1/F1d2 FECHADAS no técnico. **F1d3 NÃO FECHADA — juiz confirmou o `foot` na tela (2026-11-22), mas faltam painel/arrasto/VT e o ok completo.** Push WIP falhou por credencial; commits locais até `b1982df`. **`~/u`+RUNBOOK+STATE+analisador estão NA ÁRVORE, NÃO commitados**: o gate falhou no S1 por flake de display (§6) e reexecutar até passar é proibido. Sem push de conclusão.
-- **Causa + correção (commit `35b173b`):** o udev não enviava `wl_surface.frame`, o cliente parava após 2 commits. `udev.rs` agora chama `send_frame` como o headless. Gui do domicile: quem detém ack/present responde o callback. `is_empty=true` é idle normal (fato do humano), intocável.
-- **Veredito visual POSITIVO PARCIAL:** humano: *"Agora abriu o conteudo do foot na janela"*. Prova objetiva no 7º log `052933`: 68 `FOOT_COMMIT` (antes 2), `UDEV_FRAME_CB pending=0` na 1ª/última amostra, 124,32 s; `--require-circulating` → `SEM_DAMAGE_FORA_DA_CENA`, EXIT=0 (no 6º log → `CALLBACK_NAO_CHEGA`, EXIT=1). Classificador corrigido para usar as amostras CB.
-- **Painel: 8º log achou a causa real** — o binário `aeroshell-shell` foi lançado e mapeado (1920x48), mas `lista=` vazia porque faltava `AERO_WINDOW_IPC_SOCK`; `~/u` agora passa a variável ao compositor e ao painel (§3). Gui do domicile: UI e conteúdo na mesma árvore de layers vs. canal IPC explícito aqui.
-- **Provas:** gate final `bash scripts/check.sh` → `OK`, `CHECK_EXIT=0` (`gate-panel-ipc.log`); amostra anterior falhou só no S1 por `zenity Failed to open display` (§6), preservada. clippy bench 0, `--no-default-features` 0, fmt 0. Nada mexido em `is_empty`/input/VT/vblank/cursor/protocolo.
-- **Próximo passo (NÃO executado):** rode `~/u` **de novo** no tty3 e confirme: painel TSX visível na barra inferior, `foot` dentro da janela, arrastar a barra move só a janela dona, Ctrl+Alt+F2/F3 e voltar com imagem. Com o "ok" olhando a tela, fechar F1d3; sem ele, item fica em §7. Cursor invisível é cartão separado. Agente não encerrou nem trocou VT.
+- **Fase atual: F1 — TODOS OS CARTÕES AUTORIZADOS FECHADOS.** F1a/F1b/F1c/F1d1/F1d2 (§3) e **F1d3 FECHADA pelo juiz em 2026-11-22: "ok. Aprovado"** (§3). Árvore limpa; commits locais até `a90c534`. Sem push (credencial ausente). **PARAR: não avançar de fase sem aprovação (AGENTS.md §3.1).**
+- **O que fechou a F1d3:** (1) `udev.rs` passou a chamar `send_frame` como o headless — o `foot` parava após 2 commits porque nunca recebia o `wl_surface.frame` done (log `052249`: `pending=1` em 15/15); (2) `~/u` passou a lançar o `aeroshell-shell` (painel); (3) `~/u` passou a definir `AERO_WINDOW_IPC_SOCK` — sem ele o bridge reportava `lista=` vazia (log `053838`) e a barra ficava transparente. Gui do domicile: quem detém ack/present responde o callback; UI/conteúdo na mesma árvore vs. IPC explícito aqui.
+- **Provas objetivas:** log `052933`: 68 `FOOT_COMMIT` (antes 2), `pending=0` nas amostras CB; log `053838`: layer surface `1920×48` e WebView carregada; gate final `bash scripts/check.sh` → `OK`, `CHECK_EXIT=0` (`gate-panel-ipc.log`). Amostra do S1 falha por `zenity Failed to open display` preservada em §6. Nada mexido em `is_empty`/input/VT/vblank/cursor/protocolo/ADR/deps.
+- **Dívidas em cartão separado (NÃO executar sem pedido):** cursor invisível no udev, hotplug, multi-GPU, presentation-time, Plano B, 02f/02n/02q. Plano mestre segue em `docs/plano-mestre.md`.
+- **Próximo passo: nenhum — aguardar decisão do humano.** Se quiser empurrar, os commits locais estão prontos (`git push` falhou por credencial). Se quiser nova fase, abrir cartão antes (AGENTS.md §0.2). Aplicação foi operada e fechada pelo humano; agente não encerrou processos nem trocou VT.
 
