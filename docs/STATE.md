@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-21 · **Fase atual: F1** · F1c com prova técnica + moldura gigante corrigida, juiz visual PENDENTE · 02q FECHADA pelo juiz (harness de 300 ms segue como lacuna registrada)
+Última atualização: 2026-11-21 · **Fase atual: F1** · F1c FECHADA pelo juiz visual · 02q FECHADA pelo juiz (harness de 300 ms segue como lacuna registrada)
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -14,8 +14,8 @@ lock, login) é TSX renderizado por WebKitGTK; runtime de política em Bun. Dev 
 **Fase atual: F1** (núcleo do compositor). F0/fatia vertical FECHADA pelo humano em 2026-11-21: `foot` com
 decoração HTML funcional e painel React/TSX; fechamento formal em `docs/f0-relatorio-go-no-go.md` (quadro
 S1–S5, ratificação registrada dos ADRs, S4→F2/F9 e S5→F5/F6 deferidos com justificativa).
-F1 em andamento por cartões pequenos: F1a e F1b FECHADAS (F1a com juiz visual OK; F1b fechada pelo humano);
-F1c em andamento com prova técnica e juiz visual pendente; F1d só após novo pedido/aprovação. F1 anterior revertida em `4307cc4`.
+F1 em andamento por cartões pequenos: F1a, F1b e F1c FECHADAS (juiz visual OK nas três; F1c em 2026-11-21);
+F1d só após novo pedido/aprovação. F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
 - [x] Compositor nested (winit) com socket próprio, xdg-shell, layer-shell — `scripts/check.sh` (S1 nested)
@@ -385,7 +385,7 @@ F1c em andamento com prova técnica e juiz visual pendente; F1d só após novo p
   (`orientation-after-normal-request-size{,3}.log`), `size=1280x480`, titlebar `rgb=(43,43,43) diff=21,33`.
   Falhas intermediárias de harness e colisão D-Bus estão preservadas em §6. Gate pós-correção
   `check-after-orientation.log` EXIT=0 (28 Rust + 9 Bun), clippy bench/fmt EXIT=0. Novo juiz visual PENDENTE.
-- [~] F1c (JUIZ VISUAL 2 — moldura ocupando metade da tela, CORREÇÃO OBJETIVA): humano relatou por texto
+- [x] F1c (JUIZ VISUAL 2 — moldura ocupando metade da tela, CORREÇÃO OBJETIVA): humano relatou por texto
   "estou vendo uma moldura ocupando a metade inteira da tela"; o modelo não lê imagem, então o relato
   prevaleceu sobre a medição anterior (~400×336). Nova medição no dump do host (64×40 células/1280×480):
   output 1 tinha `(43,43,43)` em 32/32 colunas (640 px) em y=38..39; output 0, 20/32 colunas (foot).
@@ -395,12 +395,14 @@ F1c em andamento com prova técnica e juiz visual pendente; F1d só após novo p
   pula frames cujo cliente já mapeou (desenhados pelo 9-slice no output do cliente). Teste primeiro em
   `multi_output_damage.py` (`decoração_por_metade`): baseline FALHOU (`{0:20, 1:32}`,
   `oversize-baseline.log`), depois 2× OK (`{0:20, 1:0}`, `oversize-after{,2}.log`). Gate
-  `check-oversize.log` EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0. Juiz visual: §7/§9.
+  `check-oversize.log` EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
+  **JUIZ VISUAL F1c (2026-11-21): humano respondeu "aprovado visualmente"** na instância aberta
+  (2 outputs, 2 `foot`, arrasto dos dois lados sem piscar). O próprio humano encerrou a aplicação;
+  nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
+  EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
-- F1c EM ANDAMENTO: implementação, regressão, gate e medição da moldura verdes em §3; falta o juiz visual
-  da correção da moldura gigante. Nova instância ÚNICA e sem timeout ABERTA (2 outputs, 2 `foot`):
-  ver PIDs/socket/log em `visual-oversize-current.env` (§9). A instância antiga (51121) foi encerrada.
-  Não encerrar pelo agente; sem "ok visual F1c", não fechar F1c/iniciar F1d.
+- F1c FECHADA (§3): prova técnica + juiz visual "aprovado visualmente" em 2026-11-21. Aplicação encerrada
+  pelo humano (não pelo agente). F1d NÃO iniciada — exige pedido e aprovação separados. Sem push.
 - A 02p foi concluída com pixels, vizinhos, gate/clippy e juiz visual positivos (§3).
 - 02o SUBSTITUÍDA pela medição/correção 02p; não ajustar sua grade antiga nem reabrir sem novo pedido.
 - 02n: **JUIZ VISUAL NEGOU (2026-11-20)** — humano: "problema ainda ocorre". Técnica/gate/clippy provados 3× (§3),
@@ -429,9 +431,9 @@ F1c em andamento com prova técnica e juiz visual pendente; F1d só após novo p
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. `F1c` — prova técnica + moldura gigante corrigida e gate verde (§3); aguardar "ok visual F1c" na instância
-   aberta. Depois do fechamento, `F1d`/udev exige pedido e aprovação separados (inclusive features/apt).
-   Não reabrir 02q pela divergência do cronômetro sem pedido explícito do humano.
+0. `F1d`/udev — NÃO iniciar sem pedido e aprovação separados (features/apt/DRM/GBM/libseat fora do escopo
+   de F1c). F1c está FECHADA (§3); `git push` é feito pelo humano. Não reabrir 02q pela divergência do
+   cronômetro sem pedido explícito.
 1. `02o` — SUBSTITUÍDA: a 02p criou sonda full-res que reproduziu o flicker (2×1.910 pixels) e depois
    comprovou canvas fixo sem transiente. A grade antiga não é mais critério; não reabrir sem novo pedido.
 2. `02n` — JUIZ NEGOU ("problema ainda ocorre"); instância já não existe. NÃO abrir 5ª correção sem decisão.
@@ -715,16 +717,16 @@ F1c em andamento com prova técnica e juiz visual pendente; F1d só após novo p
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- F1c (JUIZ VISUAL 2 NEGADO → 3 PENDENTE): humano relatou "somente o arrastar do foot a esquerda
+- F1c (JUIZ VISUAL — FECHADO, 2026-11-21): humano relatou "somente o arrastar do foot a esquerda
   funciona e mal", "vejo janela com decoração nos outputs; não deveria" e, por fim, "estou vendo uma
   moldura ocupando a metade inteira da tela". O modelo NÃO lê imagem; os relatos por texto são dados.
   Causa 1 (arrasto): `input.rs:136` usava só o primeiro output (640×480) contra host 1280×480 — corrigido
   por união das geometrias (`absolute_pointer_space`), teste falhou antes (`640` vs `1280`) e passou depois.
   Causa 2 (moldura gigante): fallback N>1 desenhava o frame do outro output inteiro (652×516) na origem;
   corrigido em §3, medição `{0:20, 1:32}` → `{0:20, 1:0}` colunas. A decoração dos FEET (titlebar "janela")
-  é por design do F0/F1b e permanece; os outputs em si não têm título. Falta o "ok visual F1c" na instância
-  aberta, cobrindo: um foot por metade, moldura do tamanho do foot, titlebar no topo, arrasto dos dois lados
-  sem piscar. NÃO fechar F1c nem iniciar F1d sem o "ok".
+  é por design do F0/F1b e permanece; os outputs em si não têm título. Humano TESTOU a instância aberta
+  (2 outputs, 2 `foot`, arrasto dos dois lados) e respondeu **"aprovado visualmente"**; encerrou a aplicação.
+  F1c FECHADA. Não iniciar F1d sem aprovação separada.
 - F1c (NÃO MEDIDO): desempenho/FPS/latência em GPU real (VM sem 3D); resize dinâmico da janela host N>1
   (o host fica fixo em N tiles); damage incremental do host (full por decisão, §6). N=1 manteve `age=0`.
 - F1b (NÃO MEDIDO): desempenho/FPS/latência do headless em GPU real (VM sem 3D, llvmpipe); o que foi medido
@@ -886,18 +888,16 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **Fase atual: F1.** F1c tem implementação, moldura gigante corrigida, regressão e gate verdes; juiz visual PENDENTE.
-- Winit N>1: textura/tracker por output (`age=1`), cena em coordenadas locais, host `Normal` + `request_inner_size`
-  1280×480; N=1 segue `age=0`. Host full por vsync (§6).
-- Arrasto: `absolute_pointer_space` usa a união das geometrias; teste falhou antes (`640` vs `1280`) e passou depois.
-- Moldura gigante: fallback N>1 (`winit.rs`) agora pula frames com cliente mapeado (`frame_has_mapped_client`);
-  medição `{0:20,1:32}` → `{0:20,1:0}` colunas de decoração (limite 28/32).
-- Headless: `age=1`, 2× OK com dano parcial e titlebar `rgb=(43,43,43)` vs clear `(20,20,25)`.
-- Multi: 2× OK (`oversize-after{,2}.log`), `damage=none` estável, dano parcial nos 2 outputs, titlebar no lugar.
-- Instância VISUAL ABERTA (sem timeout): `visual-oversize-current.env` — compositor PID 57853, 2º foot PID 58129,
-  socket `wayland-aero-f1c-oversize-57852`, log `/tmp/opencode/f1c/visual-oversize-57852.log`. NÃO encerrar pelo agente.
-- Gate `check-oversize.log` EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0; baselines em `/tmp/opencode/f1c/` e §6.
+- **Fase atual: F1.** F1a, F1b e F1c FECHADAS pelo juiz visual. F1d exige pedido/aprovação separados. Sem push.
+- Winit N>1: textura/tracker por output (`age=1`), cena local, host `Normal` + `request_inner_size` 1280×480;
+  N=1 segue `age=0`. Host full por vsync (§6).
+- Arrasto: `absolute_pointer_space` usa a união das geometrias (teste `640`→`1280`). Moldura gigante: fallback
+  N>1 pula frames com cliente mapeado (`frame_has_mapped_client`); `{0:20,1:32}` → `{0:20,1:0}` colunas.
+- Headless e multi: 2× OK cada, dano parcial, `damage=none` estável, titlebar `rgb=(43,43,43)` vs clear `(20,20,25)`.
+- JUIZ F1c (2026-11-21): humano testou 2 outputs/2 `foot` com arrasto nos dois lados e respondeu
+  **"aprovado visualmente"**; encerrou a aplicação ele próprio. F1c FECHADA.
+- Gate final `check-f1c-fechada.log` EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0. Baselines/erros em §6.
 - Reproduzir: `dbus-run-session -- python3 tests/integration/multi_output_damage.py`,
   `python3 tests/integration/headless_render_damage.py`, `bash scripts/check.sh`.
-- Próximo: humano testa a instância aberta (um foot por metade, moldura do tamanho do foot, titlebar no topo,
-  arrasto dos 2 lados sem piscar) e responde "ok visual F1c". Não fechar sem o "ok"; não iniciar F1d. VM sem 3D.
+- Próximo passo (NÃO executado): só abrir F1d/udev com pedido explícito (features/apt/DRM/GBM/libseat).
+  VM sem 3D: desempenho em GPU real não medido. `git push` é do humano.
