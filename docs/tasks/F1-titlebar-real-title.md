@@ -1,5 +1,8 @@
-# Tarefa F1-titlebar-real-title — título real na titlebar (RASCUNHO — aguarda "ok")
+# Tarefa F1-titlebar-real-title — título real na titlebar
 
+> **FECHADA PELO JUIZ VISUAL em 2026-11-22.** Humano operou a nested deixada aberta
+  (`wayland-aero-title-1795388310`, `foot -T 'Titulo Real AeroShell'`) e respondeu **"ok"** após conferir o título real
+  na barra. Nenhuma instância foi encerrada pelo agente; quem fecha é o humano.
 > Cartão pequeno de feature (não é gate de fase). Um cartão por sessão; se o objetivo mudar, PARE e pergunte.
 
 ## Objetivo (uma frase, verificável)
