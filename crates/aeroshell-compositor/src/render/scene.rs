@@ -164,9 +164,9 @@ pub fn collect_output_elements(
                     .get(frame_surface)
                     .copied()
                     .unwrap_or_default();
-                // A escala do element do frame é a da SUPERFÍCIE do frame; se ela
-                // divergir da do cliente, a borda "descolava" 1 px do conteúdo.
-                let frame_scale = surface_scale(frame_surface, output_scale);
+                // F1f: o 9-slice precisa da MESMA escala do cliente (preferred_scale),
+                // não a do frame/output — senão `geo.loc + fgeo.offset()` e o
+                // WaylandSurfaceRenderElement divergem e a borda "descola" 1 px.
                 let (dx, dy) = fgeo.offset();
                 let loc: smithay::utils::Point<i32, smithay::utils::Physical> =
                     smithay::utils::Point::<i32, smithay::utils::Logical>::new(
@@ -185,7 +185,7 @@ pub fn collect_output_elements(
                         #[cfg(feature = "bench")]
                         client_origin: local_loc,
                         committed: geo.size,
-                        output_scale: frame_scale,
+                        output_scale: client_scale,
                         #[cfg(feature = "bench")]
                         output,
                         window_id: *_window_id,

@@ -38,9 +38,15 @@ def read_dump(path, timeout=25.0):
         if path.exists() and path.stat().st_size >= 1280 * 800 * 4:
             data = path.read_bytes()
             last = data
-            # O primeiro dump é todo clear; esperar até haver conteúdo real.
-            if any(data[i : i + 3] != b"\x19\x14\x14" for i in range(0, len(data), 4 * 997)):
-                return data
+            # Esperar o dump conter AS DUAS cores (frame e cliente); um frame
+            # intermediário pode ter só uma delas e gerar medição falsa.
+            has_frame = has_client = False
+            for i in range(0, len(data) - 3, 4 * 101):
+                px = (data[i + 2], data[i + 1], data[i])
+                has_frame |= near(px, FRAME)
+                has_client |= near(px, CLIENT)
+                if has_frame and has_client:
+                    return data
         time.sleep(0.1)
     return last
 
@@ -68,11 +74,15 @@ def analyze(data, scale):
     border = cb[0] - fb[0]
     titlebar = fb[3] - cb[3]
     # Continuidade: entre o bbox do frame e o do cliente NAO pode haver CLEAR.
-    ymid = (cb[1] + cb[3]) // 2
-    xmid = (cb[0] + cb[2]) // 2
-    gap_h = any(near(rgb(x, ymid), CLEAR) for x in range(fb[0], cb[0] + 1))
-    gap_v = any(near(rgb(xmid, y), CLEAR) for y in range(cb[3], fb[3] + 1))
-    return border, titlebar, not (gap_h or gap_v)
+    # Várias linhas/colunas (nao só uma) para pegar gap de 1 px em qualquer
+    # ponto da borda — o sintoma relatado pelo humano no udev/canvas real.
+    gap = False
+    for frac in (0.15, 0.35, 0.5, 0.65, 0.85):
+        y = cb[1] + int((cb[3] - cb[1]) * frac)
+        gap |= any(near(rgb(x, y), CLEAR) for x in range(fb[0], cb[0] + 1))
+        x = cb[0] + int((cb[2] - cb[0]) * frac)
+        gap |= any(near(rgb(x, y), CLEAR) for y in range(cb[3], fb[3] + 1))
+    return border, titlebar, not gap
 
 
 def run_scale(scale):

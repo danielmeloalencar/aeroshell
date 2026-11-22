@@ -21,6 +21,19 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **F1f — escala do 9-slice trocada para a do CLIENTE (2026-11-22).** Humano diagnosticou a margem preta
+      no udev: frame renderizado com escala do frame/output (1.0) e cliente em `preferred_scale` 1.5 ⇒
+      `geo.loc + fgeo.offset()` ancorado em física diferente do `WaylandSurfaceRenderElement` do cliente.
+      Correção em `render/scene.rs`: `FrameRenderInput.output_scale` agora recebe `client_scale`
+      (`with_states(client_surface) → FractionalScaleState::preferred_scale()`, fallback `output_scale`),
+      não a escala da superfície do frame. **Geometria/insets/slices do 9-slice intocados** — só a fonte da
+      escala. Harness `fractional_scale.py`: assert de colagem reforçado (5 linhas + 5 colunas na faixa
+      frame↔cliente, proibindo CLEAR) e `read_dump` agora espera as cores de frame **e** cliente (antes
+      havia corrida que capturava dump intermediário e dava `border=0` falso em 1.25). Depois: 15 checagens
+      verdes em 1.0/1.25/1.5, `VEREDITO: OK`, `border/titlebar = 6/30, 8/38, 8/46`, colagem OK nas três.
+      Nested 1.5 com 3 `FSCALE_SURFACE` e 0 erros; 6 harnesses vizinhos OK; `check.sh` EXIT=0, clippy bench
+      `-D warnings` 0, `--no-default-features` 0. Amostra da falha transitória de 1.25 preservada.
+      **Veredito visual do humano no udev segue pendente (§7) — ele deve repetir `~/u --scale 1.5`.**
 - [x] **Backend udev passou a aplicar `--scale` (2026-11-22).** Depois do repasse de args corrigido, o humano
       relatou que `--scale 1.5` e `--scale 2` não mudavam a tela. Causa confirmada: `udev.rs:31` recebia
       `_opts` (descartado) e `:194` chamava `change_current_state(..., None, None, None)` — o udev ignorava
@@ -1231,7 +1244,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   aparência em escala fracionária no tty3**. O juiz deve abrir `~/u --scale 1.5` — o repasse de args no
   script e o backend udev foram corrigidos nesta sessão (§3); antes, o argumento era descartado no script
   e, depois disso, ignorado pelo udev — a tela seguia em 1.0. Confirmar no log `UDEV_OUTPUT … scale=1.5`
-  e que frame/conteúdo/painel estão nítidos e alinhados, sem gap ou borda desproporcional.
+  e que frame/conteúdo/painel estão nítidos e alinhados, sem margem preta entre a decoração e o conteúdo
+  (causa corrigida acima: 9-slice com a escala do cliente).
   **Tarefa NÃO fechada e F1g NÃO aberto sem o "ok"** (AGENTS.md §0.9 / §3.1). Não medido: udev/DRM,
   desempenho em GPU real (VM sem 3D).
 - **F1-popups-render — RESOLVIDO PELO JUIZ VISUAL (2026-11-22).** Humano abriu `gedit` no tty3 e, com
