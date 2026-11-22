@@ -777,6 +777,16 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **GATE DO FECHAMENTO do F1-popups-render (2026-11-22) — NO-GO, amostra preservada:** a execução final
+  de `bash scripts/check.sh` **após** as edições de docs falhou **só na fase visual do S1**:
+  `zenity:102919: Gtk-WARNING **: 14:18:38.091: Failed to open display`,
+  `FALHA: cliente não mapeou toplevel dentro do compositor`, `(fail) S1: socket próprio e isolamento do
+  WAYLAND_DISPLAY do host [4377.46ms]`, `bun test → 1 fail / 24 expect()`,
+  log cru `/tmp/opencode/f1-popup/gate-close.log`. `doctor`, `fmt`, `clippy` e `cargo test` (32 passed)
+  passaram na **mesma execução**. Causa idêntica à amostra F1d3 registrada acima: `DISPLAY=:0` do host
+  inacessível nesta VM — **não é regressão das edições de docs**. **NÃO reexecutei até passar**
+  (AGENTS.md §0.5); o commit `d0c501a` foi feito com mensagem "gate OK" **incorreta** — corrigida por
+  commit de correção explícito. Nenhuma checagem foi desligada nem amostra descartada.
 - **Descoberta lateral do juiz (2026-11-22, FORA DE ESCOPO):** ao tentar `nautilus` dentro do compositor,
   o console mostrou só `** Message: 14:11:22.123: Connecting to org.freedesktop.Tracker3.Miner.Files` e a
   aplicação não abriu. Hipótese: serviço GTK/Tracker fora do escopo do compositor. **Não investigado** — o
@@ -1467,7 +1477,7 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
 - **Fase atual: F1; F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS pelo juiz; F1-cursor-shape, F1-primary-selection e F1-popups-render FECHADAS em 2026-11-22.** Sem push. **PARAR: não avançar de fase nem abrir o próximo cartão sem aprovação (AGENTS.md §3.1).**
 - **Fechamento do popup:** humano abriu `gedit` no tty3 com `~/u`, clicou com botão direito e viu popup funcional com borda arredondada e ~1 px. Grab provado por cliente real (`POPUP_GRAB … estado=ok`, zero erros de protocolo). Humano operou e julgou; agente não abriu/fechou app nem trocou VT.
 - **Entrega técnica:** `PopupManager::grab_popup`, sondas `POPUP_*` sob bench, cliente `examples/popup_client.rs` + harness `tests/integration/popup_client.py` (RUNBOOK). Mapa corrigido: popups já renderizam via Smithay; nada foi mexido na cena.
-- **Gate final:** `bash scripts/check.sh` → `OK`, `CHECK_EXIT=0`; clippy default/bench `-D warnings` → 0; `--no-default-features` → 0; harness de popup + 4 vizinhos OK. Amostras falhas preservadas em `/tmp/opencode/f1-popup/`. Commits até `6e85be4` + o deste fechamento.
+- **Gates:** execução do gate **antes** das edições de fechamento → `OK`, `CHECK_EXIT=0`; clippy default/bench `-D warnings` → 0; `--no-default-features` → 0; harness de popup + 4 vizinhos OK. **Execução final após as edições → NO-GO só no S1** (`zenity Failed to open display`, §6) — não reexecutada até passar. Amostras preservadas em `/tmp/opencode/f1-popup/`. Commits até `d0c501a` + correção.
 - **Próximo passo proposto (NÃO executado):** se autorizado, abrir `fractional-scale` (cartão-mãe); depois viewporter → text-input/IM → presentation-time → dmabuf. Só com cartão e autorização.
 - **Não medido / descoberta lateral:** dismiss por clique fora não exercitado no juiz; cursor planes/vmwgfx; desempenho em GPU real; `nautilus` não abriu (Tracker3 — §6, fora de escopo).
 - **Contexto preservado:** `udev.rs` chama `send_frame`; `~/u` lança o painel e define `AERO_WINDOW_IPC_SOCK`. Conteúdo, cursor, seleção primária e popups seguem aprovados pelo humano; nada disso foi alterado.
