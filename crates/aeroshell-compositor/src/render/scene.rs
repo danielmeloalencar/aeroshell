@@ -5,6 +5,13 @@
 //! só Smithay e `AeroState`. O caminho N=1 do winit mantém sua cópia especializada
 //! (age=0, cor de clear configurável) para não regredir a validação visual F0/F1c.
 
+#[cfg(feature = "bench")]
+use smithay::utils::{Physical, Size};
+#[cfg(feature = "bench")]
+use smithay::wayland::compositor::SurfaceAttributes;
+#[cfg(feature = "bench")]
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use smithay::{
     backend::renderer::{
         element::{surface::WaylandSurfaceRenderElement, AsRenderElements, Kind},
@@ -22,6 +29,11 @@ use crate::{
     render::elements::{AeroRenderElements, FrameRenderInput, FrameRenderKind},
     state::AeroState,
 };
+
+/// F1f: amostragem baixa (1/120 frames) do diagnóstico de escala, compartilhada
+/// entre nested/headless e udev para comparação direta dos logs.
+#[cfg(feature = "bench")]
+static FSCALE_LOG: AtomicU64 = AtomicU64::new(0);
 
 /// Escala EFETIVA da superfície: a preferida pelo `wp_fractional_scale_v1`, com
 /// fallback para a escala do output. É o que o `AsRenderElements` deve usar —
@@ -174,6 +186,44 @@ pub fn collect_output_elements(
                         local_loc.y + dy,
                     )
                     .to_physical_precise_round(output_scale);
+
+                #[cfg(feature = "bench")]
+                if FSCALE_LOG
+                    .fetch_add(1, Ordering::Relaxed)
+                    .is_multiple_of(120)
+                {
+                    let foot_bs = client_surface
+                        .as_ref()
+                        .map(|surface| {
+                            with_states(surface, |states| {
+                                states
+                                    .cached_state
+                                    .get::<SurfaceAttributes>()
+                                    .current()
+                                    .buffer_scale
+                            })
+                        })
+                        .unwrap_or(-1);
+                    let frame_pref = surface_scale(frame_surface, output_scale);
+                    let foot_dst: Size<i32, Physical> =
+                        geo.size.to_physical_precise_round(client_scale);
+                    let frame_dst: Size<i32, Physical> =
+                        crate::render::elements::frame_target(geo.size, &fgeo)
+                            .to_physical_precise_round(client_scale);
+                    let t = crate::frame_diagnostics::now_ns();
+                    eprintln!(
+                        "FSCALE_FRAME t={t} backend=scene output={} window_id={} output_scale={} client_scale={} frame_pref={} foot_buffer_scale={} foot_dst={:?} frame_dst={:?} frame_loc={:?}",
+                        output.name(),
+                        *_window_id,
+                        output_scale,
+                        client_scale,
+                        frame_pref,
+                        foot_bs,
+                        foot_dst,
+                        frame_dst,
+                        loc
+                    );
+                }
 
                 let result = crate::render::elements::push_frame_elements(
                     renderer,

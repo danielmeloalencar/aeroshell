@@ -2,6 +2,16 @@
 
 use std::time::Duration;
 
+#[cfg(feature = "bench")]
+use smithay::{
+    utils::{Physical, Size},
+    wayland::{compositor::SurfaceAttributes, fractional_scale::with_fractional_scale},
+};
+#[cfg(feature = "bench")]
+use std::sync::atomic::{AtomicU64, Ordering};
+#[cfg(feature = "bench")]
+static WINIT_FSCALE_LOG: AtomicU64 = AtomicU64::new(0);
+
 use smithay::{
     backend::{
         allocator::Fourcc,
@@ -480,6 +490,48 @@ pub fn init_winit(
                                                 geo.loc.y + dy,
                                             )
                                             .to_physical_precise_round(output_scale);
+
+                                        // F1f: o nested N=1 tem caminho próprio (nao
+                                        // passa por render::scene); medir os mesmos
+                                        // campos para comparar com o udev/DRM.
+                                        #[cfg(feature = "bench")]
+                                        if WINIT_FSCALE_LOG
+                                            .fetch_add(1, Ordering::Relaxed)
+                                            .is_multiple_of(120)
+                                        {
+                                            let client_scale = client_surface
+                                                .as_ref()
+                                                .map(|s| {
+                                                    with_states(s, |st| {
+                                                        with_fractional_scale(st, |fs| {
+                                                            fs.preferred_scale().unwrap_or(output_scale)
+                                                        })
+                                                    })
+                                                })
+                                                .unwrap_or(output_scale);
+                                            let foot_bs = client_surface
+                                                .as_ref()
+                                                .map(|s| {
+                                                    with_states(s, |st| {
+                                                        st.cached_state
+                                                            .get::<SurfaceAttributes>()
+                                                            .current()
+                                                            .buffer_scale
+                                                    })
+                                                })
+                                                .unwrap_or(-1);
+                                            let foot_dst: Size<i32, Physical> =
+                                                geo.size.to_physical_precise_round(client_scale);
+                                            let frame_dst: Size<i32, Physical> =
+                                                crate::render::elements::frame_target(geo.size, &fgeo)
+                                                    .to_physical_precise_round(output_scale);
+                                            let t = crate::frame_diagnostics::now_ns();
+                                            eprintln!(
+                                                "FSCALE_FRAME t={t} backend=winit-n1 output={} window_id={} output_scale={} client_scale={} foot_buffer_scale={} foot_dst={:?} frame_dst={:?} frame_loc={:?}",
+                                                output.name(), *_window_id, output_scale,
+                                                client_scale, foot_bs, foot_dst, frame_dst, loc
+                                            );
+                                        }
 
                                         // F1a: o 9-slice/canvas/placeholder vive em
                                         // render/elements.rs, agnóstico de backend.
