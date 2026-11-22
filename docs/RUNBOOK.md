@@ -4,6 +4,11 @@ Se um comando abaixo estiver desatualizado, CORRIJA este arquivo na mesma tarefa
  
 ## Pré-requisitos
 - Rust via rustup (versão em `rust-toolchain.toml`), Bun, `libwebkitgtk-6.0-dev`, `libgtk-4-dev`, `libgtk4-layer-shell-dev`, `foot`.
+- Backend de sessão real (obrigatório desde F1d1, feature padrão do `aeroshell-compositor`):
+  `libdrm-dev libgbm-dev libinput-dev libudev-dev libseat-dev libsystemd-dev`
+  (fallback `libelogind-dev` se `libseat-dev` não existir na imagem).
+- Instala tudo: `bash scripts/setup-deps.sh`. Verifica: `bash scripts/doctor.sh` (o gate chama o doctor).
+- Build sem o backend de sessão real (nested/headless apenas): `cargo check --workspace --no-default-features`.
 - Rode `bash scripts/check.sh` primeiro; ele chama o `doctor` e diz o que falta.
 ## Gate de qualidade (obrigatório antes de dizer "concluído")
 ```
@@ -44,6 +49,37 @@ Em outro terminal, com o mesmo D-Bus privado: `WAYLAND_DISPLAY=wayland-aero-demo
 Arraste a titlebar do `foot` da direita para o segundo tile e de volta: o ponteiro cobre a janela host
 inteira (1280×480), cada output desenha só o seu cliente e nenhum frame aparece ocupando a metade da tela.
  
+## Rodar em DRM (udev) — sessão real no VT
+**Status medido em F1d1:** o backend udev é **stub** — `crates/aeroshell-compositor/src/backend/udev.rs:20-26`
+devolve `Err("backend udev: implementação na F1 (requer libgbm/libseat e sessão real)")`. Desde F1d1 os crates
+do backend de sessão real estão no grafo e no binário
+(`cargo tree -p aeroshell-compositor | grep -cE "(gbm|drm|drm-ffi|input|udev|libseat) v"` → 6;
+`nm -a --defined-only target/debug/aeroshell-compositor | grep -E " a (gbm|libseat|udev|input|drm)\."` → CGUs
+dos 5 crates), **mas `ldd` não lista as `.so`** (medido: `DT_NEEDED` só tem libxkbcommon/libgcc/libc), porque
+nenhum código as chama ainda. Nada aparece na tela com `--backend udev`; a implementação chega em **F1d3**.
+Em F1d1 este comando termina com o erro do stub — registre a saída crua, não a interprete como regressão.
+
+Comando exato a partir do **tty3** (executado, olhado e **fechado pelo humano**):
+```
+# tty3, logado como o usuário da sessão (líder de sessão do logind; sem sudo no host de dev)
+cd ~/Projetos/aeroshell
+cargo build --workspace
+XDG_RUNTIME_DIR=/run/user/$(id -u) MESA_DEBUG=1 LIBGL_ALWAYS_SOFTWARE=1 \
+  target/debug/aeroshell-compositor --backend udev --socket wayland-aero-tty3 \
+  --shell target/debug/examples/frame_webview \
+  --shell-env LD_PRELOAD=libgtk4-layer-shell.so.0 \
+  --command foot
+```
+- `--backend udev` é aceito pela CLI (`src/cli.rs:85`); sem compositor host (`WAYLAND_DISPLAY`/`DISPLAY`
+  ausentes) a autodetecção já escolhe udev (`src/cli.rs:63-70`).
+- **Trocar o VT (`Ctrl+Alt+F3`) e fechar a sessão é tarefa do humano** (AGENTS.md §0.9). O agente não troca
+  VT, não usa `sudo`, não toca em `/etc` (AGENTS.md §3.8).
+- **Validação visual exigida em F1d3** (juiz humano, não teste headless): "no tty3 aparecem o painel e a
+  janela `foot`; arrastar a barra move só a janela dona; não há cursor fantasma; a tela não pisca no resize"
+  → o humano dá o ok e fecha.
+- VM VirtualBox **sem 3D**: `LIBGL_ALWAYS_SOFTWARE=1` é o caminho em dev; tempo/RAM medidos aqui **não**
+  valem como desempenho (GPU real pendente, STATE.md §7).
+
 ## Runtime Bun / SDK (tarefa 03)
 Tipos TS gerados do Rust (não editar à mão):
 ```
@@ -86,6 +122,8 @@ Testes de protocolo headless (CI): `cargo test -p aeroshell-compositor`.
 - Em sessão X11 o nested abre via X11; confirme também numa sessão Wayland antes de concluir sobre input.
 - Variáveis `AERO_*` de benchmark só podem existir sob feature `bench`; o binário release não deve lê-las.
 ## Onde mexer para…
+- Backend de sessão real (udev/DRM/GBM/libseat): `crates/aeroshell-compositor/src/backend/udev.rs` (stub em F1d1; implementação em F1d3)
+- Features de build do backend: `crates/aeroshell-compositor/Cargo.toml` → `[features]` (`default = [backend_udev, backend_gbm, backend_libinput, backend_session_libseat]`)
 - Protocolo Wayland do frame: `protocols/aero_frame_v1.xml` (PROTEGIDO) + `crates/aeroshell-compositor/src/protocols/aero_frame.rs`
 - Grabs de mover/resize: `crates/aeroshell-compositor/src/grab.rs`
 - Supervisor/filhos: `crates/aeroshell-compositor/src/supervisor.rs`

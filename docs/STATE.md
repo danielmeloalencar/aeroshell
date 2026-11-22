@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-21 · **Fase atual: F1** · F1c FECHADA pelo juiz visual · 02q FECHADA pelo juiz (harness de 300 ms segue como lacuna registrada)
+Última atualização: 2026-11-22 · **Fase atual: F1** · **F1d1 FECHADA no critério técnico** (sem critério visual: o backend udev segue stub) · F1c FECHADA pelo juiz visual · 02q FECHADA pelo juiz (harness de 300 ms segue como lacuna registrada)
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -15,9 +15,26 @@ lock, login) é TSX renderizado por WebKitGTK; runtime de política em Bun. Dev 
 decoração HTML funcional e painel React/TSX; fechamento formal em `docs/f0-relatorio-go-no-go.md` (quadro
 S1–S5, ratificação registrada dos ADRs, S4→F2/F9 e S5→F5/F6 deferidos com justificativa).
 F1 em andamento por cartões pequenos: F1a, F1b e F1c FECHADAS (juiz visual OK nas três; F1c em 2026-11-21);
-F1d só após novo pedido/aprovação. F1 anterior revertida em `4307cc4`.
+F1d autorizada pelo humano em 2026-11-21: **F1d1 FECHADA no critério técnico (§3)**; F1d2 e F1d3 só após novo ok.
+F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **F1d1 — features/apt/docs do backend de sessão real (udev/DRM/GBM/libinput/libseat)**, 2026-11-22.
+      `crates/aeroshell-compositor/Cargo.toml:[features]` ganhou os aliases `backend_udev`, `backend_gbm`,
+      `backend_libinput`, `backend_session_libseat` (apontando para o Smithay 0.7.0 fixado) e `default` com os
+      quatro; `scripts/doctor.sh` passou `libdrm`/`gbm`/`libseat` de opcionais para obrigatórios;
+      `.github/workflows/ci.yml` ganhou `libdrm-dev libgbm-dev libinput-dev libudev-dev libseat-dev libsystemd-dev`
+      (mesma lista de `scripts/setup-deps.sh:13-19`); `docs/RUNBOOK.md` tem "Rodar em DRM (udev)".
+      **Provas medidas nesta sessão (VM VirtualBox sem 3D):** `cargo check --workspace --all-targets` EXIT=0;
+      `cargo clippy --workspace --all-targets -- -D warnings` EXIT=0; `cargo build --workspace` EXIT=0;
+      `cargo check --workspace --no-default-features` EXIT=0 **e** `cargo tree -p aeroshell-compositor
+      --no-default-features` com **0** ocorrências de libseat/gbm/input/udev (opt-out real do backend pesado);
+      `cargo tree -p aeroshell-compositor` com **6** crates novos no grafo (`drm 0.14.1`, `drm-ffi 0.9.1`,
+      `gbm 0.18.0`, `input 0.9.1`, `libseat 0.2.4`, `udev 0.9.3`); CGUs desses 5 crates presentes no binário
+      (`nm -a --defined-only target/debug/aeroshell-compositor` → 9 linhas); gate `bash scripts/check.sh`
+      EXIT=0 numa única execução (29 Rust + 9 Bun); `bash tests/integration/s1_nested.sh` EXIT=0.
+      Cartão: `docs/tasks/F1d-udev-drm-gbm-libinput.md`. **Nenhum critério visual** — o backend udev segue stub
+      (`backend/udev.rs:20-26` devolve `Err`); nada muda na tela. F1d2/F1d3 só após ok do humano.
 - [x] Compositor nested (winit) com socket próprio, xdg-shell, layer-shell — `scripts/check.sh` (S1 nested)
 - [x] Painel WebKitGTK transparente como layer-shell, input regions do DOM, passagem de clique (S2/S3, validado à mão)
 - [x] `aero_frame_v1` v1 (opção B: `associate` só MARCA a superfície, não atribui role; ver ADR 0004) — `protocol_tests` (17 testes)
@@ -401,8 +418,15 @@ F1d só após novo pedido/aprovação. F1 anterior revertida em `4307cc4`.
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
+- **F1d1 CONCLUÍDA no critério técnico (§3), sem critério visual** (o backend udev é stub: nada aparece na
+  tela). Cartão `docs/tasks/F1d-udev-drm-gbm-libinput.md`. **F1d2** (sonda GBM em `renderD128`, harness
+  `tests/integration/udev_drm_probe.py`) e **F1d3** (backend udev completo + extração da cena de
+  `backend/headless.rs:126-255` para `render/scene.rs`) **NÃO iniciadas** — aguardam o ok do humano.
+  Lacuna de medição aberta em §7: o `ldd` do plano não prova a linkagem (medido 0 linhas) e a sonda de F1d2
+  é quem fecha essa prova. Sem push.
 - F1c FECHADA (§3): prova técnica + juiz visual "aprovado visualmente" em 2026-11-21. Aplicação encerrada
-  pelo humano (não pelo agente). F1d NÃO iniciada — exige pedido e aprovação separados. Sem push.
+  pelo humano (não pelo agente). F1d foi autorizada em 2026-11-21 e F1d1 foi executada (§3); F1d2/F1d3 seguem
+  pedindo aprovação separada. Sem push.
 - A 02p foi concluída com pixels, vizinhos, gate/clippy e juiz visual positivos (§3).
 - 02o SUBSTITUÍDA pela medição/correção 02p; não ajustar sua grade antiga nem reabrir sem novo pedido.
 - 02n: **JUIZ VISUAL NEGOU (2026-11-20)** — humano: "problema ainda ocorre". Técnica/gate/clippy provados 3× (§3),
@@ -431,9 +455,11 @@ F1d só após novo pedido/aprovação. F1 anterior revertida em `4307cc4`.
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. `F1d`/udev — NÃO iniciar sem pedido e aprovação separados (features/apt/DRM/GBM/libseat fora do escopo
-   de F1c). F1c está FECHADA (§3); `git push` é feito pelo humano. Não reabrir 02q pela divergência do
-   cronômetro sem pedido explícito.
+0. `F1d2` (sonda GBM em `renderD128`, harness novo `tests/integration/udev_drm_probe.py`) e `F1d3`
+   (backend udev completo + `render/scene.rs`) — definidas no cartão
+   `docs/tasks/F1d-udev-drm-gbm-libinput.md`. **NÃO iniciar sem o ok do humano.** F1d1 está FECHADA no
+   critério técnico (§3); `git push` é feito pelo humano. Não reabrir 02q pela divergência do cronômetro
+   sem pedido explícito.
 1. `02o` — SUBSTITUÍDA: a 02p criou sonda full-res que reproduziu o flicker (2×1.910 pixels) e depois
    comprovou canvas fixo sem transiente. A grade antiga não é mais critério; não reabrir sem novo pedido.
 2. `02n` — JUIZ NEGOU ("problema ainda ocorre"); instância já não existe. NÃO abrir 5ª correção sem decisão.
@@ -447,6 +473,21 @@ F1d só após novo pedido/aprovação. F1 anterior revertida em `4307cc4`.
 8. `05-compatibilidade-protocolos.md` — RASCUNHO; 7 mensagens do `foot` registradas em §6. NÃO executar sem ok.
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- F1d1 (CURSOR no backend udev): o Smithay 0.7.0 fixado **não tem** `PointerRenderElement` nem
+  `SoftwareCursor` (`grep -rn "PointerRenderElement|SoftwareCursor" ~/.cargo/registry/src/*/smithay-0.7.0/src`
+  → 0 ocorrências). O caminho é `cursor-icon` 1.2 + `MemoryRenderBufferRenderElement`
+  (`element/memory.rs:463`, presente no 0.7.0). F1d3 precisará disso. Não corrigir fora de cartão.
+- F1d1 (GBM modifiers, NÃO medido): `backend_gbm_has_create_with_modifiers2` e
+  `backend_gbm_has_fd_for_plane` ficam **desligadas**, embora o gbm da VM seja 26.0.8
+  (`pkg-config --modversion gbm`). Ligá-las sem hardware real seria chute: teste futuro em GPU real.
+- F1d1 (DOCTOR, pré-existente, fora do critério): a linha de sugestão do `doctor.sh:90`
+  (`sudo apt-get install -y ${missing[*]} …`) imprime os itens com o sufixo `(pkg-config: X)`, que não são
+  nomes de pacote apt válidos. Já existia para gtk4/webkit; F1d1 só aumenta os itens afetados.
+- F1d1 (Cargo.lock): 24 pacotes novos, todos por feature **aprovada** do Smithay 0.7.0. Os alvos
+  `windows-*`/`hermit-abi`/`io-lifetimes` entram no lock por deps condicionadas a Windows; não afetam o
+  build Linux (verificado em `cargo tree -p aeroshell-compositor`).
+- Docs: `docs/STATE.md` medido em **962 linhas** (903 antes desta sessão) contra o teto de 150 anunciado no
+  próprio cabeçalho (linha 4). Cartão de documentação próprio, não resolvido nesta tarefa.
 - F1c (FALLBACK N>1, descoberto ao corrigir a moldura): o mesmo padrão de fallback "frame sem cliente"
   existe em `winit.rs:699` (N=1), `headless.rs:223` e `headless.rs:314`. Só o caminho N>1 foi alterado,
   porque é o único onde outro output pode cair no fallback; nos demais não há sintoma relatado. Não
@@ -717,6 +758,21 @@ F1d só após novo pedido/aprovação. F1 anterior revertida em `4307cc4`.
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- F1d1 (LACUNA DE MEDIÇÃO, amostra preservada): o plano de aceite pedia
+  `ldd target/debug/aeroshell-compositor | grep -E "gbm|libdrm|libinput|libseat|libudev"` → 5 linhas.
+  **Medido: 0 linhas**, e `readelf -d` mostra `DT_NEEDED` só de libxkbcommon/libgcc_s/libc/ld-linux. Causa
+  provável (`estou supondo`, a provar em F1d2): nenhum código chama as funções C (`backend/udev.rs:20-26` é
+  stub) e o padrão `--as-needed` do linker do Ubuntu descarta as `.so` não referenciadas. A medição que
+  **existe** prova crate no grafo (`cargo tree` → 6) e CGU no binário (`nm -a` → 5 crates), **não** prova
+  `.so` carregada em runtime: isso fica para a sonda GBM de F1d2.
+- F1d1 (NÃO MEDIDO): abrir seat real via libseat (logind/PAM, líder de sessão), GBM em `renderD128`,
+  formats/modifiers e modos reais do hardware, cursor no backend udev (§6), desempenho/RAM em GPU real
+  (VM sem 3D). A validação visual do backend udev em tty3 (F1d3) é **do humano** (troca o VT e fecha).
+- F1d1 (S1 SOB CARGA, amostra preservada): a 1ª execução de `bash tests/integration/s1_nested.sh`
+  imediatamente depois de `cargo build --workspace` falhou o `sleep 4` da fase visual → EXIT=1
+  ("FALHA: cliente não mapeou toplevel dentro do compositor"). A reexecução em máquina ociosa deu EXIT=0
+  (duas linhas `OK:`). Nenhuma amostra apagada; o gate (`bun test`) passou na mesma sessão. Coerente com o
+  flake de carga já registrado em `docs/RUNBOOK.md:12-14`; causa exata não identificada.
 - F1c (JUIZ VISUAL — FECHADO, 2026-11-21): humano relatou "somente o arrastar do foot a esquerda
   funciona e mal", "vejo janela com decoração nos outputs; não deveria" e, por fim, "estou vendo uma
   moldura ocupando a metade inteira da tela". O modelo NÃO lê imagem; os relatos por texto são dados.
@@ -888,16 +944,19 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **Fase atual: F1.** F1a, F1b e F1c FECHADAS pelo juiz visual. F1d exige pedido/aprovação separados. Sem push.
-- Winit N>1: textura/tracker por output (`age=1`), cena local, host `Normal` + `request_inner_size` 1280×480;
-  N=1 segue `age=0`. Host full por vsync (§6).
-- Arrasto: `absolute_pointer_space` usa a união das geometrias (teste `640`→`1280`). Moldura gigante: fallback
-  N>1 pula frames com cliente mapeado (`frame_has_mapped_client`); `{0:20,1:32}` → `{0:20,1:0}` colunas.
-- Headless e multi: 2× OK cada, dano parcial, `damage=none` estável, titlebar `rgb=(43,43,43)` vs clear `(20,20,25)`.
-- JUIZ F1c (2026-11-21): humano testou 2 outputs/2 `foot` com arrasto nos dois lados e respondeu
-  **"aprovado visualmente"**; encerrou a aplicação ele próprio. F1c FECHADA.
-- Gate final `check-f1c-fechada.log` EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0. Baselines/erros em §6.
-- Reproduzir: `dbus-run-session -- python3 tests/integration/multi_output_damage.py`,
-  `python3 tests/integration/headless_render_damage.py`, `bash scripts/check.sh`.
-- Próximo passo (NÃO executado): só abrir F1d/udev com pedido explícito (features/apt/DRM/GBM/libseat).
-  VM sem 3D: desempenho em GPU real não medido. `git push` é do humano.
+- **Fase atual: F1.** F1a/F1b/F1c FECHADAS pelo juiz visual. **F1d1 FECHADA no critério técnico (2026-11-22,
+  sem critério visual).** F1d2 e F1d3 exigem ok do humano. Sem push (`git push` é do humano).
+- F1d1: `backend_udev|backend_gbm|backend_libinput|backend_session_libseat` são aliases + `default` em
+  `crates/aeroshell-compositor/Cargo.toml:[features]`; `doctor` obriga libdrm/gbm/libseat; CI instalou as libs;
+  RUNBOOK documenta o tty3. Backend udev continua **stub** (`backend/udev.rs:20-26` devolve `Err`).
+- Prova F1d1 (VM sem 3D): check/clippy/build EXIT=0; `cargo check --workspace --no-default-features` EXIT=0 com
+  `cargo tree --no-default-features` **0** ocorrências de libseat/gbm/input/udev; `cargo tree` normal com 6 crates;
+  `nm -a` com CGUs de drm/gbm/input/libseat/udev; gate `check.sh` EXIT=0 (29 Rust + 9 Bun); `s1_nested.sh` EXIT=0.
+- LACUNA (§7): `ldd` com **0** linhas das libs (medido) — sem código chamando-as, `--as-needed` descarta as `.so`.
+  F1d2 fecha essa prova. S1 falhou 1× sob carga e passou ocioso: amostras preservadas.
+- Winit N>1 (F1c): textura/tracker por output (`age=1`), host `Normal` + `request_inner_size` 1280×480, N=1 `age=0`;
+  arrasto por união das geometrias; fallback N>1 pula frames com cliente mapeado. JUIZ F1c: "aprovado visualmente".
+- Reproduzir o estado: `bash scripts/check.sh` · `bash tests/integration/s1_nested.sh` ·
+  `cargo tree -p aeroshell-compositor | grep -cE "(gbm|drm|drm-ffi|input|udev|libseat) v"`.
+- Próximo passo imediato (NÃO executado): **F1d2** — escrever `tests/integration/udev_drm_probe.py` e vê-lo
+  falhar contra o stub; depois sonda GBM em `renderD128` (EGLDevice→EGLDisplay→GbmAllocator), sem trocar VT.
