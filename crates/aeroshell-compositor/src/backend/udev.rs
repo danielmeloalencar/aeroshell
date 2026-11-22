@@ -199,6 +199,16 @@ pub fn init_udev(
             .device()
             .planes(&crtc)
             .map_err(|e| format!("planes: {e}"))?;
+        #[cfg(feature = "bench")]
+        {
+            let cursor_size = manager.device().cursor_size();
+            eprintln!(
+                "UDEV_CURSOR_PLANE crtc={crtc:?} cursor_planes={} cursor_size={}x{}",
+                planes.cursor.len(),
+                cursor_size.w,
+                cursor_size.h
+            );
+        }
         let drm_output = manager
             .initialize_output::<GlesRenderer, AeroRenderElements<GlesRenderer>>(
                 crtc,
@@ -398,14 +408,16 @@ pub fn init_udev(
                 frame_seq += 1;
                 let (mut elements, _) =
                     collect_output_elements(&mut data.state, &slot.wl_output, &mut renderer, false);
-                // F1-cursor-shape: o cursor plane já está habilitado pelo DrmOutputManager;
-                // falta só o elemento com Kind::Cursor (não altera a ordem z da cena).
+                // F1-cursor-shape: o cursor plane já está habilitado pelo DrmOutputManager.
+                // INSERIR NA FRENTE (índice 0): a cena é frente->trás, e se o DRM não
+                // tiver cursor plane livre o Smithay compõe este elemento no primary
+                // plane — onde ficaria ATRÁS das janelas e do painel se fosse push().
                 if let Some(cursor) = crate::render::cursor::cursor_element(
                     &mut renderer,
                     &mut data.state,
                     &slot.wl_output,
                 ) {
-                    elements.push(cursor);
+                    elements.insert(0, cursor);
                 }
                 match slot.drm_output.render_frame(
                     &mut renderer,
