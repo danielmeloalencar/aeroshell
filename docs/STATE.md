@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-22 · **Fase atual: F1** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · cursor invisível no udev segue em cartão separado · 02q REABERTA E FECHADA PELO JUIZ em 2026-11-22 (sem adiamento, spike 12×36 eliminado; harness de 300 ms segue como limitação de VM registrada) · **02r FECHADA PELO JUIZ em 2026-11-22 (nested + tty3 aprovados)**
+Última atualização: 2026-11-22 · **Fase atual: F1** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · cursor invisível no udev segue em cartão separado · 02q REABERTA E FECHADA PELO JUIZ em 2026-11-22 (sem adiamento, spike 12×36 eliminado; harness de 300 ms segue como limitação de VM registrada) · **02r FECHADA PELO JUIZ (nested + tty3) e 02s FECHADA PELO JUIZ (duas instâncias no mesmo D-Bus, "ok aprovado")**
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -21,6 +21,22 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **02s — duas instâncias AeroShell no mesmo D-Bus não roubam a decoração (2026-11-22; FECHADA PELO JUIZ).**
+      Cartão `docs/tasks/02s-frame-application-id.md`. Causa: `frame_webview.rs:806` usava
+      `application_id("dev.aeroshell.frame-webview")` fixo; com outra instância dona do nome, o novo
+      GApplication só reativava a antiga e saía sem rodar `connect_activate` → `FRAMEWEB=0`, shell caiu,
+      janela sem decoração. Correção mínima: `.flags(gtk4::gio::ApplicationFlags::NON_UNIQUE)` no builder
+      (APIs conferidas: `gtk4-0.11.5/src/auto/application.rs:72`, `gio-0.22.11/src/auto/flags.rs:112-113`).
+      Guard `ACTIVATED` dentro da mesma instância preservado.
+      **Teste-first:** `tests/integration/frame_two_instances.py` novo (dois compositores nested no mesmo
+      D-Bus, sockets/IPCs/logs próprios). Baseline `VEREDITO: FALHA` (`baseline2.log`): A com
+      `FRAMEWEB=1/painted=2/caiu=0`, B com `FRAMEWEB=0/painted=0/caiu=1`. Depois 3× `VEREDITO: OK`
+      (`final-{1,2,3}.log`): A **e** B com `FRAMEWEB=1`, `frame_painted=2`, `caiu=0` e `W 0 60 80 798 598
+      "foot"` no IPC. Uma amostra inicial com IPC mal lido (`baseline1.log`, loop de recv errado) foi
+      corrigida no harness e preservada. Vizinhos `frame_buttons`, `frame_reopen`, `frame_window_id`,
+      `frame_resize_glue` → OK. Gate `gate-close.log` EXIT=0, clippy bench 0, `--no-default-features` 0.
+      **JUIZ VISUAL: humano aprovou ("ok aprovado") com a instância nested aberta de propósito e `~/u` no
+      tty3 — decoração presente e botões respondendo nas duas.** Nenhuma instância aberta pelo agente.
 - [x] **02r — maximizar usa a área não exclusiva do output (2026-11-22; FECHADA PELO JUIZ: nested + tty3).**
       Cartão `docs/tasks/02r-maximize-workarea.md`. Causa lida: `window_ipc.rs:128-151` só trocava
       `state.size = output_size` (sem reposicionar e sem descontar insets/painel) e lia o toggle de
@@ -904,13 +920,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
-- **02s (2026-11-22) — código/teste/gates verdes, aguarda SÓ o juiz visual.** Correção aplicada:
-  `frame_webview.rs:803` usa `ApplicationFlags::NON_UNIQUE` no builder, para cada processo ser independente
-  no D-Bus. Harness novo `frame_two_instances.py`: baseline FALHA (B com `FRAMEWEB=0` e shell caiu),
-  3× OK (A e B com `FRAMEWEB`, `frame_painted`, IPC `W 0`, 0 quedas). Vizinhos OK; gate/clippy/no-default OK.
-  Instância nested deixada **aberta de propósito** para o juiz rodar `~/u` no tty3 com concorrência:
-  socket `wayland-aero-02s-visual`, IPC `/tmp/opencode/02s/visual-ipc.sock`, comp PID 229156,
-  painel 229162, log `/tmp/opencode/02s/visual.log`, PIDs em `visual.pids`. O agente NÃO fecha.
+- **02s FECHADA (2026-11-22) — ver §3.** Juiz aprovou com a nested aberta e `~/u` no tty3. Nenhuma
+  instância ficou aberta pelo agente; o humano julgou e fecha. Não reabrir sem novo pedido.
 - **02r FECHADA (2026-11-22) — ver §3.** Juiz aprovou no nested e no tty3. A instância nested foi fechada
   a pedido do humano (TERM só nos PIDs 211541/211563/211566 + remoção dos sockets); `ps` sem processos
   AeroShell. O `foot --server=3` PID 3911 é preexistente e NÃO foi tocado. Não reabrir sem novo pedido.
@@ -954,8 +965,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. **02s EM EXECUÇÃO — só falta o juiz visual (§4/§7).** Não abrir outro cartão até o "ok". Fora isso,
-   NENHUMA AUTORIZADA — PARAR.
+0. **NENHUMA AUTORIZADA — PARAR.** 02s FECHADA pelo juiz (§3), 02r FECHADA pelo juiz (§3),
+   F1d3 FECHADA pelo juiz (§3).
    02r FECHADA pelo juiz (§3); F1d3 FECHADA pelo juiz (§3).
    Cursor invisível no udev, hotplug, multi-GPU, presentation-time e
    Plano B são dívidas/cartões separados — abrir só com decisão explícita. Não avançar de fase sem
@@ -1421,6 +1432,11 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- **02s — JUIZ VISUAL OBTIDO (2026-11-22): humano aprovou ("ok aprovado") com a instância nested aberta e
+  `~/u` no tty3.** A prova automatizada mede apenas logs/IPC (`FRAMEWEB`, `frame_painted`, quedas do shell,
+  `list`); a aparência da decoração nas duas instâncias foi julgada pelo humano. **Não medido:** pixels do
+  DRM, desempenho em GPU real (VM sem 3D). A armadilha do `application_id` fixo deixou de existir, mas a
+  recomendação de não deixar duas instâncias no mesmo barramento segue registrada em §6.
 - **02r — JUIZ VISUAL RESOLVIDO (2026-11-22): nested OK e tty3 OK (após fechar a instância nested concorrente).** Humano: *"testei no nested e estava
   ok, mas ao testar no tty a janela não exibiu decoração pra eu poder clicar no maximizar"*. A causa do tty3
   é a colisão de D-Bus do `frame_webview` (§6), pré-existente e fora da 02r — **não é regressão do maximize**.
@@ -1754,20 +1770,19 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **Sessão atual (02s, CÓDIGO/TESTE/GATE OK): aguarda SÓ o juiz visual.** Instância nested aberta de
-  propósito (§4); humano deve rodar `~/u` no tty3 **com ela aberta** e confirmar que a decoração aparece
-  e que ✕/max respondem nas DUAS instâncias. Sem o "ok", 02s NÃO está concluída (§0.9). Quem fecha é o humano.
+- **Sessão atual: 02s FECHADA PELO JUIZ (2026-11-22, "ok aprovado") — nested aberta + `~/u` no tty3.**
+  Nenhuma instância aberta pelo agente. Sem push (commits locais até `047bc47` + fechamento).
 - **Reproduzir 02s:** `python3 tests/integration/frame_two_instances.py` → 3× `VEREDITO: OK`
-  (`final-{1,2,3}.log`); baseline FALHA em `baseline2.log`. Gate `gate-final.log` EXIT=0, clippy bench 0,
-  `--no-default-features` 0. Vizinhos buttons/reopen/window_id/resize_glue OK.
+  (`final-{1,2,3}.log`); baseline FALHA em `baseline2.log`. Gate de fechamento `gate-close.log` EXIT=0,
+  clippy bench 0, `--no-default-features` 0. Vizinhos buttons/reopen/window_id/resize_glue OK.
 - **Histórico: 02r FECHADA PELO JUIZ (2026-11-22) — nested e tty3 aprovados.** Sem push (commits locais).
 - **Reproduzir:** `python3 tests/integration/maximize_workarea.py` → `VEREDITO: OK` 3×
   (`/tmp/opencode/02r/final-{1,2,3}.log`); baseline FALHA em `baseline-final-harness.log`.
   Cliente `(60,80,798,598) → (6,30,788,516)`, frame `(800,552) == zona`, origem `(0,0)`, volta exato.
   Gate de fechamento `check.sh` EXIT=0 (`gate-close.log`), clippy bench 0, `--no-default-features` 0.
-- **Próximo passo: NENHUM AUTORIZADO — PARAR (AGENTS.md §3.1).** Dívida registrada em §6: não deixar duas
-  instâncias AeroShell no mesmo D-Bus (o `application_id` fixo do `frame_webview` faz a nova morrer sem
-  decoração); corrigir em cartão próprio se o humano pedir. Não reabrir 02q/02f/02n/02r sem novo pedido.
+- **Próximo passo: NENHUM AUTORIZADO — PARAR (AGENTS.md §3.1).** A dívida do `application_id` fixo (§6)
+  foi resolvida pela 02s; o registro permanece só como histórico/regra prática. Não reabrir
+  02q/02f/02n/02r/02s sem novo pedido.
 - **Histórico 02q (FECHADA pelo juiz):** cliente nasce no startup, placeholder do compositor para
   qualquer janela e `set_default_insets` no protocolo; `pending_initial_command`/sleep removidos.
 - **Reproduzir:** `python3 tests/integration/frame_cold_start_stages.py` → 3× `VEREDITO: FALHA` só pelo
