@@ -46,6 +46,22 @@
 
     <request name="destroy" type="destructor"/>
 
+    <request name="set_default_insets">
+      <description summary="decoração padrão antes do primeiro associate">
+        O shell privilegiado anuncia no startup as insets que o compositor deve
+        usar para a decoração sólida de QUALQUER janela mapeada que ainda não
+        tenha um WebView associado. Não é estado pendente de superfície: vale
+        imediatamente para o placeholder do compositor. O `set_insets` de cada
+        frame sobrescreve essa geometria quando o WebView associar; o default
+        NÃO é uma constante do tema dentro do compositor — é declarada por quem
+        desenha o HTML. Chamadas repetidas substituem o valor anterior.
+      </description>
+      <arg name="left" type="int"/>
+      <arg name="top" type="int"/>
+      <arg name="right" type="int"/>
+      <arg name="bottom" type="int"/>
+    </request>
+
     <request name="associate">
       <description summary="marca uma superfície como frame desta janela">
         NÃO atribui role: apenas marca a superfície como frame desta janela.

@@ -170,15 +170,18 @@ if 0 not in entries or 1 not in entries:
 
 # 2) o frame_host precisa ter frame para os dois window_ids
 frames = {}
-for m in hits(r"FRAMEWEB: associate\(window_id=(\d+)\)"):
+# O shell e o compositor escrevem no MESMO arquivo de log; eprintln concorrentes
+# podem intercalar no meio de uma linha. Casar só o núcleo do marcador, não o
+# prefixo "FRAMEWEB: " nem o fim da linha (dívida de interleaving já registrada).
+for m in hits(r"associate\(window_id=(\d+)\)"):
     frames[int(m.group(1))] = m.group(0)
 for _ in range(int(30 * 10)):
     if len(frames) >= 2:
         break
-    frames = {int(m.group(1)): m.group(0) for m in hits(r"FRAMEWEB: associate\(window_id=(\d+)\)")}
+    frames = {int(m.group(1)): m.group(0) for m in hits(r"associate\(window_id=(\d+)\)")}
     time.sleep(0.2)
 
-announced = sorted(set(int(m.group(1)) for m in hits(r"FRAMEWEB: frame_requested window_id=(\d+)")))
+announced = sorted(set(int(m.group(1)) for m in hits(r"frame_requested window_id=(\d+)")))
 print(f"frame_requested vistos pelo frame_host: {announced}")
 print(f"associate por window_id no frame_host: {sorted(frames)}")
 if len(frames) < 2:

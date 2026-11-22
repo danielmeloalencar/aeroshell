@@ -237,7 +237,27 @@ impl GlobalDispatch<AeroFrameManagerV1, ()> for AeroState {
         data_init: &mut DataInit<'_, Self>,
     ) {
         tracing::info!("cliente privilegiado vinculou aero_frame_manager_v1");
-        state.shell_manager = Some(data_init.init(resource, ()));
+        let manager = data_init.init(resource, ());
+        state.shell_manager = Some(manager.clone());
+        // O cliente pode mapear ANTES de o shell nascer (é exatamente o que
+        // queremos: spawn em paralelo). Reapresenta as janelas já mapeadas que
+        // ainda não têm frame, para que nenhuma fique sem decoração HTML só
+        // porque o frame_requested original foi enviado antes deste bind.
+        let pending: Vec<(u32, (i32, i32))> = state
+            .window_surfaces
+            .keys()
+            .filter(|id| !state.frames.iter().any(|(_, frame_id)| frame_id == *id))
+            .map(|id| (*id, state.client_content_size(*id).unwrap_or((0, 0))))
+            .collect();
+        for (window_id, (width, height)) in pending {
+            manager.frame_requested(
+                window_id,
+                width,
+                height,
+                crate::aero_frame_protocol::aero_frame_v1::State::empty(),
+            );
+            tracing::info!(window_id, "frame_requested reapresentado no bind do shell");
+        }
     }
 
     fn can_view(client: Client, _global_data: &()) -> bool {
@@ -259,6 +279,27 @@ impl Dispatch<AeroFrameManagerV1, ()> for AeroState {
         data_init: &mut DataInit<'_, Self>,
     ) {
         match request {
+            ManagerRequest::SetDefaultInsets {
+                left,
+                top,
+                right,
+                bottom,
+            } => {
+                // Geometria declarada por quem desenha o HTML. O compositor não
+                // conhece as constantes do tema: apenas guarda o que o shell
+                // anunciou para o placeholder pré-associate.
+                state.default_frame_insets = (left, top, right, bottom);
+                #[cfg(feature = "bench")]
+                {
+                    let t = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_nanos())
+                        .unwrap_or(0);
+                    eprintln!(
+                        "DEFAULT_INSETS t={t} left={left} top={top} right={right} bottom={bottom}"
+                    );
+                }
+            }
             ManagerRequest::Associate {
                 id,
                 surface,
@@ -284,33 +325,13 @@ impl Dispatch<AeroFrameManagerV1, ()> for AeroState {
                     return;
                 }
                 let existing: Vec<u32> = state.frames.iter().map(|(_, id)| *id).collect();
-                // Cold-start temporário: o primeiro associate do frame_host libera o
-                // cliente inicial adiado. Ele ainda não mapeou, então este associate
-                // NÃO é "janela fechada": tratamos como Ok e o configure sai quando o
-                // cliente mapear (reconfigure no commit).
-                let pending_cmd = state.pending_initial_command.take();
-                if let Some(command) = &pending_cmd {
-                    match crate::supervisor::spawn_public_client(&state.socket_name, command) {
-                        Ok(pid) => tracing::info!(
-                            ?command,
-                            pid,
-                            "cliente inicial iniciado (após associate)"
-                        ),
-                        Err(err) => {
-                            tracing::warn!(?command, %err, "falha ao iniciar cliente adiado")
-                        }
-                    }
-                }
                 // Correção F1: com IDs monotônicos, o limite de "janela
                 // existente" é o contador (water mark), não a contagem de janelas
                 // vivas — senão o id recém-alocado é tratado como corrida de
                 // fechamento e recebe `closed` em vez do configure.
+                // O cliente já nasceu no startup (main.rs); o associate apenas
+                // anexa a decoração a uma janela possivelmente já mapeada.
                 let window_count = state.next_window_id as usize + state.test_window_count;
-                let window_count = if pending_cmd.is_some() {
-                    window_count.max(window_id as usize + 1)
-                } else {
-                    window_count
-                };
                 match check_frame(&existing, window_id, window_count) {
                     FrameCheck::AlreadyConstructed => {
                         manager.post_error(
@@ -381,19 +402,17 @@ impl Dispatch<AeroFrameManagerV1, ()> for AeroState {
                         }
                     });
                 }
-                // Em produção: configure com o conteúdo REAL do cliente. No caso
-                // normal usa fallback no output; só no cliente inicial adiado (sem
-                // cliente mapeado) adia o configure para o commit do cliente.
+                // Em produção: configure com o conteúdo REAL do cliente quando já
+                // existe; senão usa o tamanho do output como fallback. O commit do
+                // cliente reconfigura com o tamanho real (protocols/compositor.rs).
                 #[cfg(not(feature = "bench"))]
                 {
                     let real = state.client_content_size(window_id);
-                    if real.is_some() || pending_cmd.is_none() {
-                        state.send_frame_configure(
-                            window_id,
-                            real.unwrap_or((size.w, size.h)),
-                            "probe",
-                        );
-                    }
+                    state.send_frame_configure(
+                        window_id,
+                        real.unwrap_or((size.w, size.h)),
+                        "probe",
+                    );
                 }
                 // Só sob `bench`: quantos passos de resize sintéticos enviar de uma
                 // vez (N=5 / N=20 nas medições).

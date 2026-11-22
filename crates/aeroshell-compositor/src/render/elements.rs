@@ -70,7 +70,6 @@ pub struct FrameRenderInput<'a> {
     /// Origem do frame em coordenadas FÍSICAS (conteúdo + offset do frame).
     pub loc: SlicePoint,
     /// Origem do cliente em coordenadas LÓGICAS (usada pelo log do placeholder).
-    #[cfg(feature = "bench")]
     pub client_origin: Point<i32, Logical>,
     /// Tamanho de conteúdo commitado pelo cliente.
     pub committed: Size<i32, Logical>,
@@ -88,6 +87,68 @@ pub struct FrameRenderResult {
     pub kind: FrameRenderKind,
     #[cfg(feature = "bench")]
     pub titlebar_probe: Option<TitlebarFrame>,
+}
+
+/// Decoração sólida de uma janela que ainda não tem WebKit associado (ou cujo
+/// buffer ainda não chegou). É propriedade do COMPOSITOR, não do frame: qualquer
+/// janela mapeada recebe estas quatro faixas na geometria-alvo. A cor é a mesma
+/// do HTML; as constantes de geometria vêm de `fgeo` (anunciadas pelo shell).
+pub fn push_window_placeholder<R: ImportAll + ImportMem>(
+    elements: &mut Vec<AeroRenderElements<R>>,
+    fgeo: &FrameGeometry,
+    loc: SlicePoint,
+    committed: Size<i32, Logical>,
+    output_scale: f64,
+    client_origin: Point<i32, Logical>,
+    _window_id: u32,
+) -> FrameRenderResult {
+    let target = frame_target(committed, fgeo);
+    let dst: Size<i32, Physical> = target.to_physical_precise_round(output_scale);
+    let l = (fgeo.insets.0 as f64 * output_scale).round() as i32;
+    let t = (fgeo.insets.1 as f64 * output_scale).round() as i32;
+    let r = (fgeo.insets.2 as f64 * output_scale).round() as i32;
+    let b = (fgeo.insets.3 as f64 * output_scale).round() as i32;
+    let middle_h = (dst.h - t - b).max(0);
+    let rects = [
+        (loc, dst.w, t),
+        (SlicePoint::new(loc.x, loc.y + t), l, middle_h),
+        (SlicePoint::new(loc.x + dst.w - r, loc.y + t), r, middle_h),
+        (SlicePoint::new(loc.x, loc.y + dst.h - b), dst.w, b),
+    ];
+    for (origin, w, h) in rects {
+        if w <= 0 || h <= 0 {
+            continue;
+        }
+        let solid = SolidColorBuffer::new(
+            (w, h),
+            [43.0_f32 / 255.0, 43.0_f32 / 255.0, 43.0_f32 / 255.0, 1.0],
+        );
+        elements.push(AeroRenderElements::Solid(
+            SolidColorRenderElement::from_buffer(&solid, origin, 1.0, 1.0, Kind::Unspecified),
+        ));
+    }
+    #[cfg(feature = "bench")]
+    {
+        let t_nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        eprintln!(
+            "FRAME_PLACEHOLDER t={t_nanos} window_id={_window_id} \
+             x={} y={} w={} h={}",
+            client_origin.x + fgeo.offset().0,
+            client_origin.y + fgeo.offset().1,
+            target.w,
+            target.h,
+        );
+    }
+    #[cfg(not(feature = "bench"))]
+    let _ = client_origin;
+    FrameRenderResult {
+        kind: FrameRenderKind::Placeholder,
+        #[cfg(feature = "bench")]
+        titlebar_probe: None,
+    }
 }
 
 /// Monta os elementos do frame (9-slice com canvas fixo ou placeholder) em
@@ -409,59 +470,17 @@ where
             }
         }
         Ok(None) => {
-            // 02q: sem buffer ainda, a decoração não fica ausente. Desenha só
-            // titlebar/bordas (o centro continua livre para o cliente), com a
-            // mesma cor do HTML e na geometria-alvo.
-            let dst: Size<i32, Physical> = target.to_physical_precise_round(output_scale);
-            let l = (fgeo.insets.0 as f64 * output_scale).round() as i32;
-            let t = (fgeo.insets.1 as f64 * output_scale).round() as i32;
-            let r = (fgeo.insets.2 as f64 * output_scale).round() as i32;
-            let b = (fgeo.insets.3 as f64 * output_scale).round() as i32;
-            let middle_h = (dst.h - t - b).max(0);
-            let rects = [
-                (loc, dst.w, t),
-                (SlicePoint::new(loc.x, loc.y + t), l, middle_h),
-                (SlicePoint::new(loc.x + dst.w - r, loc.y + t), r, middle_h),
-                (SlicePoint::new(loc.x, loc.y + dst.h - b), dst.w, b),
-            ];
-            for (origin, w, h) in rects {
-                if w <= 0 || h <= 0 {
-                    continue;
-                }
-                let solid = SolidColorBuffer::new(
-                    (w, h),
-                    [43.0_f32 / 255.0, 43.0_f32 / 255.0, 43.0_f32 / 255.0, 1.0],
-                );
-                elements.push(AeroRenderElements::Solid(
-                    SolidColorRenderElement::from_buffer(
-                        &solid,
-                        origin,
-                        1.0,
-                        1.0,
-                        Kind::Unspecified,
-                    ),
-                ));
-            }
-            #[cfg(feature = "bench")]
-            {
-                let t_nanos = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_nanos())
-                    .unwrap_or(0);
-                eprintln!(
-                    "FRAME_PLACEHOLDER t={t_nanos} window_id={_window_id} \
-                     x={} y={} w={} h={}",
-                    input.client_origin.x + fgeo.offset().0,
-                    input.client_origin.y + fgeo.offset().1,
-                    target.w,
-                    target.h,
-                );
-            }
-            return Some(FrameRenderResult {
-                kind: FrameRenderKind::Placeholder,
-                #[cfg(feature = "bench")]
-                titlebar_probe,
-            });
+            // Sem buffer WebKit ainda: mesma decoração sólida de primeira classe
+            // usada para janelas que ainda não têm frame associado.
+            return Some(push_window_placeholder(
+                elements,
+                &fgeo,
+                loc,
+                committed,
+                output_scale,
+                input.client_origin,
+                _window_id,
+            ));
         }
         Err(err) => {
             tracing::warn!(?err, "import do frame falhou");

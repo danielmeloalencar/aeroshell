@@ -107,18 +107,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         )?;
     }
 
-    // Cliente inicial: com frame_host (--shell), ADIA o lançamento até o primeiro
-    // associate (cold-start temporário: a janela nunca aparece sem decoração).
-    // Sem frame_host, lança imediato. Só vale para o primeiro cliente.
+    // Cliente inicial nasce no startup, como qualquer outro cliente. A decoração
+    // sólida é garantida pelo compositor para toda janela mapeada (default
+    // insets anunciados pelo shell); o WebView anexa quando fica pronto.
     if let Some(command) = &opts.command {
-        if opts.shell.is_some() {
-            data.state.pending_initial_command = Some(command.clone());
-            tracing::info!(?command, "cliente inicial adiado até o frame associar");
-        } else {
-            match supervisor::spawn_public_client(&socket_name, command) {
-                Ok(pid) => tracing::info!(?command, pid, "cliente inicial iniciado"),
-                Err(err) => tracing::warn!(?command, %err, "falha ao iniciar cliente"),
-            }
+        match supervisor::spawn_public_client(&socket_name, command) {
+            Ok(pid) => tracing::info!(?command, pid, "cliente inicial iniciado"),
+            Err(err) => tracing::warn!(?command, %err, "falha ao iniciar cliente"),
         }
     }
 

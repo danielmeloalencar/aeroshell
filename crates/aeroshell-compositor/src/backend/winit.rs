@@ -172,6 +172,8 @@ pub fn init_winit(
     #[cfg(feature = "bench")]
     let mut redraw_seq = 0u64;
     #[cfg(feature = "bench")]
+    let mut n1_present_seq = 0u64;
+    #[cfg(feature = "bench")]
     let mut host_probe_done = false;
     let fixed_host_size = opts.size.is_some() || multi;
 
@@ -272,8 +274,8 @@ pub fn init_winit(
                             }
                             #[cfg(feature = "bench")]
                             eprintln!(
-                                "OUTPUT_FRAME output={} seq={seq} age={age} damage={damage_text}",
-                                _output.name()
+                                "OUTPUT_FRAME t={} output={} seq={seq} age={age} damage={damage_text}",
+                                crate::frame_diagnostics::now_ns(), _output.name()
                             );
                             #[cfg(not(feature = "bench"))]
                             let _ = damage_text;
@@ -543,7 +545,6 @@ pub fn init_winit(
                                                 surface: frame_surface,
                                                 fgeo,
                                                 loc,
-                                                #[cfg(feature = "bench")]
                                                 client_origin: geo.loc,
                                                 committed: geo.size,
                                                 output_scale,
@@ -570,6 +571,38 @@ pub fn init_winit(
                                                 titlebar_probe = Some(probe);
                                             }
                                         }
+                                    } else {
+                                        // 02q: nenhum WebView associado ainda. A janela
+                                        // mapeada recebe a decoração sólida do compositor
+                                        // com as insets anunciadas pelo shell no startup.
+                                        let mut window_id = 0;
+                                        for (id, surface) in state.window_surfaces.iter() {
+                                            if client_surface == Some(surface) {
+                                                window_id = *id;
+                                                break;
+                                            }
+                                        }
+                                        let fgeo = crate::state::FrameGeometry {
+                                            insets: state.default_frame_insets,
+                                            ..Default::default()
+                                        };
+                                        let (dx, dy) = fgeo.offset();
+                                        let loc =
+                                            smithay::utils::Point::<i32, smithay::utils::Logical>::new(
+                                                geo.loc.x + dx,
+                                                geo.loc.y + dy,
+                                            )
+                                            .to_physical_precise_round(output_scale);
+                                        crate::render::elements::push_window_placeholder(
+                                            &mut elements,
+                                            &fgeo,
+                                            loc,
+                                            geo.size,
+                                            output_scale,
+                                            geo.loc,
+                                            window_id,
+                                        );
+                                        render_order.push(format!("placeholder-sem-frame@{window_id}"));
                                     }
                                 }
 
@@ -665,6 +698,14 @@ pub fn init_winit(
                             if let Err(err) = backend.submit(Some(damage)) {
                                 tracing::warn!("submit falhou: {err}");
                             }
+                        }
+                        #[cfg(feature = "bench")]
+                        {
+                            n1_present_seq += 1;
+                            eprintln!(
+                                "OUTPUT_FRAME t={} output=n1 seq={n1_present_seq} age=0 damage=submitted",
+                                crate::frame_diagnostics::now_ns()
+                            );
                         }
                         let now = state.start_time.elapsed();
                         state.space.elements().for_each(|window| {

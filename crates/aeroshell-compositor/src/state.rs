@@ -168,9 +168,11 @@ pub struct AeroState {
     pub last_render_order: Vec<String>,
     /// Permite testes de protocolo validarem IDs sem criar uma janela xdg real.
     pub test_window_count: usize,
-    /// Cliente inicial adiado até o frame_host associar (cold-start temporário).
-    /// Consumido no primeiro associate; `None` depois disso ou sem `--shell`.
-    pub pending_initial_command: Option<String>,
+    /// Geometria da decoração anunciada pelo shell no startup via
+    /// `set_default_insets`. Usada pelo placeholder do compositor para janelas
+    /// mapeadas que ainda não têm WebView associado; `set_insets` do frame
+    /// sobrescreve quando ele associa. (0,0,0,0) até o shell declarar.
+    pub default_frame_insets: (i32, i32, i32, i32),
     /// Lista de clientes inseridos (usada só para sinalizar prontidão em testes).
     #[allow(dead_code)]
     pub test_client_count: usize,
@@ -343,7 +345,7 @@ impl AeroState {
             last_geometry_action: None,
             last_render_order: Vec::new(),
             test_window_count: 0,
-            pending_initial_command: None,
+            default_frame_insets: (0, 0, 0, 0),
             test_client_count: 0,
             compositor_state,
             xdg_shell_state,

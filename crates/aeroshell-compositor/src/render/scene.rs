@@ -281,7 +281,6 @@ pub fn collect_output_elements(
                         surface: frame_surface,
                         fgeo,
                         loc,
-                        #[cfg(feature = "bench")]
                         client_origin: local_loc,
                         committed: client_logical,
                         output_scale,
@@ -310,6 +309,37 @@ pub fn collect_output_elements(
                             titlebar_probe = Some(probe);
                         }
                     }
+                } else {
+                    // 02q: decoração do compositor para janelas que mapeiam antes
+                    // do WebView associar. Mesma geometria/insets do caminho winit.
+                    let mut window_id = 0;
+                    for (id, surface) in state.window_surfaces.iter() {
+                        if client_surface == Some(surface) {
+                            window_id = *id;
+                            break;
+                        }
+                    }
+                    let fgeo = crate::state::FrameGeometry {
+                        insets: state.default_frame_insets,
+                        ..Default::default()
+                    };
+                    let (dx, dy) = fgeo.offset();
+                    let loc: smithay::utils::Point<i32, smithay::utils::Physical> =
+                        smithay::utils::Point::<i32, smithay::utils::Logical>::new(
+                            local_loc.x + dx,
+                            local_loc.y + dy,
+                        )
+                        .to_physical_precise_round(output_scale);
+                    crate::render::elements::push_window_placeholder(
+                        &mut elements,
+                        &fgeo,
+                        loc,
+                        client_logical,
+                        output_scale,
+                        local_loc,
+                        window_id,
+                    );
+                    render_order.push(format!("placeholder-sem-frame@{window_id}"));
                 }
             }
         }

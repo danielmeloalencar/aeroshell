@@ -51,6 +51,16 @@ const RIGHT_CONTROLS: i32 = 96;
 const TITLE_TEXT_W: i32 = 120;
 const POOL_TARGET: usize = 2;
 
+/// Relógio de parede compartilhado com o `t=` das sondas do compositor.
+/// Instrumentação permanente de startup (os logs FRAMEWEB já existem); nenhuma
+/// decisão de runtime depende destes números.
+fn bench_t() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0)
+}
+
 struct FrameEntry {
     frame: AeroFrameV1,
     wl_surface: aero::wl_surface::WlSurface,
@@ -104,13 +114,20 @@ impl Dispatch<wl_registry::WlRegistry, ()> for SpikeState {
         } = event
         {
             if interface == "aero_frame_manager_v1" {
-                state.manager = Some(registry.bind::<AeroFrameManagerV1, (), SpikeState>(
+                let manager = registry.bind::<AeroFrameManagerV1, (), SpikeState>(
                     name,
                     version.min(1),
                     qh,
                     (),
-                ));
-                eprintln!("FRAMEWEB: manager global={name} vinculado");
+                );
+                // Primeira classe: o compositor precisa da geometria da decoração
+                // ANTES de qualquer associate, para desenhar o placeholder de uma
+                // janela que mapeou enquanto o WebView ainda não existe.
+                manager.set_default_insets(BORDER, TITLEBAR_H, BORDER, BORDER);
+                eprintln!(
+                    "FRAMEWEB: manager global={name} vinculado; default_insets=({BORDER},{TITLEBAR_H},{BORDER},{BORDER})"
+                );
+                state.manager = Some(manager);
             }
             if interface == "wl_seat" {
                 state.seat = Some(registry.bind::<wl_seat::WlSeat, (), SpikeState>(
@@ -363,6 +380,9 @@ thread_local! {
     static APP: RefCell<Option<Rc<gtk4::Application>>> = const { RefCell::new(None) };
     static ACTIVATED: Cell<bool> = const { Cell::new(false) };
     static ANCHOR: RefCell<Option<(gtk4::ApplicationWindow, WebView)>> = const { RefCell::new(None) };
+    /// Janela 1×1 sem WebView: serve só para derivar a conexão Wayland e anunciar
+    /// as insets padrão ANTES de iniciar o WebProcess da âncora.
+    static BOOTSTRAP_WINDOW: RefCell<Option<gtk4::ApplicationWindow>> = const { RefCell::new(None) };
     static POOL: RefCell<Vec<PoolItem>> = const { RefCell::new(Vec::new()) };
     static PENDING_FRAMES: RefCell<VecDeque<(u32, i32, i32)>> = const { RefCell::new(VecDeque::new()) };
     static NEXT_POOL_ID: Cell<usize> = const { Cell::new(0) };
@@ -457,7 +477,41 @@ fn create_anchor() {
     // nem associate: a âncora não entra no LayerMap nem recebe window_id.
     gtk4::prelude::WidgetExt::realize(&window);
     ANCHOR.with(|cell| *cell.borrow_mut() = Some((window, webview)));
-    eprintln!("FRAMEWEB: anchor viva (oculta, related_view em todos os frames)");
+    eprintln!(
+        "FRAMEWEB: anchor viva (oculta, related_view em todos os frames) anchor_viva t={}",
+        bench_t()
+    );
+}
+
+/// Inicializa o runtime Wayland com uma janela 1×1 SEM WebView. Isso permite
+/// anunciar as insets padrão antes de pagar o cold-start do WebProcess da
+/// âncora: a decoração sólida do compositor já nasce na geometria correta.
+fn bootstrap_at_startup() {
+    let app = APP
+        .with(|cell| cell.borrow().clone())
+        .expect("APP não inicializado");
+    let window = gtk4::ApplicationWindow::builder()
+        .application(&*app)
+        .title("aero bootstrap (hidden)")
+        .default_width(1)
+        .default_height(1)
+        .build();
+    gtk4::prelude::WidgetExt::realize(&window);
+    BOOTSTRAP_WINDOW.with(|cell| *cell.borrow_mut() = Some(window.clone()));
+    let gdk_surface = window.surface();
+    let Some(gdk_surface) = gdk_surface else {
+        eprintln!("FRAMEWEB: âncora sem GdkSurface; runtime não iniciado");
+        return;
+    };
+    let Some(wayland) = gdk_surface.downcast_ref::<WaylandSurface>() else {
+        eprintln!("FRAMEWEB: GdkSurface da âncora não é WaylandSurface");
+        return;
+    };
+    let Some(wl_surface) = wayland.wl_surface() else {
+        eprintln!("FRAMEWEB: wl_surface=None na âncora");
+        return;
+    };
+    bootstrap_runtime(&wl_surface);
 }
 
 fn associate_frame(
@@ -488,7 +542,7 @@ fn associate_frame(
             window_id,
         });
         eprintln!("FRAMEWEB: associate(window_id={window_id}) + set_insets({BORDER},{TITLEBAR_H},{BORDER},{BORDER}) \
-                   + set_titlebar_slices({TITLE_TEXT_W},{RIGHT_CONTROLS})");
+                   + set_titlebar_slices({TITLE_TEXT_W},{RIGHT_CONTROLS}) t={}", bench_t());
     });
 }
 
@@ -564,7 +618,7 @@ fn pool_mark_ready(pool_id: usize) {
         Some(pool.iter().filter(|item| item.ready).count())
     });
     if let Some(available) = available {
-        eprintln!("FRAMEWEB: pool_ready available={available}");
+        eprintln!("FRAMEWEB: pool_ready available={available} t={}", bench_t());
         drain_pending_frames();
     }
 }
@@ -639,7 +693,11 @@ fn prewarm_frame() {
                     if let Some(frame) = frame {
                         frame.frame_painted(serial);
                         let _ = rt.queue.flush();
-                        eprintln!("FRAMEWEB: frame_painted window_id={window_id} serial={serial}");
+                        eprintln!(
+                            "FRAMEWEB: frame_painted window_id={window_id} serial={serial} \
+                             html_painted t={} ",
+                            bench_t()
+                        );
                     }
                 });
             }
@@ -657,6 +715,7 @@ fn prewarm_frame() {
     window.set_child(Some(&webview));
     webview.connect_load_changed(move |_, event| {
         if event == webkit6::LoadEvent::Finished {
+            eprintln!("FRAMEWEB: html_ready t={} pool_id={pool_id}", bench_t());
             pool_mark_ready(pool_id);
         }
     });
@@ -721,12 +780,21 @@ fn bootstrap_runtime(wl_surface: &aero::wl_surface::WlSurface) {
     connection.display().get_registry(&qh, ());
     let _ = queue.flush();
     let mut state = SpikeState::default();
-    for _ in 0..30 {
-        glib::MainContext::default().iteration(false);
-        let _ = queue.dispatch_pending(&mut state);
-        std::thread::sleep(std::time::Duration::from_millis(2));
+    // Sem sleep e sem contagem de iterações cega: `blocking_dispatch` espera o
+    // próximo evento do registry que nós mesmos acabamos de pedir. O teto de 4
+    // dispatchs é só defesa contra um servidor que nunca responde; não há atraso
+    // fixo nem janela presa num número arbitrário de iterações vazias.
+    for _ in 0..4 {
+        if state.manager.is_some() {
+            break;
+        }
+        let _ = queue.blocking_dispatch(&mut state);
     }
-    eprintln!("FRAMEWEB: manager no guest = {}", state.manager.is_some());
+    eprintln!(
+        "FRAMEWEB: manager no guest = {} bootstrap t={}",
+        state.manager.is_some(),
+        bench_t()
+    );
     if state.manager.is_some() {
         RUNTIME.with(|cell| *cell.borrow_mut() = Some(Runtime { queue, state }));
     }
@@ -758,10 +826,14 @@ fn main() {
             gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );
 
-        // A âncora é separada e oculta; a janela 0 continua sendo o primeiro
-        // frame associado e libera o cliente inicial adiado.
+        // A âncora é separada e oculta. O runtime é iniciado AQUI (não no
+        // primeiro associate) para anunciar as insets padrão no startup, e o
+        // pool é pré-aquecido antes de qualquer cliente mapear. Não existe mais
+        // "frame da janela 0" criado por iniciativa do shell: o compositor pede
+        // um frame para cada janela mapeada via frame_requested.
+        bootstrap_at_startup();
         create_anchor();
-        request_frame(0, 0, 0);
+        ensure_pool_fill();
 
         glib::timeout_add_local(std::time::Duration::from_millis(20), || {
             dispatch_nonblocking();
