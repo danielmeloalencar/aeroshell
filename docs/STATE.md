@@ -21,6 +21,15 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **Backend udev passou a aplicar `--scale` (2026-11-22).** Depois do repasse de args corrigido, o humano
+      relatou que `--scale 1.5` e `--scale 2` não mudavam a tela. Causa confirmada: `udev.rs:31` recebia
+      `_opts` (descartado) e `:194` chamava `change_current_state(..., None, None, None)` — o udev ignorava
+      a escala; só `winit.rs:129` e o headless (corrigido em F1f) a aplicavam. Correção: `opts` real,
+      `Scale::Fractional(opts.scale)` no `change_current_state` e campo `scale=…` no log `UDEV_OUTPUT`
+      (import de `Scale` dentro da função, para não gerar aviso no build sem features). `bash scripts/check.sh`
+      → `OK`, `CHECK_EXIT=0`; clippy bench `-D warnings` 0; `--no-default-features` 0. **Não há VT aqui para
+      medir o resultado — o humano precisa repetir `~/u --scale 1.5` e conferir o log.** Não é regressão do
+      F1f: o protocolo/render já respondem à escala (nested/headless provados).
 - [x] **Repasse de args no `~/u` / `run-udev-diag.sh` (2026-11-22).** Humano relatou que `./u --scale 1.5`
       abria em 1.0. Causa confirmada: `~/u` já fazia `exec ... "$@"`, mas `scripts/run-udev-diag.sh:70-80`
       montava o comando fixo sem repassar args. Correção: `"$@"` ao final da invocação do compositor +
@@ -1220,8 +1229,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
 - **F1f — JUIZ VISUAL PENDENTE (2026-11-22).** Pixelmedição headless (borda colada, titlebar/borda
   escalando em 1.0/1.25/1.5) e nested 1.5 sem erros estão provados (§3), mas **nenhum humano julgou a
   aparência em escala fracionária no tty3**. O juiz deve abrir `~/u --scale 1.5` — o repasse de args no
-  script foi corrigido nesta sessão (§3); antes, o argumento era descartado e a abertura parecia 1.0,
-  e confirmar que frame/conteúdo/painel estão nítidos e alinhados, sem gap ou borda desproporcional.
+  script e o backend udev foram corrigidos nesta sessão (§3); antes, o argumento era descartado no script
+  e, depois disso, ignorado pelo udev — a tela seguia em 1.0. Confirmar no log `UDEV_OUTPUT … scale=1.5`
+  e que frame/conteúdo/painel estão nítidos e alinhados, sem gap ou borda desproporcional.
   **Tarefa NÃO fechada e F1g NÃO aberto sem o "ok"** (AGENTS.md §0.9 / §3.1). Não medido: udev/DRM,
   desempenho em GPU real (VM sem 3D).
 - **F1-popups-render — RESOLVIDO PELO JUIZ VISUAL (2026-11-22).** Humano abriu `gedit` no tty3 e, com

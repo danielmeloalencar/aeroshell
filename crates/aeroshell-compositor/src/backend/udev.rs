@@ -28,10 +28,11 @@ impl super::Backend for UdevBackend {
     feature = "backend_session_libseat"
 ))]
 pub fn init_udev(
-    _opts: &Options,
+    opts: &Options,
     event_loop: &mut EventLoop<CalloopData>,
     data: &mut CalloopData,
 ) -> Result<(), Box<dyn Error>> {
+    use smithay::output::Scale;
     use std::{
         cell::{Cell, RefCell},
         path::PathBuf,
@@ -191,7 +192,13 @@ pub fn init_udev(
         );
         let _global = output.create_global::<crate::state::AeroState>(&data.display_handle);
         output.set_preferred(wl_mode);
-        output.change_current_state(Some(wl_mode), None, None, None);
+        // F1f: `--scale` também vale na sessão real, não só no nested/headless.
+        output.change_current_state(
+            Some(wl_mode),
+            None,
+            Some(Scale::Fractional(opts.scale)),
+            None,
+        );
         data.state.space.map_output(&output, (0, 0));
         data.state.outputs.push(output.clone());
 
@@ -229,6 +236,7 @@ pub fn init_udev(
             ?crtc,
             active = manager.device().is_active(),
             connectors = 1,
+            scale = opts.scale,
             "UDEV_OUTPUT"
         );
     }
