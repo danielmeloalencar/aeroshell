@@ -297,10 +297,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     eprintln!("CSD_CLIENT pronto_para_input");
 
-    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    let started = std::time::Instant::now();
+    let deadline = started + Duration::from_secs(30);
     while std::time::Instant::now() < deadline {
         queue.roundtrip(&mut app)?;
-        if geometry_only && !app.geometry_sent {
+        // A geometria com sombra aparece TARDE no GTK4, depois de vários
+        // polls do shell: o bug do `continue` punha a checagem de CSD abaixo
+        // do bloco do ícone e nunca a alcançava nesse caso.
+        if geometry_only && !app.geometry_sent && started.elapsed() >= Duration::from_secs(2) {
             app.send_csd_geometry();
             app.geometry_sent = true;
         }

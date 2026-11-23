@@ -653,56 +653,58 @@ fn refresh_titles() {
             entry.last_icon = signature;
             true
         });
-        if !changed {
-            continue;
-        }
-        let (script, log) = match icon {
-            Some(IconSource::Pixels { w, h, format, b64 }) => {
-                let payload = serde_json::json!({
-                    "w": w, "h": h, "format": format, "b64": b64,
-                });
-                let payload = serde_json::to_string(&payload).unwrap_or_else(|_| "null".to_owned());
-                (
-                    format!("window.aeroSetIcon && window.aeroSetIcon({payload});"),
-                    format!(
-                        "FRAMEWEB: titlebar_icon window_id={window_id} w={w} h={h} source=protocolo"
-                    ),
-                )
-            }
-            Some(IconSource::Name(name)) => match theme_icon_uri(&name) {
-                Some(uri) => {
-                    let payload = serde_json::json!({ "uri": uri });
+        // NÃO usar `continue` aqui: isso pularia a checagem de CSD abaixo
+        // quando o ícone não muda (o caso do GTK4 no tty3).
+        if changed {
+            let (script, log) = match icon {
+                Some(IconSource::Pixels { w, h, format, b64 }) => {
+                    let payload = serde_json::json!({
+                        "w": w, "h": h, "format": format, "b64": b64,
+                    });
                     let payload =
                         serde_json::to_string(&payload).unwrap_or_else(|_| "null".to_owned());
                     (
                         format!("window.aeroSetIcon && window.aeroSetIcon({payload});"),
                         format!(
-                            "FRAMEWEB: titlebar_icon window_id={window_id} source=nome name={name}"
-                        ),
+                        "FRAMEWEB: titlebar_icon window_id={window_id} w={w} h={h} source=protocolo"
+                    ),
                     )
                 }
+                Some(IconSource::Name(name)) => match theme_icon_uri(&name) {
+                    Some(uri) => {
+                        let payload = serde_json::json!({ "uri": uri });
+                        let payload =
+                            serde_json::to_string(&payload).unwrap_or_else(|_| "null".to_owned());
+                        (
+                            format!("window.aeroSetIcon && window.aeroSetIcon({payload});"),
+                            format!(
+                            "FRAMEWEB: titlebar_icon window_id={window_id} source=nome name={name}"
+                        ),
+                        )
+                    }
+                    None => (
+                        "window.aeroSetIcon && window.aeroSetIcon(null);".to_owned(),
+                        format!("FRAMEWEB: titlebar_icon window_id={window_id} source=fallback"),
+                    ),
+                },
                 None => (
                     "window.aeroSetIcon && window.aeroSetIcon(null);".to_owned(),
                     format!("FRAMEWEB: titlebar_icon window_id={window_id} source=fallback"),
                 ),
-            },
-            None => (
-                "window.aeroSetIcon && window.aeroSetIcon(null);".to_owned(),
-                format!("FRAMEWEB: titlebar_icon window_id={window_id} source=fallback"),
-            ),
-        };
-        webview.evaluate_javascript(
-            &script,
-            None,
-            None,
-            None::<&webkit6::gio::Cancellable>,
-            |result| {
-                if let Err(err) = result {
-                    eprintln!("FRAMEWEB: aeroSetIcon falhou: {err}");
-                }
-            },
-        );
-        eprintln!("{log}");
+            };
+            webview.evaluate_javascript(
+                &script,
+                None,
+                None,
+                None::<&webkit6::gio::Cancellable>,
+                |result| {
+                    if let Err(err) = result {
+                        eprintln!("FRAMEWEB: aeroSetIcon falhou: {err}");
+                    }
+                },
+            );
+            eprintln!("{log}");
+        }
 
         // O gedit não pede ClientSide: a sombra aparece na window_geometry
         // só depois do primeiro commit. Por isso CSD também é consultado no

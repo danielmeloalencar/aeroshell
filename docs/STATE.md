@@ -87,7 +87,14 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
       `Server`; agora respondemos uma vez por superfície (1 `CSD_DETECT` em 6 s, antes centenas).
       Harnesses `--geometry-only` e explícito OK após reconstruir com `--features bench` (o `check.sh` reconstrói o bin
       sem bench — rodar o build bench DEPOIS do gate). Gate `gate-final3.log` EXIT=0, clippy bench 0.
-      **Aguardando novo juiz com build fresco no tty3; cartão NÃO fechado.**
+      **6º juiz (2026-11-22): Calculadora ainda com barra dupla.** O log do teste
+      (`~/aeroshell-udev-20261122-231052.log`) mostrou a causa real: `CSD_GEOM window_id=1 loc=(0,0)` (antes do commit)
+      e **nenhuma consulta depois** — no `refresh_titles()` do shell, o bloco do ícone fazia `continue` quando o ícone
+      não mudava, pulando a checagem de CSD abaixo. Corrigido: sem `continue`; CSD é consultado em TODOS os polls.
+      O cliente de teste `--geometry-only` agora só define a geometria após 2 s (imitando o GTK4): baseline FALHAVA
+      antes da correção; com ela `geom-late1.log` → `VEREDITO: OK`, `CSD_DETECT ... reason=geometry` e
+      `csd_applied ... bar=hidden`. Modo explícito `final19.log` OK; gate `gate-final4.log` EXIT=0, clippy bench 0.
+      **Aguardando 7º juiz com build fresco no tty3; cartão NÃO fechado.**
 - [x] **F1-toplevel-icon — ícone real na titlebar FECHADO PELO JUIZ VISUAL (2026-11-22).**
       Cartão `docs/tasks/F1-toplevel-icon.md` (humano escolheu um cartão único com as duas etapas).
       **Guia (não receita):** `domicile-engine` — base64 próprio (`packages/domicile-host/src/base64.rs:1`),
@@ -1640,9 +1647,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- **F1-csd-gtk — AGUARDA JUIZ VISUAL COM BUILD FRESCO (2026-11-22):** gedit e gnome-disks OK; Calculadora ainda com
-  barra dupla no último teste, mas o log prova que a sessão era de build antigo. O build atual detecta GTK3 (KDE) e
-  GTK4 (window_geometry) em medição headless. Falta reiniciar `~/u` e confirmar em todos. Sem o "ok", o cartão NÃO fecha.
+- **F1-csd-gtk — AGUARDA JUIZ VISUAL (2026-11-22):** gedit e gnome-disks OK; Calculadora ainda com barra dupla no 6º
+  teste. Causa lida no log e corrigida: `continue` do bloco do ícone impedia consultar CSD nos polls seguintes (§3).
+  Falta reiniciar `~/u` com o build atual e confirmar os três apps. Sem o "ok", o cartão NÃO fecha.
   **Não medido:** temas/DPI alto e GPU real (VM sem 3D). **Bloqueio do pré-filtro visual:** o `gedit` não abre no
   nested (`(gedit): Gtk-ERROR: GTK 2/3 symbols detected. Using GTK 2/3 and GTK 4 in the same process is not
   supported`, log `/tmp/opencode/f1-csd/visual.log`); o julgamento tem de ser no tty3 com o binário novo. Já havia
