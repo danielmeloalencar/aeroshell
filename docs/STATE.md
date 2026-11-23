@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-22 · **Fase atual: F1** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · **F1i+ FECHADA PELO JUIZ VISUAL (digitação normal; só aviso de toplevel-icon, fora de escopo)** · **título real na titlebar FECHADO PELO JUIZ VISUAL ("ok")** · **F1-toplevel-icon: código/teste/gate verdes, juiz visual PENDENTE (§3/§7)** · cursor invisível no udev segue em cartão separado · 02q REABERTA E FECHADA PELO JUIZ em 2026-11-22 (sem adiamento, spike 12×36 eliminado; harness de 300 ms segue como limitação de VM registrada) · **02r FECHADA PELO JUIZ (nested + tty3) e 02s FECHADA PELO JUIZ (duas instâncias no mesmo D-Bus, "ok aprovado")**
+Última atualização: 2026-11-22 · **Fase atual: F1** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · **F1i+ FECHADA PELO JUIZ VISUAL (digitação normal; só aviso de toplevel-icon, fora de escopo)** · **título real na titlebar FECHADO PELO JUIZ VISUAL ("ok")** · **F1-toplevel-icon FECHADO PELO JUIZ VISUAL ("vi o icone perfeitamente")** · cursor invisível no udev segue em cartão separado · 02q REABERTA E FECHADA PELO JUIZ em 2026-11-22 (sem adiamento, spike 12×36 eliminado; harness de 300 ms segue como limitação de VM registrada) · **02r FECHADA PELO JUIZ (nested + tty3) e 02s FECHADA PELO JUIZ (duas instâncias no mesmo D-Bus, "ok aprovado")**
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -21,7 +21,7 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
-- [~] **F1-toplevel-icon — ícone real na titlebar (2026-11-22) — código/teste/gate verdes; juiz visual PENDENTE (§7).**
+- [x] **F1-toplevel-icon — ícone real na titlebar FECHADO PELO JUIZ VISUAL (2026-11-22).**
       Cartão `docs/tasks/F1-toplevel-icon.md` (humano escolheu um cartão único com as duas etapas).
       **Guia (não receita):** `domicile-engine` — base64 próprio (`packages/domicile-host/src/base64.rs:1`),
       data URL (`data_url.rs:3`) e lookup de ícone em diretórios XDG (`docs/SHELL-CONFIG.md:388-393`).
@@ -42,7 +42,11 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
       Gate `check.sh` EXIT=0 (`gate-final2.log`), clippy bench 0, `--no-default-features` 0.
       Vizinhos: `frame_window_id`, `frame_reopen`, `frame_buttons`, `frame_resize_glue`, `headless_render_damage`,
       `sdk_cli` OK; `frame_title` falhou 1× (2º `title_applied` ausente) e passou na repetição sem mudança de código
-      (`reg-frame_title.log` vs `-2`). **Nenhuma fase/cartão novo aberto.**
+      (`reg-frame_title.log` vs `-2`).
+      **JUIZ VISUAL: humano operou a instância `wayland-aero-iconvisual2-1795391487` e respondeu *"vi o icone
+      perfeitamente"* — critério deste cartão aprovado. No mesmo teste ele relatou outros sintomas (janela/diálogo
+      cortados, handles fora do lugar, arrastar não funcionava) que NÃO são deste cartão; registrados em §6/§7 com
+      medições próprias. Nenhuma instância encerrada pelo agente. Nenhuma fase/cartão novo aberto.**
 - [x] **Título real na titlebar FECHADO PELO JUIZ VISUAL (2026-11-22).**
       Cartão `docs/tasks/F1-titlebar-real-title.md`. O compositor JÁ expunha o título no IPC
       (`window_ipc.rs:30-41,80-102`); a lacuna era só no shell. `frame_webview.rs` ganhou `ipc_title()`
@@ -992,9 +996,10 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
-- **F1-toplevel-icon (2026-11-22): código, teste-first, 3× harness verde, regressões e gate prontos (§3). Falta o juiz
-  visual: ícone real visível na barra do `foot`/`gedit`. O humano já reportou que NÃO viu ícone nos testes anteriores
-  (antes do caminho de nome); uma instância nova será deixada aberta para novo julgamento. Não abrir próximo cartão.**
+- **F1-toplevel-icon FECHADO PELO JUIZ (2026-11-22) — ver §3.** Humano viu o ícone perfeitamente. Os demais sintomas
+  que relatou no mesmo teste (corte de janelas, handles desalinhados, arrasto/movimento) são de geometria/input,
+  registrados em §6/§7 para cartão próprio — **não** foram tratados aqui e **não** são regressão provada do ícone.
+  Nenhuma instância encerrada pelo agente. Não reabrir sem novo pedido.
 - **Título real na titlebar FECHADO PELO JUIZ (2026-11-22) — ver §3.** Humano confirmou o título real na barra com
   o `foot` na nested. Nenhuma instância encerrada pelo agente. Não reabrir sem novo pedido; próximo cartão só com
   autorização explícita.
@@ -1046,8 +1051,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. **NENHUMA AUTORIZADA — PARAR.** F1-toplevel-icon aguarda o juiz visual (§4/§7); título real e F1i+ FECHADOS PELO
-   JUIZ (§3). O próximo cartão SÓ com autorização explícita.
+0. **NENHUMA AUTORIZADA — PARAR.** F1-toplevel-icon FECHADO PELO JUIZ (§3), título real e F1i+ fechados (§3).
+   O próximo cartão SÓ com autorização explícita — em particular o de geometria/input de §6 (janela cortada /
+   handles desalinhados / arrasto), que NÃO foi aberto.
    02s FECHADA pelo juiz (§3), 02r FECHADA pelo juiz (§3),
    F1d3 FECHADA pelo juiz (§3).
    02r FECHADA pelo juiz (§3); F1d3 FECHADA pelo juiz (§3).
@@ -1086,6 +1092,16 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
 - **F1-toplevel-icon (2026-11-22): `frame_title` teve 1 amostra falha preservada** em
   `/tmp/opencode/f1-icon/reg-frame_title.log` (`title_applied` do 2º cliente não chegou a tempo); repetição imediata
   OK sem mudança de código. Não foi descartada.
+- **Sintomas de geometria/input relatados no juiz do ícone (2026-11-22) — cartão NOVO, NÃO autorizado.** Humano:
+  *"vi a janela do foot e um dialogo do zeity cortado pela metade (parte de baixo) e uma sensacao de que as janelas
+  estava renderizadas em um lugar e os handles funcionando em outro"* e, depois, *"inclusive arrastar nao funcionava
+  nem nada"* e *"ao passar o mouse, sem clicar a janela moveu"*. Medições: `frame_resize_edges` falhou 1×
+  (`BottomRight hit=None`), passou na repetição após o humano parar de arrastar (`reg2-` vs `reg3-`);
+  `frame_follows_resize` falha **também no commit pré-ícone `980777e`** (`baseline-follows.log`) → não é regressão do
+  ícone; teste controlado de hover sem botão em headless não moveu a janela (`(60,80)` antes e depois). Hipótese:
+  offset entre canvas/target do 9-slice e/ou geometria da janela host do winit; não investigado (fora do cartão).
+  Humanos podem ter interferido nos harnesses ao arrastar a janela aberta — registrado, não usado para descartar o
+  relato. **Abrir cartão próprio só com decisão explícita.**
 - **S1 voltou a falhar no gate de fechamento do título real (2026-11-22):**
   `/tmp/opencode/f1-title/gate-close.log` → `FALHA: cliente não mapeou toplevel dentro do compositor` e
   `zenity: Gtk-WARNING: Failed to open display`,EXIT=1 (8/9 Bun, 32/32 Rust). O mesmo gate já tinha passado nesta
@@ -1546,11 +1562,11 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- **F1-toplevel-icon — JUIZ VISUAL PENDENTE (2026-11-22):** humano reportou *"ainda não vi ícone na barra de título em
-  nenhum dos seus testes"*. Isso era dado real: até então só tinha havido harnesses que fecham rápido, e o `foot`
-  envia nome (não pixels), caminho que não existia. O pré-filtro agora mede `icon_applied` com `data:image/png` e
-  `titlebar_icon ... source=nome name=foot`, mas **não** prova a tela. Falta o humano confirmar na instância aberta.
-  **Não medido:** tema/DPI alto, desempenho em GPU real (VM sem 3D).
+- **F1-toplevel-icon — JUIZ VISUAL OBTIDO (2026-11-22): humano respondeu *"vi o icone perfeitamente"*.** O pré-filtro
+  mediu `icon_applied` com data URI e `titlebar_icon ... source=nome name=foot`; a sentença final foi do humano.
+  **Não validado / não medido (§6):** corte da parte inferior de janelas/diálogos, alinhamento entre pixels
+  renderizados e handles de input, e a alegação de movimento sem clique — o teste controlado de hover não reproduziu,
+  mas o relato do humano prevalece até um cartão de geometria/input medi-lo. Tema/DPI alto e GPU real também não medidos.
 - **Título real na titlebar — JUIZ VISUAL OBTIDO (2026-11-22): humano respondeu "ok"** ao ver o título real na barra
   do `foot` na nested. O harness mediu o valor lido de volta do DOM via `postMessage` (`title_applied`); a sentença
   final foi do humano. **Não medido:** latência do polling em GPU real (VM sem 3D); títulos com UTF-8/emoji na tela.
@@ -1905,8 +1921,9 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
   Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-compositor --example toplevel_icon_client && cargo build -p aeroshell-shell --example frame_webview && python3 tests/integration/f1_toplevel_icon.py`
   → `VEREDITO: OK` 3× (`/tmp/opencode/f1-icon/final{15,16,17}.log`); baseline FALHA em `baseline2.log`.
   Gate `gate-final2.log` EXIT=0, clippy bench 0, `--no-default-features` 0.
-- **Próximo passo:** obter o "ok" visual do humano na instância deixada aberta (PIDs no relatório). Só depois fechar
-  o cartão. Não avançar de fase nem implementar temas/DPI alto sem autorização.
+- **Próximo passo: NENHUM AUTORIZADO — PARAR (AGENTS.md §3.1).** Cartão fechado pelo juiz. Não avançar de fase;
+  se o humano quiser, abrir cartão NOVO para os sintomas de geometria/input de §6 (com medição de pixel↔handle),
+  temas/DPI alto ou qualquer outra coisa. Não reabrir este sem pedido.
 - **Sessão atual: título real na titlebar FECHADO PELO JUIZ VISUAL (2026-11-22) — ver §3.**
   Instância nested deixada aberta: compositor PID 248731, shell 248736, `foot -T 'Titulo Real AeroShell'` PID 248740,
   socket `wayland-aero-title-1795388310`, IPC `/tmp/opencode/f1-title/visual-ipc-1795388310.sock`, log
