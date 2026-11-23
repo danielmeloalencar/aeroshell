@@ -22,6 +22,7 @@ use smithay::{
         fractional_scale::{with_fractional_scale, FractionalScaleManagerState},
         input_method::InputMethodManagerState,
         output::OutputManagerState,
+        presentation::PresentationState,
         selection::{data_device::DataDeviceState, primary_selection::PrimarySelectionState},
         shell::kde::decoration::KdeDecorationState,
         shell::{
@@ -212,6 +213,9 @@ pub struct AeroState {
     /// F1-dmabuf: global `zwp_linux_dmabuf_v1` (vivo enquanto o estado existe).
     pub dmabuf_state: DmabufState,
     pub dmabuf_global: Option<DmabufGlobal>,
+    /// F1-presentation-time: global `wp_presentation` + sequência por output.
+    pub presentation_state: Option<PresentationState>,
+    pub presentation_seq: HashMap<String, u64>,
     pub output_manager_state: OutputManagerState,
     pub seat_state: SeatState<AeroState>,
     pub data_device_state: DataDeviceState,
@@ -364,6 +368,10 @@ impl AeroState {
         let shm_state = ShmState::new::<Self>(&dh, vec![]);
         // O global dmabuf é criado por cada backend assim que o renderer existe.
         let dmabuf_state = DmabufState::new();
+        let presentation_state = Some(PresentationState::new::<Self>(
+            &dh,
+            crate::protocols::presentation::clock_id(),
+        ));
         let output_manager_state = OutputManagerState::new_with_xdg_output::<Self>(&dh);
         let mut seat_state = SeatState::new();
         let data_device_state = DataDeviceState::new::<Self>(&dh);
@@ -466,6 +474,8 @@ impl AeroState {
             shm_state,
             dmabuf_state,
             dmabuf_global: None,
+            presentation_state,
+            presentation_seq: HashMap::new(),
             output_manager_state,
             seat_state,
             data_device_state,

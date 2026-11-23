@@ -369,6 +369,16 @@ pub fn init_winit(
                                 tracing::warn!("submit falhou: {err}");
                             }
                         }
+                        // F1-presentation-time: o swap do host é o ponto de
+                        // apresentação real no nested; responder depois dele e
+                        // antes dos frame callbacks.
+                        for output in &outputs {
+                            crate::protocols::presentation::present_output(
+                                state,
+                                output,
+                                smithay::reexports::wayland_protocols::wp::presentation_time::server::wp_presentation_feedback::Kind::Vsync,
+                            );
+                        }
 
                         let now = state.start_time.elapsed();
                         for output in &outputs {
@@ -434,7 +444,7 @@ pub fn init_winit(
                     }
 
                     // F0/S1: caminho direto de UM output, inalterado pela F1c.
-                    let Some(output) = state.outputs.first() else {
+                    let Some(output) = state.outputs.first().cloned() else {
                         return;
                     };
                     let Some(tracker) = damage_trackers.first_mut() else {
@@ -453,7 +463,7 @@ pub fn init_winit(
                             #[cfg(feature = "bench")]
                             let mut titlebar_probe = None;
                             {
-                                let layer_map = smithay::desktop::layer_map_for_output(output);
+                                let layer_map = smithay::desktop::layer_map_for_output(&output);
                                 let (lower, upper): (Vec<_>, Vec<_>) = layer_map
                                     .layers()
                                     .rev()
@@ -475,7 +485,7 @@ pub fn init_winit(
 
                                 let mut placed_frames = Vec::new();
                                 let mut render_order: Vec<String> = Vec::new();
-                                for window in state.space.elements_for_output(output).rev() {
+                                for window in state.space.elements_for_output(&output).rev() {
                                     let Some(geo) = state.space.element_geometry(window) else {
                                         continue;
                                     };
@@ -571,7 +581,7 @@ pub fn init_winit(
                                                 committed: geo.size,
                                                 output_scale,
                                                 #[cfg(feature = "bench")]
-                                                output,
+                                                output: &output,
                                                 window_id: *_window_id,
                                                 #[cfg(feature = "bench")]
                                                 resize_active: state.resize_grab_active
@@ -733,6 +743,12 @@ pub fn init_winit(
                                 tracing::warn!("submit falhou: {err}");
                             }
                         }
+                        // F1-presentation-time: submit/swap é a apresentação real.
+                        crate::protocols::presentation::present_output(
+                            state,
+                            &output,
+                            smithay::reexports::wayland_protocols::wp::presentation_time::server::wp_presentation_feedback::Kind::Vsync,
+                        );
                         #[cfg(feature = "bench")]
                         {
                             n1_present_seq += 1;
@@ -743,13 +759,13 @@ pub fn init_winit(
                         }
                         let now = state.start_time.elapsed();
                         state.space.elements().for_each(|window| {
-                            window.send_frame(output, now, Some(Duration::ZERO), |_, _| {
+                            window.send_frame(&output, now, Some(Duration::ZERO), |_, _| {
                                 Some(output.clone())
                             })
                         });
                         for layer in &state.layer_surfaces {
                             if layer.alive() {
-                                layer.send_frame(output, now, Some(Duration::ZERO), |_, _| {
+                                layer.send_frame(&output, now, Some(Duration::ZERO), |_, _| {
                                     Some(output.clone())
                                 });
                             }
@@ -776,7 +792,7 @@ pub fn init_winit(
                                         output.name()
                                     );
                                 }
-                                layer.send_frame(output, now, Some(Duration::ZERO), |_, _| {
+                                layer.send_frame(&output, now, Some(Duration::ZERO), |_, _| {
                                     Some(output.clone())
                                 });
                             }

@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-23 · **Fase atual: F1** · **F1-xdg-toplevel-states FECHADO PELO JUIZ VISUAL ("aprovado")** · **F1-subsurfaces FECHADO PELO JUIZ VISUAL (2026-11-23: "Funcionou tudo")** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · **F1i+ FECHADA PELO JUIZ VISUAL (digitação normal; só aviso de toplevel-icon, fora de escopo)** · **título real na titlebar FECHADO PELO JUIZ VISUAL ("ok")** · **F1-toplevel-icon FECHADO PELO JUIZ VISUAL ("vi o icone perfeitamente")** · **F1-csd-gtk-move-resize FECHADO PELO JUIZ VISUAL ("ok": gedit, gnome-disks e Calculadora OK)** · **F1-csd-sem-flash FECHADO PELO JUIZ VISUAL ("aprovado")** · cursor invisível no udev segue em cartão separado · 02q REABERTA E FECHADA PELO JUIZ em 2026-11-22 (sem adiamento, spike 12×36 eliminado; harness de 300 ms segue como limitação de VM registrada) · **02r FECHADA PELO JUIZ (nested + tty3) e 02s FECHADA PELO JUIZ (duas instâncias no mesmo D-Bus, "ok aprovado")**
+Última atualização: 2026-11-23 · **Fase atual: F1** · **F1-presentation-time FECHADO (juiz visual N/A); GATE FINAL de apps pendente** · **F1-xdg-toplevel-states FECHADO PELO JUIZ VISUAL ("aprovado")** · **F1-subsurfaces FECHADO PELO JUIZ VISUAL (2026-11-23: "Funcionou tudo")** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · **F1i+ FECHADA PELO JUIZ VISUAL (digitação normal; só aviso de toplevel-icon, fora de escopo)** · **título real na titlebar FECHADO PELO JUIZ VISUAL ("ok")** · **F1-toplevel-icon FECHADO PELO JUIZ VISUAL ("vi o icone perfeitamente")** · **F1-csd-gtk-move-resize FECHADO PELO JUIZ VISUAL ("ok": gedit, gnome-disks e Calculadora OK)** · **F1-csd-sem-flash FECHADO PELO JUIZ VISUAL ("aprovado")** · cursor invisível no udev segue em cartão separado · 02q REABERTA E FECHADA PELO JUIZ em 2026-11-22 (sem adiamento, spike 12×36 eliminado; harness de 300 ms segue como limitação de VM registrada) · **02r FECHADA PELO JUIZ (nested + tty3) e 02s FECHADA PELO JUIZ (duas instâncias no mesmo D-Bus, "ok aprovado")**
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -21,6 +21,29 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **F1-presentation-time (2026-11-23) — código/teste/gates verdes; juiz visual NÃO se aplica (decisão do humano).**
+      Cartão `docs/tasks/F1-presentation-time.md` aprovado e executado. APIs confirmadas no Smithay 0.7.0 fixado:
+      `PresentationState::new::<D>(&dh, clk_id)` cria global v2 (`wayland/presentation/mod.rs:97-107,105`);
+      `delegate_presentation!` (`:349-364`); `clock_id` é `clockid_t` POSIX bruto — `ClockId::Monotonic as u32`
+      (= 1) via `smithay::reexports::rustix`; `PresentationFeedbackCallback::presented(output, Duration,
+      Refresh, seq, Kind)` (`:233-240`); `OutputPresentationFeedback` é STRUCT (`desktop/wayland/utils.rs:370`)
+      com `presented()` em `:391-414`; `DrmCompositor::frame_submitted()` devolve o user_data de `queue_frame`
+      (`backend/drm/compositor/mod.rs:2604`); winit `submit()` NÃO devolve feedback (`backend/winit/mod.rs:326-329`).
+      **Nenhum XML/ADR/dependência nova.** Código: `protocols/presentation.rs` novo (global com CLOCK_MONOTONIC,
+      `seq` por output, `Refresh::fixed` derivado do `Mode.refresh` mHz, drenagem de callbacks antes dos frame
+      callbacks) ligado em headless (tick do timer — documentado como NÃO-vblank e sem flag `Vsync`), winit (após
+      `submit`/swap) e udev (callbacks povoadas em `queue_frame`, `presented()` no vblank de `frame_submitted`).
+      `state.rs` guarda `presentation_state` + `presentation_seq: HashMap<output, u64>`.
+      **Teste-first:** `examples/presentation_client.rs` + `tests/integration/f1_presentation_time.py` escritos
+      antes; baseline `VEREDITO: FALHA` (global ausente nos dois backends). Depois **3× `VEREDITO: OK`**:
+      `PRES_CLIENT GLOBAL clock=1`, 8 `PRES_CLIENT FEEDBACK seq=13,24,34,… tv=4588.… refresh=16666667`
+      (16,7 ms = 60 Hz do mode), `PRESENT_FEEDBACK … seq=… n=1` no log bench, 0 erros de protocolo.
+      Gates: `check.sh` EXIT=0 (`gate-final4.log`), clippy bench 0, no-default 0; sonda `PRESENT_FEEDBACK t=`
+      **0 ocorrências no binário sem `bench`** (verificado por `strings`). Vizinhos: `headless_render_damage`,
+      `frame_buttons`, `frame_resize_glue`, `frame_fixed_canvas_hygiene` → OK; `multi_output_damage` e
+      `frame_window_id` falharam 2×, mas **A/B no HEAD sem minhas mudanças falha idêntico** → pré-existentes (§6).
+      Sem flicker/perf novo medido em nested (VM sem 3D); juiz visual não se aplica a feedback offscreen.
+      **Próximo: GATE FINAL de apps reais da F1 (§5), ainda com ok do humano antes de F1 FECHADA.**
 - [x] **F1-xdg-toplevel-states (2026-11-23) — FECHADO PELO JUIZ VISUAL: humano respondeu *"aprovado"*.**
       Juiz operou a instância nested deixada aberta (compositor PID 24370, socket `wayland-aero-xdgstates-visual`,
       gedit PID 24379) e aprovou fullscreen sem barra dupla, maximize pela área útil e diálogo modal; agente não
@@ -1312,6 +1335,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
+- **F1-presentation-time FECHADO (§3): global/feedback/gates verdes; juiz visual não se aplica.**
+  Falta o **GATE FINAL de apps reais** (foot, gedit, qterminal, kate, Firefox, nautilus; VSCode só se o ambiente
+  permitir) e o "ok" do humano para commitar `docs(state): F1 FECHADA`. Não abrir F2.
 - **F1-xdg-toplevel-states FECHADO (§3): humano aprovou o juiz visual ("aprovado") no nested com gedit.**
   **PARAR — não abrir presentation-time sem "ok" do humano.** Nenhum processo foi encerrado pelo agente.
 - **F1-clipboard-two-clients FECHADO (§3): A→B em headless + winit, 3× OK, gates verdes.**
@@ -1382,13 +1408,14 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
 0. **SEQUÊNCIA F1-FINAL REVISADA (humano, 2026-11-23): F1-dmabuf → clipboard 2 clientes → xdg-toplevel-states →
    presentation-time. Um cartão por sessão; PARAR antes do próximo cartão e antes da F2.** F1-dmabuf FECHADO com
    ressalvas (VSCode requalificado como compatibilidade de ambiente/DX, não bloqueante); F1-clipboard-two-clients
-   FECHADO (A→B em headless+winit, 3× OK, sem mudança de produto); F1-xdg-toplevel-states executado nesta sessão
-   (§3): 4 estados com harness estável 3× OK, gates verdes, juiz visual pendente. Cartão seguinte:
-   `F1-presentation-time.md` (rascunho aguardando ok).
+   FECHADO (A→B em headless+winit, 3× OK, sem mudança de produto); F1-xdg-toplevel-states FECHADO PELO JUIZ
+   ("aprovado"); F1-presentation-time executado nesta sessão (§3): 3× OK headless+winit, gates verdes, sonda fora
+   do binário normal, juiz visual NÃO se aplica. **Todos os cartões da sequência concluídos.**
+   **Próximo passo: GATE FINAL de apps reais da F1 (foot, gedit, qterminal, kate, Firefox, nautilus; VSCode só se
+   o ambiente permitir); com gate verde + "ok" do humano, commitar `docs(state): F1 FECHADA`. SÓ então F2.**
    **cursor-shape e primary-selection JÁ FECHADOS — removidos da fila pelo humano**; F1f FECHADO; xdg_activation
    sanada na F1i+. Decoração: manter ServerSide+CSD e expor estado via IPC para a política Bun na F2, sem mudar
    arquitetura. STATE.md >150 linhas: cartão de docs próprio depois.
-   **Próximo passo: SÓ com "ok" do humano, abrir `F1-presentation-time.md`.**
 1. **NENHUMA AUTORIZADA — PARAR.** F1-csd-sem-flash, F1-csd-gtk-move-resize, F1-toplevel-icon, título real e F1i+
    FECHADOS PELO JUIZ (§3/§7). O próximo cartão só com decisão explícita; não avançar de fase nem abrir spike D-Bus.
    02s FECHADA pelo juiz (§3), 02r FECHADA pelo juiz (§3),
@@ -1422,6 +1449,13 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **F1-presentation-time (2026-11-23): 2 correções de instrumento + A/B dos vizinhos.** O cliente precisou de um
+  SEGUNDO roundtrip para receber o `clock_id` enviado no bind (o primeiro só entrega os globals); a sonda
+  `PRESENT_FEEDBACK t=` fogia para o binário normal sempre que `cargo build --workspace --examples` rodava depois
+  do build com `bench` — conferido por `strings` (0 ocorrências no binário final sem bench). `multi_output_damage`
+  e `frame_window_id` falharam 2× cada, mas **A/B no HEAD sem minhas mudanças (worktree `4dcc708`) falha idêntico**
+  — pré-existentes, não regressão. Worktree de A/B removido e binários restaurados com `cargo clean` dos dois
+  crates. No headless não há vblank: o "present" é o tick do timer e a flag `Vsync` NÃO é alegada ao cliente.
 - **F1-xdg-toplevel-states (2026-11-23): 3 correções de instrumento + 2 vizinhos intermitentes.** O cliente sintético
   precisou responder ao configure com um buffer do tamanho pedido; `frame_state_for` precisa ler o estado PENDENTE
   (o commit do cliente ainda não chegou quando o configure do frame é reenviado); a saída do compositor se
@@ -1968,6 +2002,10 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- **F1-presentation-time (2026-11-23): juiz visual NÃO se aplica (decisão do humano) — feedback é offscreen.**
+  DRM/udev compilado com `presented()` no vblank de `frame_submitted()`, mas **não executado** (sem VT nesta VM).
+  Desempenho/flicker em GPU real não medido; só funcionamento no nested/headless (VM sem 3D).
+  Falta o GATE FINAL de apps reais e o "ok" do humano para F1 FECHADA.
 - **F1-xdg-toplevel-states (2026-11-23): JUIZ VISUAL APROVADO no nested com gedit ("aprovado").** DRM/tty3 e
   GPU real seguem sem medição nesta VM; a instância nested (PID 24370, gedit 24379) foi deixada aberta — quem
   fecha é o humano, não o agente (AGENTS §0.9).
@@ -2386,6 +2424,15 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
+- **SESSÃO ATUAL (2026-11-23): F1-presentation-time — código/teste/gates verdes; juiz visual N/A.**
+  `protocols/presentation.rs` (global v2 + CLOCK_MONOTONIC + seq por output), ligado nos 3 backends; headless usa
+  tick do timer sem alegar Vsync, winit responde após submit/swap, udev no vblank de `frame_submitted`.
+  Reproduzir (bench POR ÚLTIMO):
+  `cargo build --workspace --examples && cargo build -p aeroshell-compositor --features bench && python3 tests/integration/f1_presentation_time.py`
+  → `VEREDITO: OK` em headless+winit, `clock=1`, seq crescente, `tv` monotônico; baseline sem o global dava FALHA.
+  `check.sh` EXIT=0, clippy bench 0, no-default 0, sonda 0 no binário normal; A/B e dívidas em §6.
+  **Próximo passo: GATE FINAL de apps reais (foot/gedit/qterminal/kate/Firefox/nautilus; VSCode se permitir),
+  depois "ok" → commit `docs(state): F1 FECHADA`. NÃO abrir F2.** Sem push.
 - **SESSÃO ENCERRADA (2026-11-23): F1-xdg-toplevel-states — FECHADO PELO JUIZ VISUAL ("aprovado").**
   4 estados implementados, harness 3× OK, gates verdes; humano operou gedit no nested e aprovou.
   Código: `protocols/toplevel_states.rs` + handlers em `xdg_shell.rs`, `render/scene.rs`, `grab.rs`, `window_ipc.rs`,

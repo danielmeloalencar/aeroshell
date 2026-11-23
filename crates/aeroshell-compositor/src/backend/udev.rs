@@ -75,8 +75,14 @@ pub fn init_udev(
 
     use crate::render::{elements::AeroRenderElements, scene::collect_output_elements};
 
-    type Slot =
-        DrmOutput<GbmAllocator<DrmDeviceFd>, GbmFramebufferExporter<DrmDeviceFd>, (), DrmDeviceFd>;
+    // F1-presentation-time: o user_data do frame é o feedback deste output,
+    // recuperado no vblank por frame_submitted().
+    type Slot = DrmOutput<
+        GbmAllocator<DrmDeviceFd>,
+        GbmFramebufferExporter<DrmDeviceFd>,
+        smithay::desktop::utils::OutputPresentationFeedback,
+        DrmDeviceFd,
+    >;
     struct OutputSlot {
         crtc: smithay::reexports::drm::control::crtc::Handle,
         wl_output: Output,
@@ -339,7 +345,7 @@ pub fn init_udev(
     let vblank_source_count = vblank_count.clone();
     event_loop
         .handle()
-        .insert_source(drm_notifier, move |event, _, _| match event {
+        .insert_source(drm_notifier, move |event, _, data| match event {
             DrmEvent::VBlank(crtc) => {
                 let n = vblank_source_count.get() + 1;
                 vblank_source_count.set(n);
@@ -347,7 +353,28 @@ pub fn init_udev(
                     vblank_slots.borrow().iter().find(|slot| slot.crtc == crtc)
                 {
                     match slot.drm_output.frame_submitted() {
-                        Ok(_) => "ok",
+                        Ok(Some(mut feedback)) => {
+                            // F1-presentation-time: vblank é o ponto real de
+                            // apresentação no DRM; responder AQUI, não no commit.
+                            let seq = crate::protocols::presentation::next_seq(
+                                &mut data.state, &slot.wl_output,
+                            );
+                            let when = crate::protocols::presentation::monotonic_now();
+                            feedback.presented::<_, smithay::utils::Monotonic>(
+                                when,
+                                crate::protocols::presentation::refresh_for(&slot.wl_output),
+                                seq,
+                                smithay::reexports::wayland_protocols::wp::presentation_time::server::wp_presentation_feedback::Kind::Vsync,
+                            );
+                            #[cfg(feature = "bench")]
+                            eprintln!(
+                                "PRESENT_FEEDBACK t={} output={} seq={seq} source=vblank",
+                                crate::frame_diagnostics::now_ns(),
+                                slot.wl_output.name()
+                            );
+                            "ok"
+                        }
+                        Ok(None) => "none",
                         Err(err) => {
                             tracing::warn!(?err, "frame_submitted falhou");
                             "err"
@@ -447,7 +474,11 @@ pub fn init_udev(
                         let queued = if is_empty {
                             "empty"
                         } else {
-                            match slot.drm_output.queue_frame(()) {
+                            let feedback = crate::protocols::presentation::take_feedback(
+                                &data.state,
+                                &slot.wl_output,
+                            );
+                            match slot.drm_output.queue_frame(feedback) {
                                 Ok(()) => "ok",
                                 Err(err) => {
                                     tracing::warn!(?err, "queue_frame falhou");

@@ -166,6 +166,16 @@ fn render_headless(
         }
     }
 
+    // F1-presentation-time: o headless NÃO tem vblank real. O "present" é o
+    // tick deste timer, documentado como aproximação — não alegamos Vsync de
+    // hardware. Drenar ANTES dos frame callbacks (doc Smithay presentation).
+    crate::protocols::presentation::present_output(
+        state,
+        output,
+        // Sem vblank real: NÃO alegar Vsync/HwClock ao cliente.
+        smithay::reexports::wayland_protocols::wp::presentation_time::server::wp_presentation_feedback::Kind::empty(),
+    );
+
     let now = state.start_time.elapsed();
     state.space.elements().for_each(|window| {
         window.send_frame(output, now, Some(Duration::ZERO), |_, _| {
