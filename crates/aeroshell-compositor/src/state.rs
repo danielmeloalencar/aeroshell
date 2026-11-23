@@ -22,19 +22,20 @@ use smithay::{
         input_method::InputMethodManagerState,
         output::OutputManagerState,
         selection::{data_device::DataDeviceState, primary_selection::PrimarySelectionState},
+        shell::kde::decoration::KdeDecorationState,
         shell::{
             wlr_layer::WlrLayerShellState,
             xdg::{decoration::XdgDecorationState, XdgShellState},
         },
         shm::ShmState,
-        shell::kde::decoration::KdeDecorationState,
         socket::ListeningSocketSource,
         text_input::TextInputManagerState,
         viewporter::ViewporterState,
         xdg_activation::XdgActivationState,
-        xdg_toplevel_icon::XdgToplevelIconManager,
     },
 };
+
+use crate::protocols::toplevel_icon::IconManager;
 use smithay::reexports::wayland_protocols_misc::server_decoration::server::org_kde_kwin_server_decoration_manager::Mode as DefaultMode;
 
 use crate::{cli::Options, render::cursor::CursorImage, CalloopData};
@@ -220,8 +221,9 @@ pub struct AeroState {
     pub input_method_state: InputMethodManagerState,
     /// F1i/F7: global `xdg_activation_v1` (token + pedido de ativação).
     pub xdg_activation_state: XdgActivationState,
-    /// F1-toplevel-icon: global `xdg_toplevel_icon_v1` (ícone por toplevel).
-    pub toplevel_icon_manager: XdgToplevelIconManager,
+    /// F1-toplevel-icon-protocol: global `xdg_toplevel_icon_v1` com pixels copiados
+    /// (sem reter `wl_buffer`), evitando o bug do hook do Smithay 0.7.0.
+    pub toplevel_icon_manager: IconManager,
     pub cursor_image: CursorImageStatus,
     /// Imagens do tema XCursor por nome de forma, com o hotspot lido do arquivo.
     pub cursor_images: HashMap<String, Option<CursorImage>>,
@@ -345,9 +347,8 @@ impl AeroState {
         let input_method_state = InputMethodManagerState::new::<Self, _>(&dh, |_client| true);
         let text_input_state = TextInputManagerState::new::<Self>(&dh);
         let xdg_activation_state = XdgActivationState::new::<Self>(&dh);
-        let mut toplevel_icon_manager = XdgToplevelIconManager::new::<Self>(&dh);
-        // Tamanhos que oferecemos aos clientes (xdg_toplevel_icon.rs:222); o
-        // shell consome os pixels via IPC, sem precisar de dependência nova.
+        let toplevel_icon_manager = IconManager::new(&dh);
+        // Tamanhos que oferecemos aos clientes; o shell consome os pixels via IPC.
         for size in [16, 32, 48, 64] {
             toplevel_icon_manager.add_icon_size(size);
         }

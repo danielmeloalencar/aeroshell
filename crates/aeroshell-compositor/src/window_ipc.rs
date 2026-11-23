@@ -22,15 +22,13 @@ use smithay::{
     desktop::Window,
     reexports::{
         wayland_protocols::xdg::shell::server::xdg_toplevel,
-        wayland_server::{protocol::wl_shm::Format, protocol::wl_surface::WlSurface, Resource},
+        wayland_server::protocol::wl_surface::WlSurface,
     },
     utils::{Logical, Point, Size, SERIAL_COUNTER},
-    wayland::{
-        compositor::with_states, shell::xdg::XdgToplevelSurfaceData, shm::with_buffer_contents,
-        xdg_toplevel_icon::ToplevelIconCachedState,
-    },
+    wayland::{compositor::with_states, shell::xdg::XdgToplevelSurfaceData},
 };
 
+use crate::protocols::toplevel_icon::IconPixels;
 use crate::protocols::xdg_shell::client_draws_frame;
 use crate::state::AeroState;
 
@@ -70,67 +68,22 @@ fn base64_encode(bytes: &[u8]) -> String {
     out
 }
 
-/// Cópia dos pixels do ícone do cached state da superfície do toplevel.
-/// Devolve (largura, altura, escala, formato, RGB/BGRA em linhas tightly-packed).
+/// Pixels do ícone copiados no `add_buffer` pelo nosso handler
+/// (`protocols/toplevel_icon.rs`). Nenhum `wl_buffer` é retido, então o destroy
+/// do cliente (sequência do Qt) não pode matar a conexão.
+/// Devolve (largura, altura, escala, formato, BGRA em linhas tightly-packed).
 fn icon_pixels(surface: &WlSurface) -> Option<(i32, i32, i32, &'static str, Vec<u8>)> {
     with_states(surface, |states| {
-        let mut cached = states.cached_state.get::<ToplevelIconCachedState>();
-        let mut chosen: Option<(i32, i32, i32, &'static str, Vec<u8>)> = None;
-        for (buffer, scale) in cached.current().buffers() {
-            if !buffer.is_alive() {
-                continue;
-            }
-            let Ok(Some(candidate)) = with_buffer_contents(buffer, |ptr, len, info| {
-                let (w, h, stride) = (info.width, info.height, info.stride);
-                let format = match info.format {
-                    Format::Argb8888 => "Argb8888",
-                    Format::Xrgb8888 => "Xrgb8888",
-                    _ => return None,
-                };
-                if w <= 0 || h <= 0 || stride < w * 4 {
-                    return None;
-                }
-                let row = w as usize * 4;
-                let needed = stride as usize * h as usize;
-                if needed > len {
-                    return None;
-                }
-                let mut pixels = vec![0u8; row * h as usize];
-                // SAFETY: `ptr` é válido enquanto este closure executa (documentado
-                // em smithay/wayland/shm/mod.rs:219-239). Copiamos na hora para um
-                // Vec próprio, linha a linha dentro do stride informado: nenhuma
-                // referência ao shm sobrevive ao closure, mesmo que o cliente o
-                // mute depois. `row*h` foi validado contra `len` acima.
-                unsafe {
-                    for y in 0..h as usize {
-                        std::ptr::copy_nonoverlapping(
-                            ptr.add(y * stride as usize),
-                            pixels[y * row..].as_mut_ptr(),
-                            row,
-                        );
-                    }
-                }
-                Some((w, h, *scale, format, pixels))
-            }) else {
-                continue;
-            };
-            let bigger = chosen
-                .as_ref()
-                .map(|old| old.0 * old.1 < candidate.0 * candidate.1)
-                .unwrap_or(true);
-            if bigger {
-                chosen = Some(candidate);
-            }
-        }
-        chosen
+        let mut cached = states.cached_state.get::<IconPixels>();
+        cached.current().biggest.clone()
     })
 }
 
 /// Nome de ícone do tema, quando o cliente não enviou buffers (ex.: `foot`).
 fn icon_name(surface: &WlSurface) -> Option<String> {
     with_states(surface, |states| {
-        let mut cached = states.cached_state.get::<ToplevelIconCachedState>();
-        cached.current().icon_name().map(str::to_owned)
+        let mut cached = states.cached_state.get::<IconPixels>();
+        cached.current().name.clone()
     })
 }
 

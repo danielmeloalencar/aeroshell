@@ -4,4 +4,5 @@ pub mod aero_frame;
 pub mod compositor;
 pub mod layer_shell;
 pub mod seat;
+pub mod toplevel_icon;
 pub mod xdg_shell;

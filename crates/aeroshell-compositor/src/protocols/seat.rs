@@ -6,10 +6,8 @@ use smithay::{
     delegate_cursor_shape, delegate_data_device, delegate_fractional_scale,
     delegate_input_method_manager, delegate_output, delegate_primary_selection, delegate_seat,
     delegate_text_input_manager, delegate_viewporter, delegate_xdg_activation,
-    delegate_xdg_toplevel_icon,
     desktop::{PopupKind, PopupManager},
     input::{pointer::CursorImageStatus, Seat, SeatHandler, SeatState},
-    reexports::wayland_protocols::xdg::shell::server::xdg_toplevel::XdgToplevel,
     reexports::wayland_server::{protocol::wl_surface::WlSurface, Resource},
     utils::{Logical, Rectangle, SERIAL_COUNTER},
     wayland::{
@@ -27,13 +25,11 @@ use smithay::{
             },
             SelectionHandler,
         },
-        shm::with_buffer_contents,
         tablet_manager::TabletSeatHandler,
         text_input::TextInputSeat,
         xdg_activation::{
             XdgActivationHandler, XdgActivationState, XdgActivationToken, XdgActivationTokenData,
         },
-        xdg_toplevel_icon::{ToplevelIconCachedState, XdgToplevelIconHandler},
     },
 };
 
@@ -288,44 +284,7 @@ impl XdgActivationHandler for AeroState {
 }
 delegate_xdg_activation!(AeroState);
 
-// F1-toplevel-icon: o Smithay guarda o ícone no cached state da superfície;
-// aqui só associamos o window_id para a sonda e para o IPC `icon <id>`.
-impl XdgToplevelIconHandler for AeroState {
-    fn set_icon(&mut self, _toplevel: XdgToplevel, surface: WlSurface) {
-        let window_id = self
-            .window_surfaces
-            .iter()
-            .find(|(_, candidate)| *candidate == &surface)
-            .map(|(id, _)| *id);
-        let mut dimensions = None;
-        let mut icon_name = None;
-        with_states(&surface, |states| {
-            let mut cached = states.cached_state.get::<ToplevelIconCachedState>();
-            icon_name = cached.pending().icon_name().map(str::to_owned);
-            if let Some((buffer, scale)) = cached.pending().buffers().first() {
-                dimensions =
-                    with_buffer_contents(buffer, |_, _, info| (info.width, info.height, *scale))
-                        .ok();
-            }
-        });
-        #[cfg(feature = "bench")]
-        {
-            let t = crate::frame_diagnostics::now_ns();
-            let id = window_id
-                .map(|id| id.to_string())
-                .unwrap_or_else(|| "?".to_owned());
-            match dimensions {
-                Some((w, h, scale)) => {
-                    eprintln!("ICON_SET t={t} window_id={id} w={w} h={h} scale={scale}")
-                }
-                None => eprintln!(
-                    "ICON_SET t={t} window_id={id} w=? h=? scale=? name={}",
-                    icon_name.as_deref().unwrap_or("?")
-                ),
-            }
-        }
-        #[cfg(not(feature = "bench"))]
-        let _ = (&window_id, &dimensions, &icon_name);
-    }
-}
-delegate_xdg_toplevel_icon!(AeroState);
+// F1-toplevel-icon-protocol: o handler próprio em `protocols/toplevel_icon.rs`
+// copia os pixels no `add_buffer` e grava no cached state `IconPixels` da
+// superfície. A sonda ICON_SET e o IPC `icon <id>` leem desse estado (via
+// `window_ipc.rs`), sem registrar hooks de destruição em `wl_buffer`.
