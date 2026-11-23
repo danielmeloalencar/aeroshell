@@ -448,7 +448,11 @@ pub fn handle_commit(popups: &mut PopupManager, space: &Space<Window>, surface: 
             #[cfg(feature = "bench")]
             {
                 let t = crate::frame_diagnostics::now_ns();
-                eprintln!("POPUP_COMMIT t={t} surface={:?}", popup.wl_surface().id());
+                let coords = get_popup_toplevel_coords(&PopupKind::Xdg(popup.clone()));
+                eprintln!(
+                    "POPUP_COMMIT t={t} surface={:?} toplevel_coords={coords:?}",
+                    popup.wl_surface().id()
+                );
             }
         }
     }
