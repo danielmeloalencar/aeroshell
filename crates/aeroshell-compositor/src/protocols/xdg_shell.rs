@@ -55,6 +55,11 @@ fn window_id_for(state: &AeroState, surface: &WlSurface) -> Option<u32> {
 #[derive(Default)]
 struct ClientDrawsFrame(AtomicBool);
 
+/// Evita loop de feedback: o GTK3 voltou a pedir Client cada vez que
+/// respondemos Server; respondemos uma vez por superfície.
+#[derive(Default)]
+struct KdeAnsweredServer(AtomicBool);
+
 fn set_client_frame(surface: &WlSurface, value: bool) {
     with_states(surface, |states| {
         states
@@ -292,10 +297,26 @@ delegate_xdg_shell!(AeroState);
 // desenhar a barra HTML (guia do Domicile: decorations.rs / WRITING-A-SHELL.md).
 impl XdgDecorationHandler for AeroState {
     fn new_decoration(&mut self, toplevel: ToplevelSurface) {
+        #[cfg(feature = "bench")]
+        eprintln!(
+            "CSD_DECO t={} window_id={} acao=new",
+            crate::frame_diagnostics::now_ns(),
+            window_id_for(self, toplevel.wl_surface())
+                .map(|id| id.to_string())
+                .unwrap_or_else(|| "?".to_owned())
+        );
         set_client_frame(toplevel.wl_surface(), false);
         self.server_side_decoration(toplevel);
     }
     fn request_mode(&mut self, toplevel: ToplevelSurface, mode: Mode) {
+        #[cfg(feature = "bench")]
+        eprintln!(
+            "CSD_DECO t={} window_id={} acao=request mode={mode:?}",
+            crate::frame_diagnostics::now_ns(),
+            window_id_for(self, toplevel.wl_surface())
+                .map(|id| id.to_string())
+                .unwrap_or_else(|| "?".to_owned())
+        );
         let client_frame = mode == Mode::ClientSide;
         set_client_frame(toplevel.wl_surface(), client_frame);
         #[cfg(feature = "bench")]
@@ -337,6 +358,14 @@ impl KdeDecorationHandler for AeroState {
     }
 
     fn new_decoration(&mut self, surface: &WlSurface, _decoration: &OrgKdeKwinServerDecoration) {
+        #[cfg(feature = "bench")]
+        eprintln!(
+            "CSD_DECO t={} window_id={} acao=kde-new",
+            crate::frame_diagnostics::now_ns(),
+            window_id_for(self, surface)
+                .map(|id| id.to_string())
+                .unwrap_or_else(|| "?".to_owned())
+        );
         set_client_frame(surface, false);
     }
 
@@ -346,18 +375,40 @@ impl KdeDecorationHandler for AeroState {
         decoration: &OrgKdeKwinServerDecoration,
         mode: WEnum<KdeMode>,
     ) {
+        #[cfg(feature = "bench")]
+        eprintln!(
+            "CSD_DECO t={} window_id={} acao=kde-request mode={mode:?}",
+            crate::frame_diagnostics::now_ns(),
+            window_id_for(self, surface)
+                .map(|id| id.to_string())
+                .unwrap_or_else(|| "?".to_owned())
+        );
+        let first_answer = with_states(surface, |states| {
+            states
+                .data_map
+                .insert_if_missing_threadsafe(|| KdeAnsweredServer(AtomicBool::new(false)));
+            states
+                .data_map
+                .get::<KdeAnsweredServer>()
+                .map(|flag| !flag.0.swap(true, Ordering::Relaxed))
+                .unwrap_or(false)
+        });
         if let WEnum::Value(KdeMode::Client) = mode {
             set_client_frame(surface, true);
             #[cfg(feature = "bench")]
-            eprintln!(
-                "CSD_DETECT t={} window_id={} client_frame=true reason=kde",
-                crate::frame_diagnostics::now_ns(),
-                window_id_for(self, surface)
-                    .map(|id| id.to_string())
-                    .unwrap_or_else(|| "?".to_owned())
-            );
+            if first_answer {
+                eprintln!(
+                    "CSD_DETECT t={} window_id={} client_frame=true reason=kde",
+                    crate::frame_diagnostics::now_ns(),
+                    window_id_for(self, surface)
+                        .map(|id| id.to_string())
+                        .unwrap_or_else(|| "?".to_owned())
+                );
+            }
         }
-        decoration.mode(KdeMode::Server);
+        if first_answer {
+            decoration.mode(KdeMode::Server);
+        }
     }
 
     fn release(&mut self, _decoration: &OrgKdeKwinServerDecoration, surface: &WlSurface) {

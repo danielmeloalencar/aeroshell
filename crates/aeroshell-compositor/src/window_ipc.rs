@@ -323,6 +323,15 @@ impl AeroState {
                 let geo = window.geometry();
                 let from_geometry = geo.loc.x != 0 || geo.loc.y != 0;
                 #[cfg(feature = "bench")]
+                eprintln!(
+                    "CSD_GEOM t={} window_id={id} loc=({},{}) size=({},{}) explicit={explicit} from_geometry={from_geometry}",
+                    crate::frame_diagnostics::now_ns(),
+                    geo.loc.x,
+                    geo.loc.y,
+                    geo.size.w,
+                    geo.size.h,
+                );
+                #[cfg(feature = "bench")]
                 if from_geometry && !explicit {
                     eprintln!(
                         "CSD_DETECT t={} window_id={id} client_frame=true reason=geometry loc=({},{})",

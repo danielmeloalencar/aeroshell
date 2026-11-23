@@ -78,7 +78,16 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
       baixo e direita"*. Correção: janelas CSD agora recebem `set_insets(0,0,0,0)` (e `set_titlebar_slices(0,0)`) tanto
       no associate quanto no late-apply; antes era `(6,0,6,6)`. Harness passou a assertar `set_insets(0,0,0,0)` /
       `csd_late ... insets=(0,0,0,0)` — `geom-final9.log` e `final14.log` OK; gate `gate-final2.log` EXIT=0, clippy
-      bench 0. **Aguardando 5º juiz visual no tty3; cartão NÃO fechado.**
+      bench 0.
+      **5º juiz (2026-11-22): gedit e gnome-disks perfeitos; Calculadora (GTK4/libadwaita) ainda com as duas barras.**
+      O log desse teste (`~/aeroshell-udev-20261122-230046.log`) não contém `CSD_GEOM`/`CSD_DECO` — ou seja, era um
+      build **anterior** a estas sondas/correções. Medição com o build atual no headless+shell+IPC: a Calculadora é
+      detectada por `window.geometry()` (`loc=(25,25) size=(800,616)`) → `CSD_DETECT ... reason=geometry` e
+      `csd_applied ... bar=hidden`. Também foi corrigido o loop de feedback do GTK3: ele pedia `Client` a cada resposta
+      `Server`; agora respondemos uma vez por superfície (1 `CSD_DETECT` em 6 s, antes centenas).
+      Harnesses `--geometry-only` e explícito OK após reconstruir com `--features bench` (o `check.sh` reconstrói o bin
+      sem bench — rodar o build bench DEPOIS do gate). Gate `gate-final3.log` EXIT=0, clippy bench 0.
+      **Aguardando novo juiz com build fresco no tty3; cartão NÃO fechado.**
 - [x] **F1-toplevel-icon — ícone real na titlebar FECHADO PELO JUIZ VISUAL (2026-11-22).**
       Cartão `docs/tasks/F1-toplevel-icon.md` (humano escolheu um cartão único com as duas etapas).
       **Guia (não receita):** `domicile-engine` — base64 próprio (`packages/domicile-host/src/base64.rs:1`),
@@ -1631,9 +1640,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- **F1-csd-gtk — AGUARDA JUIZ VISUAL (2026-11-22):** move/resize OK e barra HTML removida no gedit; restavam as bordas
-  do frame, agora zeradas (`set_insets(0,0,0,0)`, §3). Falta repetir `~/u` no tty3 e confirmar que **não sobra nenhuma
-  borda/decoração nossa** no gedit. Sem o "ok", o cartão NÃO fecha.
+- **F1-csd-gtk — AGUARDA JUIZ VISUAL COM BUILD FRESCO (2026-11-22):** gedit e gnome-disks OK; Calculadora ainda com
+  barra dupla no último teste, mas o log prova que a sessão era de build antigo. O build atual detecta GTK3 (KDE) e
+  GTK4 (window_geometry) em medição headless. Falta reiniciar `~/u` e confirmar em todos. Sem o "ok", o cartão NÃO fecha.
   **Não medido:** temas/DPI alto e GPU real (VM sem 3D). **Bloqueio do pré-filtro visual:** o `gedit` não abre no
   nested (`(gedit): Gtk-ERROR: GTK 2/3 symbols detected. Using GTK 2/3 and GTK 4 in the same process is not
   supported`, log `/tmp/opencode/f1-csd/visual.log`); o julgamento tem de ser no tty3 com o binário novo. Já havia
@@ -1999,9 +2008,9 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
   Gate `gate-final4.log` EXIT=0, clippy bench 0, `--no-default-features` 0. Modo gedit (geometria tardia):
   `geom-final{5,6,7}.log`; baseline FALHA em `geom-baseline1.log`. Verificação rápida no tty3, após `~/u`:
   `grep -E "CSD_DETECT|csd_late|csd_applied" ~/aeroshell-udev-<mais-recente>.log`.
-- **Próximo passo:** humano reinicia `~/u` no tty3 e confirma que o gedit mostra só a moldura do GTK (sem barra e sem
-  bordas nossas); verificar no log `grep -E "CSD_DETECT.*reason=kde|set_insets\(0,0,0,0\)"
-  ~/aeroshell-udev-<mais-recente>.log`. Só depois fechar o cartão. Não avançar de
+- **Próximo passo:** humano reinicia `~/u` no tty3 (o log anterior não tem as novas sondas → build velho) e confirma
+  gedit, gnome-disks **e Calculadora** sem nossa decoração; verificar
+  `grep -E "CSD_DETECT|csd_applied|set_insets\(0,0,0,0\)" ~/aeroshell-udev-<mais-recente>.log`. Só depois fechar. Não avançar de
   fase nem abrir spike do Nautilus/Tracker sem autorização. Instância nested sem gedit deixada aberta: socket
   `wayland-aero-csd-1795395710`, compositor PID 292134, log `/tmp/opencode/f1-csd/visual.log`.
 - **Sessão atual: F1-toplevel-icon (2026-11-22) — código/teste/gate verdes (§3); JUIZ VISUAL PENDENTE (§7).**
