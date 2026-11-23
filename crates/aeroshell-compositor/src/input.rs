@@ -76,6 +76,15 @@ impl AeroState {
             self.focus_on_press(serial);
         }
         let pointer = self.seat.get_pointer().unwrap();
+        #[cfg(feature = "bench")]
+        eprintln!(
+            "BUTTON_FOCUS t={} serial={} button=0x110 pressed={} focus={:?} grabbed={}",
+            crate::frame_diagnostics::now_ns(),
+            u32::from(serial),
+            pressed,
+            pointer.current_focus().map(|s| s.id()),
+            pointer.is_grabbed()
+        );
         tracing::info!(pressed, "TESTE ponteiro button");
         pointer.button(
             self,
@@ -225,6 +234,16 @@ impl AeroState {
                     self.last_button_serial = Some(u32::from(serial));
                     self.focus_on_press(serial);
                 }
+                #[cfg(feature = "bench")]
+                eprintln!(
+                    "BUTTON_FOCUS t={} serial={} button={:#x} pressed={} focus={:?} grabbed={}",
+                    crate::frame_diagnostics::now_ns(),
+                    u32::from(serial),
+                    event.button_code(),
+                    ButtonState::Pressed == button_state,
+                    pointer.current_focus().map(|s| s.id()),
+                    pointer.is_grabbed()
+                );
 
                 pointer.button(
                     self,

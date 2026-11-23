@@ -91,6 +91,9 @@ def main() -> int:
         checks = {
             "popup configurado": "POPUP_CLICK popup_configured" in out,
             "grab aceito no compositor": bool(re.search(r"POPUP_GRAB t=\d+ .* estado=ok", log)),
+            # grab_popup() só CRIA o PopupGrab: tem que ser instalado no ponteiro.
+            # Sem isso `is_grabbed()` é false no clique do item (causa do Qt).
+            "grab instalado no ponteiro": bool(re.search(r"BUTTON_FOCUS t=\d+ .* pressed=true .* grabbed=true", log)),
             "enter no popup": "POPUP_CLICK enter label=popup" in out,
             "botão entregue ao popup": "POPUP_CLICK button label=popup" in out,
             "botão entregue ao pai": "POPUP_CLICK button label=parent" in out,

@@ -5,8 +5,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use smithay::{
     delegate_kde_decoration, delegate_xdg_shell,
     desktop::{
-        find_popup_root_surface, get_popup_toplevel_coords, PopupKind, PopupManager, Space, Window,
+        find_popup_root_surface, get_popup_toplevel_coords, PopupKeyboardGrab, PopupKind,
+        PopupManager, PopupPointerGrab, Space, Window,
     },
+    input::pointer::Focus,
     reexports::{
         wayland_protocols_misc::server_decoration::server::org_kde_kwin_server_decoration::{
             Mode as KdeMode, OrgKdeKwinServerDecoration,
@@ -160,7 +162,22 @@ impl XdgShellHandler for AeroState {
         }
     }
 
-    fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {
+    fn new_popup(&mut self, surface: PopupSurface, positioner: PositionerState) {
+        #[cfg(feature = "bench")]
+        {
+            eprintln!(
+                "POPUP_POSREQ surface={:?} size={:?} anchor={:?} gravity={:?} rect={:?} offset={:?} parent_size={:?}",
+                surface.wl_surface().id(),
+                positioner.rect_size,
+                positioner.anchor_edges,
+                positioner.gravity,
+                positioner.anchor_rect,
+                positioner.offset,
+                positioner.parent_size
+            );
+        }
+        #[cfg(not(feature = "bench"))]
+        let _ = positioner;
         self.unconstrain_popup(&surface);
         #[cfg(feature = "bench")]
         {
@@ -266,27 +283,48 @@ impl XdgShellHandler for AeroState {
             return;
         };
         let popup = PopupKind::Xdg(surface);
-        // O `PopupGrab` vive no user_data do seat (grab.rs:99-102); o handle
-        // local só guarda o estado até o dismiss, não precisa ser persistido.
+        // `grab_popup()` só CRIA o `PopupGrab` (manager.rs:132): ele NÃO instala
+        // grabs no seat. Sem `set_grab` no ponteiro/teclado, `is_grabbed()` é
+        // false no clique do item de menu e o cliente Qt não recebe a ativação.
+        // Fonte: Smithay 0.7.0 `desktop/wayland/popup/grab.rs:419-530`.
         let resultado = self
             .popups
             .grab_popup::<crate::state::AeroState>(root, popup, &self.seat, serial);
-        #[cfg(feature = "bench")]
-        {
-            let t = crate::frame_diagnostics::now_ns();
-            let estado = match &resultado {
-                Ok(_) => "ok",
-                Err(err) => {
-                    tracing::warn!(?err, "grab de popup recusado");
-                    "erro"
-                }
-            };
-            eprintln!(
-                "POPUP_GRAB t={t} serial={} estado={estado}",
-                u32::from(serial)
-            );
+        match resultado {
+            Ok(grab) => {
+                let pointer_ok = if let Some(pointer) = self.seat.get_pointer() {
+                    pointer.set_grab(self, PopupPointerGrab::new(&grab), serial, Focus::Keep);
+                    true
+                } else {
+                    false
+                };
+                let keyboard_ok = if let Some(keyboard) = self.seat.get_keyboard() {
+                    keyboard.set_grab(self, PopupKeyboardGrab::new(&grab), serial);
+                    true
+                } else {
+                    false
+                };
+                #[cfg(feature = "bench")]
+                eprintln!(
+                    "POPUP_GRAB t={} serial={} estado=ok instalado_pointer={} instalado_keyboard={}",
+                    crate::frame_diagnostics::now_ns(),
+                    u32::from(serial),
+                    pointer_ok,
+                    keyboard_ok
+                );
+                #[cfg(not(feature = "bench"))]
+                let _ = (pointer_ok, keyboard_ok);
+            }
+            Err(err) => {
+                tracing::warn!(?err, "grab de popup recusado");
+                #[cfg(feature = "bench")]
+                eprintln!(
+                    "POPUP_GRAB t={} serial={} estado=erro",
+                    crate::frame_diagnostics::now_ns(),
+                    u32::from(serial)
+                );
+            }
         }
-        let _ = resultado;
     }
 }
 
@@ -442,6 +480,32 @@ pub fn handle_commit(popups: &mut PopupManager, space: &Space<Window>, surface: 
     }
 
     popups.commit(surface);
+    #[cfg(feature = "bench")]
+    if popups.find_popup(surface).is_some() {
+        let (region, buffer) = with_states(surface, |states| {
+            let mut attrs = states
+                .cached_state
+                .get::<smithay::wayland::compositor::SurfaceAttributes>();
+            let current = attrs.current();
+            let buf = match &current.buffer {
+                Some(smithay::wayland::compositor::BufferAssignment::NewBuffer(b)) => {
+                    smithay::backend::renderer::buffer_dimensions(b)
+                        .map(|s| format!("{}x{}", s.w, s.h))
+                        .unwrap_or_else(|| "?".to_owned())
+                }
+                Some(smithay::wayland::compositor::BufferAssignment::Removed) => {
+                    "removed".to_owned()
+                }
+                None => "none".to_owned(),
+            };
+            (current.input_region.clone(), buf)
+        });
+        eprintln!(
+            "POPUP_STATE t={} surface={:?} input_region={region:?} buffer={buffer}",
+            crate::frame_diagnostics::now_ns(),
+            surface.id()
+        );
+    }
     if let Some(PopupKind::Xdg(popup)) = popups.find_popup(surface) {
         if !popup.is_initial_configure_sent() {
             let _ = popup.send_configure();
@@ -485,7 +549,18 @@ impl AeroState {
         target.loc -= window_geo.loc;
 
         popup.with_pending_state(|state| {
-            state.geometry = state.positioner.get_unconstrained_geometry(target);
+            let before = state.positioner.get_geometry();
+            #[cfg(not(feature = "bench"))]
+            let _ = before;
+            let after = state.positioner.get_unconstrained_geometry(target);
+            #[cfg(feature = "bench")]
+            {
+                eprintln!(
+                    "POPUP_UNCONSTRAIN surface={:?} before={before:?} after={after:?} target={target:?} window_geo={window_geo:?}",
+                    popup.wl_surface().id()
+                );
+            }
+            state.geometry = after;
         });
     }
 }

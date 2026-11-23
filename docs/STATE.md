@@ -21,6 +21,22 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [~] **F1-final-1b — diagnóstico de menus Qt: CAUSA ENCONTRADA E CORRIGIDA; juiz visual PENDENTE (§7).**
+      Cartão `docs/tasks/F1-final-1b.md`. Log debug da instância julgada (`/tmp/opencode/f1-1b/visual-debug.log`)
+      mostrou: `POPUP_POSREQ` do Qt (âncora TopLeft/gravity BottomRight/rect 1×1), `POPUP_UNCONSTRAIN before==after`
+      (**geometria NÃO é modificada** — hipótese descartada), `hit-test cliente` acertando o popup no `motion`, e
+      **`BUTTON_FOCUS ... focus=Some(<popup>) grabbed=false` em TODO clique de item**. Causa: `grab_popup()` só cria o
+      `PopupGrab` (Smithay 0.7.0 `manager.rs:132`) — nosso `grab()` descartava o retorno e **nunca chamava
+      `pointer.set_grab`/`keyboard.set_grab`**, então nenhum grab real estava ativo (`grab.rs:419-530`).
+      Correção mínima em `protocols/xdg_shell.rs::grab`: instalar `PopupPointerGrab`/`PopupKeyboardGrab` no seat,
+      com `Focus::Keep`; sonda `POPUP_GRAB ... instalado_pointer=true instalado_keyboard=true` sob `bench`.
+      **Teste-first:** `tests/integration/f1_popup_click.py` ganhou o critério "grab instalado no ponteiro"; baseline
+      `/tmp/opencode/f1-1b-baseline-grab.log` → `VEREDITO: FALHA` (`grabbed=false`), depois 3× OK
+      (headless + winit), 48 botões no popup, `grabbed=true` no clique. Amostra do Qt preservada; nenhuma descartada.
+      Instrumentação nova (toda sob `bench`): `POPUP_POSREQ`, `POPUP_UNCONSTRAIN`, `POPUP_STATE`, `BUTTON_FOCUS`.
+      Gate `check.sh` EXIT=0 (`gate2.log`), clippy bench 0, `--no-default-features` 0. Regressões: `f1_subsurfaces`,
+      `popup_client` (F1-popups-render), `f1_popup_click` headless+winit → OK. **Nova instância aberta para o juiz:**
+      log `/tmp/opencode/f1-1b/visual-final.log`, socket `wayland-aero-f1-1b-final`. Sem push.
 - [~] **F1-subsurfaces — JUIZ VISUAL NEGOU (2026-11-23); cartão NÃO fechado.** Humano, na instância nested com
       `qterminal` (Qt): *"Tooltips não aparecem, clique em qualquer item do menu como do arquivo, editar, help, nada
       acontece. Botão direito do mouse abre menu de contexto, mas nenhum item do menu de contexto funciona também."*
@@ -1721,6 +1737,10 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- **F1-final-1b — JUIZ VISUAL PENDENTE (2026-11-23).** Causa provada por log e corrigida; o pré-filtro sintético
+  cobre instalação do grab e entrega de clique, **não a ativação de item de menu no qterminal real**. O humano precisa
+  operar a nova instância (`wayland-aero-f1-1b-final`) e confirmar itens de Arquivo/Editar/Ajuda e tooltips. Até o "ok",
+  o cartão 1 (subsurfaces) continua NÃO fechado. Não medido: GPU real e instrumentos de menu de outros toolkits.
 - **F1-subsurfaces — JUIZ VISUAL NEGOU (2026-11-23).** Ver texto literal e medições em §3 (primeiro bullet). O agente
   deixou a instância aberta; o humano a julgou e relatou tooltips ausentes e itens de menu Qt inativos. O cartão NÃO
   fecha. **Não medido:** GPU real (VM sem 3D), Gtk3 no nested, e a causa raiz do clique em item de menu Qt (o cliente
@@ -2090,15 +2110,16 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **SESSÃO ATUAL (2026-11-23): F1-subsurfaces — código/teste-first/3× harness/gates verdes, mas JUIZ VISUAL NEGOU
-  (itens de menu Qt não respondem); cartão NÃO fechado. PARADO por limite de 15 min de desvio (§0.4).**
-  Reproduzir o pré-filtro: `cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-compositor --example subsurface_client && cargo build -p aeroshell-shell --example frame_webview && python3 tests/integration/f1_subsurfaces.py`
-  → 3× `VEREDITO: OK`, `pix_sync=12600 pix_desync=12600 pix_pai=94800`; baseline FALHA. Gate `gate-final2.log` EXIT=0,
-  clippy bench 0, `--no-default-features` 0; strings sem bench = 0.
-  Diagnóstico do juiz: `cargo build -p aeroshell-compositor --example popup_click_client && python3 tests/integration/f1_popup_click.py`
-  → `VEREDITO: OK` em headless e `AERO_TEST_BACKEND=winit`, 48 botões no popup — NÃO reproduz o Qt real.
-  **Próximo passo (DECISÃO DO HUMANO):** autorizar cartão novo de diagnóstico de menu/popup Qt (posicionamento/foco
-  no press) ou dar mais tempo neste; NÃO abrir o cartão 2 (clipboard) antes de decidir. Não avançar de F2.
+- **SESSÃO ATUAL (2026-11-23): F1-final-1b — causa do menu Qt encontrada e corrigida; JUIZ VISUAL PENDENTE (§7).**
+  Causa: `grab_popup()` só cria o `PopupGrab`; faltava `set_grab` no ponteiro/teclado (`grabbed=false` no clique).
+  Correção em `protocols/xdg_shell.rs::grab` instala `PopupPointerGrab`/`PopupKeyboardGrab` com `Focus::Keep`.
+  Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-compositor --example popup_click_client && python3 tests/integration/f1_popup_click.py`
+  → baseline FALHA em "grab instalado no ponteiro" (`/tmp/opencode/f1-1b-baseline-grab.log`), depois OK em headless e
+  winit (`f1-1b-final-popup.log`); `f1_subsurfaces.py` segue OK. Gate `f1-1b-gate2.log` EXIT=0, clippy bench 0,
+  `--no-default-features` 0.
+  Instância aberta para o juiz: socket `wayland-aero-f1-1b-final`, log `/tmp/opencode/f1-1b/visual-final.log`.
+  **Próximo passo imediato:** humano operar menus/tooltips no qterminal e dar o "ok"; só então fechar cartão 1 e
+  abrir o cartão 2 (`F1-clipboard-two-clients.md`). Não avançar de F2.
 - **Sessão anterior: F1-csd-sem-flash FECHADO PELO JUIZ VISUAL (2026-11-22, "aprovado").**
   Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-compositor --example csd_client && cargo build -p aeroshell-shell --example frame_webview && python3 tests/integration/f1_csd_gtk.py --geometry-only`
   → `VEREDITO: OK`, `hide_ms` ≤ 200 (`/tmp/opencode/f1-flash/final-run{1,2,3}.log`); baseline FALHA.
