@@ -157,7 +157,7 @@ try:
         "CSD detectado (bench)": bool(re.search(r"CSD_DETECT t=\d+ window_id=0 client_frame=true", text)),
         "serial invalido recusado": bool(re.search(r"CSD_MOVE t=\d+ window_id=0 decisao=deny", text)),
         "barra HTML escondida (DOM)": bool(re.search(
-            r"FRAMEWEB: csd_applied window_id=0 client_frame=true bar=hidden", text)),
+            r"FRAMEWEB: csd_applied window_id=0 client_frame=true bar=hidden border=hidden", text)),
         "sem bordas do frame": (
             bool(re.search(r"FRAMEWEB: associate\(window_id=0\) \+ set_insets\(0,0,0,0\)", text))
             or bool(re.search(r"FRAMEWEB: csd_late window_id=0 insets=\(0,0,0,0\)", text))

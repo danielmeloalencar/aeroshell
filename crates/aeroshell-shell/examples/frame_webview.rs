@@ -786,10 +786,13 @@ const TITLEBAR_HTML: &str = r#"<!doctype html>
     // devolvemos o valor lido do DOM como prova (sem barra dupla).
     window.aeroHideFrame = () => {
       const bar = document.getElementById('bar');
+      const border = document.getElementById('border');
       bar.style.display = 'none';
+      border.style.display = 'none';
       window.webkit.messageHandlers.aero.postMessage({
         action: 'csd_applied', client_frame: true,
-        bar: getComputedStyle(bar).display
+        bar: getComputedStyle(bar).display,
+        border: getComputedStyle(border).display
       });
     };
     window.aeroSetTitle = (title) => {
@@ -1107,12 +1110,14 @@ fn prewarm_frame() {
             }
             Some("csd_applied") => {
                 let bar = parsed.get("bar").and_then(|v| v.as_str()).unwrap_or("");
+                let border = parsed.get("border").and_then(|v| v.as_str()).unwrap_or("");
                 let Some(window_id) = callback_window_id.get() else {
                     return;
                 };
                 eprintln!(
-                    "FRAMEWEB: csd_applied window_id={window_id} client_frame=true bar={}",
-                    if bar == "none" { "hidden" } else { bar }
+                    "FRAMEWEB: csd_applied window_id={window_id} client_frame=true bar={} border={}",
+                    if bar == "none" { "hidden" } else { bar },
+                    if border == "none" { "hidden" } else { border }
                 );
             }
             Some("title_applied") => {

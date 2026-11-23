@@ -94,7 +94,11 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
       O cliente de teste `--geometry-only` agora só define a geometria após 2 s (imitando o GTK4): baseline FALHAVA
       antes da correção; com ela `geom-late1.log` → `VEREDITO: OK`, `CSD_DETECT ... reason=geometry` e
       `csd_applied ... bar=hidden`. Modo explícito `final19.log` OK; gate `gate-final4.log` EXIT=0, clippy bench 0.
-      **Aguardando 7º juiz com build fresco no tty3; cartão NÃO fechado.**
+      **7º juiz (2026-11-22): *"chegou a aparecer nossa decoração e depois sumiu a barra em uns meio segundos, mas ainda
+      ficaram as bordas"*.** A detecção tardia funcionou; o que restou foi o `<div id="border">` do CSS (`6px` esquerda,
+      direita e baixo), porque `aeroHideFrame` escondia só `#bar`. Agora esconde `#bar` **e** `#border`, e o readback do
+      DOM passou a exigir `bar=hidden border=hidden` (`geom-late2.log`, `final20.log` OK). Gate `gate-final5.log` EXIT=0,
+      clippy bench 0, `--no-default-features` 0. **Aguardando 8º juiz; cartão NÃO fechado.**
 - [x] **F1-toplevel-icon — ícone real na titlebar FECHADO PELO JUIZ VISUAL (2026-11-22).**
       Cartão `docs/tasks/F1-toplevel-icon.md` (humano escolheu um cartão único com as duas etapas).
       **Guia (não receita):** `domicile-engine` — base64 próprio (`packages/domicile-host/src/base64.rs:1`),
@@ -1647,9 +1651,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- **F1-csd-gtk — AGUARDA JUIZ VISUAL (2026-11-22):** gedit e gnome-disks OK; Calculadora ainda com barra dupla no 6º
-  teste. Causa lida no log e corrigida: `continue` do bloco do ícone impedia consultar CSD nos polls seguintes (§3).
-  Falta reiniciar `~/u` com o build atual e confirmar os três apps. Sem o "ok", o cartão NÃO fecha.
+- **F1-csd-gtk — AGUARDA JUIZ VISUAL (2026-11-22):** gedit e gnome-disks OK; na Calculadora a barra já some sozinha
+  (~0,5 s), mas restavam as bordas CSS — corrigido escondendo `#border` junto com `#bar` (§3). Falta reiniciar `~/u`
+  e confirmar os três apps sem nenhuma decoração nossa. Sem o "ok", o cartão NÃO fecha.
   **Não medido:** temas/DPI alto e GPU real (VM sem 3D). **Bloqueio do pré-filtro visual:** o `gedit` não abre no
   nested (`(gedit): Gtk-ERROR: GTK 2/3 symbols detected. Using GTK 2/3 and GTK 4 in the same process is not
   supported`, log `/tmp/opencode/f1-csd/visual.log`); o julgamento tem de ser no tty3 com o binário novo. Já havia
