@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-23 · **Fase atual: F1** · **F1-subsurfaces (cartão 1 da sequência F1-final): código/teste/gate verdes, JUIZ VISUAL PENDENTE** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · **F1i+ FECHADA PELO JUIZ VISUAL (digitação normal; só aviso de toplevel-icon, fora de escopo)** · **título real na titlebar FECHADO PELO JUIZ VISUAL ("ok")** · **F1-toplevel-icon FECHADO PELO JUIZ VISUAL ("vi o icone perfeitamente")** · **F1-csd-gtk-move-resize FECHADO PELO JUIZ VISUAL ("ok": gedit, gnome-disks e Calculadora OK)** · **F1-csd-sem-flash FECHADO PELO JUIZ VISUAL ("aprovado")** · cursor invisível no udev segue em cartão separado · 02q REABERTA E FECHADA PELO JUIZ em 2026-11-22 (sem adiamento, spike 12×36 eliminado; harness de 300 ms segue como limitação de VM registrada) · **02r FECHADA PELO JUIZ (nested + tty3) e 02s FECHADA PELO JUIZ (duas instâncias no mesmo D-Bus, "ok aprovado")**
+Última atualização: 2026-11-23 · **Fase atual: F1** · **F1-xdg-toplevel-states FECHADO PELO JUIZ VISUAL ("aprovado")** · **F1-subsurfaces FECHADO PELO JUIZ VISUAL (2026-11-23: "Funcionou tudo")** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · **F1i+ FECHADA PELO JUIZ VISUAL (digitação normal; só aviso de toplevel-icon, fora de escopo)** · **título real na titlebar FECHADO PELO JUIZ VISUAL ("ok")** · **F1-toplevel-icon FECHADO PELO JUIZ VISUAL ("vi o icone perfeitamente")** · **F1-csd-gtk-move-resize FECHADO PELO JUIZ VISUAL ("ok": gedit, gnome-disks e Calculadora OK)** · **F1-csd-sem-flash FECHADO PELO JUIZ VISUAL ("aprovado")** · cursor invisível no udev segue em cartão separado · 02q REABERTA E FECHADA PELO JUIZ em 2026-11-22 (sem adiamento, spike 12×36 eliminado; harness de 300 ms segue como limitação de VM registrada) · **02r FECHADA PELO JUIZ (nested + tty3) e 02s FECHADA PELO JUIZ (duas instâncias no mesmo D-Bus, "ok aprovado")**
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -21,7 +21,10 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
-- [~] **F1-xdg-toplevel-states (2026-11-23) — código, teste-first e gates verdes; JUIZ VISUAL PENDENTE (§7).**
+- [x] **F1-xdg-toplevel-states (2026-11-23) — FECHADO PELO JUIZ VISUAL: humano respondeu *"aprovado"*.**
+      Juiz operou a instância nested deixada aberta (compositor PID 24370, socket `wayland-aero-xdgstates-visual`,
+      gedit PID 24379) e aprovou fullscreen sem barra dupla, maximize pela área útil e diálogo modal; agente não
+      encerrou a aplicação. Veredito cru registrado nesta sessão.
       Cartão `docs/tasks/F1-xdg-toplevel-states.md` aprovado e executado. APIs confirmadas no Smithay 0.7.0 fixado
       antes de editar: `XdgShellHandler::maximize_request/fullscreen_request/parent_changed` são no-op default
       (`wayland/shell/xdg/mod.rs:1144-1157,1211-1212`), `SurfaceCachedState.min_size/max_size` (`:1060-1077`),
@@ -1309,9 +1312,7 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
-- **F1-xdg-toplevel-states (2026-11-23): código/teste/gates verdes, 3× harness OK; JUIZ VISUAL PENDENTE (§7).**
-  Instância nested com `gedit` deixada aberta para o humano (PID 24370, socket `wayland-aero-xdgstates-visual`,
-  gedit 24379). Verificar F11 (sem barra), maximize (não cobre painel) e diálogo modal (Ctrl+O) acima do pai.
+- **F1-xdg-toplevel-states FECHADO (§3): humano aprovou o juiz visual ("aprovado") no nested com gedit.**
   **PARAR — não abrir presentation-time sem "ok" do humano.** Nenhum processo foi encerrado pelo agente.
 - **F1-clipboard-two-clients FECHADO (§3): A→B em headless + winit, 3× OK, gates verdes.**
   Sem mudança de produto; o fluxo já funcionava por default e a lacuna era de evidência/instrumento (§6).
@@ -1387,7 +1388,7 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
    **cursor-shape e primary-selection JÁ FECHADOS — removidos da fila pelo humano**; F1f FECHADO; xdg_activation
    sanada na F1i+. Decoração: manter ServerSide+CSD e expor estado via IPC para a política Bun na F2, sem mudar
    arquitetura. STATE.md >150 linhas: cartão de docs próprio depois.
-   **Próximo passo: SÓ com "ok" do humano (inclusive o visual do xdg-states), abrir `F1-presentation-time.md`.**
+   **Próximo passo: SÓ com "ok" do humano, abrir `F1-presentation-time.md`.**
 1. **NENHUMA AUTORIZADA — PARAR.** F1-csd-sem-flash, F1-csd-gtk-move-resize, F1-toplevel-icon, título real e F1i+
    FECHADOS PELO JUIZ (§3/§7). O próximo cartão só com decisão explícita; não avançar de fase nem abrir spike D-Bus.
    02s FECHADA pelo juiz (§3), 02r FECHADA pelo juiz (§3),
@@ -1967,13 +1968,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- **F1-xdg-toplevel-states (2026-11-23): JUIZ VISUAL PENDENTE.** Instância nested aberta e deixada para o humano:
-  compositor PID 24370, socket `wayland-aero-xdgstates-visual`, log `/tmp/opencode/f1-xdgstates/visual/compositor.log`,
-  IPC `/tmp/opencode/f1-xdgstates/visual/ipc.sock` (`W 0 60 80 800 600 "…gedit" "gedit" csd=1 transient=0
-  mode=normal`), gedit PID 24379. O humano deve: F11 → confirmar que a barra HTML e a borda DESAPARECEM e o
-  conteúdo ocupa o output; F11 de volta → barra volta; maximizar → área útil sem cobrir painel; Ctrl+O →
-  diálogo modal acima do gedit, com foco nele, sem decoração duplicada. **Sem o "ok" o cartão NÃO está fechado.**
-  Agente NÃO encerrou a aplicação (AGENTS §0.9). DRM/tty3 e GPU real seguem sem medição nesta VM.
+- **F1-xdg-toplevel-states (2026-11-23): JUIZ VISUAL APROVADO no nested com gedit ("aprovado").** DRM/tty3 e
+  GPU real seguem sem medição nesta VM; a instância nested (PID 24370, gedit 24379) foi deixada aberta — quem
+  fecha é o humano, não o agente (AGENTS §0.9).
 - **F1-dmabuf (2026-11-23): VSCode NÃO abriu; juiz visual NÃO SE APLICA a import offscreen (decisão do humano).**
   O app crítico não abriu por causa do snap (§6), mas o baseline já falhava igual antes da correção; humano
   requalificou como compatibilidade de ambiente/DX, fora do núcleo. A instância de diagnóstico (PID 11925)
@@ -2389,15 +2386,15 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **SESSÃO ATUAL (2026-11-23): F1-xdg-toplevel-states — 4 estados implementados, harness 3× OK, gates verdes;
-  juiz visual PENDENTE.**
+- **SESSÃO ENCERRADA (2026-11-23): F1-xdg-toplevel-states — FECHADO PELO JUIZ VISUAL ("aprovado").**
+  4 estados implementados, harness 3× OK, gates verdes; humano operou gedit no nested e aprovou.
   Código: `protocols/toplevel_states.rs` + handlers em `xdg_shell.rs`, `render/scene.rs`, `grab.rs`, `window_ipc.rs`,
   `frame_webview.rs`; nenhum XML/ADR/dep nova. Reproduzir (build do bench POR ÚLTIMO):
   `cargo build --workspace --examples && cargo build -p aeroshell-compositor --features bench && python3 tests/integration/f1_toplevel_states.py`
   → `VEREDITO: OK` (fullscreen sem frame, maximize work area, parent/transient, min/max). Baseline sem os handlers
   dava `VEREDITO: FALHA`. `check.sh` EXIT=0, clippy bench 0, no-default 0; vizinhos e A/B em §6.
-  Instância para o juiz: PID 24370, socket `wayland-aero-xdgstates-visual`, gedit 24379, aberta — quem fecha é o humano. **Próximo passo: só com "ok" (inclusive visual), cartão
-  `F1-presentation-time.md`.** Sem push.
+  Instância do juiz (PID 24370, gedit 24379) deixada aberta — quem fecha é o humano.
+  **Próximo passo: só com "ok" do humano, cartão `F1-presentation-time.md`.** Sem push.
 - **SESSÃO ANTERIOR (2026-11-23): F1-clipboard-two-clients — A→B em headless + winit, 3× OK; sem mudança de produto.**
   Cliente `examples/clipboard_client.rs` e harness `tests/integration/f1_clipboard_two_clients.py` (novos).
   Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-compositor --example clipboard_client && python3 tests/integration/f1_clipboard_two_clients.py`
