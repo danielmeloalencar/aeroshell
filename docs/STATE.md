@@ -1485,6 +1485,15 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **Avisos benignos / item menor (decisão do humano, 2026-11-23):** `atk-bridge` é aviso benigno do GTK (não é
+  defeito do AeroShell); `xdg_system_bell_v1` ausente é item menor a registrar no F7, **não bloqueia** F1/F2.
+- **GATE DE SESSÃO DO SNAP — teste anterior foi INVÁLIDO para a hipótese:** usou nome custom
+  (`wayland-aero-tty3`), ou seja, caso NÃO provisionado. O teste correto pedido pelo humano é **como sessão, socket
+  padrão**: no tty3 rodar `~/u --socket wayland-0` (args são repassados ao compositor; a última opção prevalece) e
+  então `WAYLAND_DISPLAY=wayland-0 firefox`. **Atenção:** `scripts/run-udev-diag.sh:15,95` fixa `SOCKET=wayland-aero-tty3`
+  também para o painel; para o teste do snap isso é irrelevante, mas o painel não conectará. Se o Firefox abrir →
+  reduzir `F7-compat-snap.md` para doc + socket padrão como sessão; se negar → manter o cartão com o dado cru e
+  **não** fazer snapd/slot sem aprovação (fora do repo).
 - **F2-event-stream (2026-11-23): amostras e armadilhas do cartão.** Baseline sem stream falhou; 2 corridas do
   harness falharam por corrida (socket de eventos ainda não existia) e por `ipc_title` tentar parsear a linha inteira
   com os campos extras do F1 — corrigidas, amostras preservadas. O bundle do painel foi reconstruído
