@@ -1,8 +1,10 @@
 # Tarefa F1-csd-gtk-move-resize — apps GTK/CSD sem barra dupla e com move/resize (EM EXECUÇÃO — aguarda reteste visual)
 
-> **1º juiz visual NEGOU (2026-11-22):** humano viu decoração dupla no gedit no tty3. Causa lida no log dele: o gedit
-> não pede `ClientSide`; detecta-se CSD pela sombra fora da `window_geometry` (guia do Domicile). Corrigido e provado
-> com `f1_csd_gtk.py --geometry-only`. Aguardando novo "ok" no tty3.
+> **2 juízes visuais NEGARAM (2026-11-22):** humano viu decoração dupla no gedit no tty3 também depois da 1ª correção.
+> O 2º log (`~/aeroshell-udev-20261122-222605.log`) mostrou `client_frame=false` e nenhum `CSD_DETECT`: o gedit define a
+> `window_geometry` com sombra **depois** do primeiro commit, e o shell consultava CSD só no `frame_requested`.
+> Corrigido: CSD passou a ser consultado no **polling** de 1 s, com late-apply de insets/barra e novo teste
+> `--geometry-only` que imita essa ordem. Aguardando 3º julgamento no tty3.
 
 > Decisão do humano (2026-11-22): cartão **único** para os dois sintomas observados no `gedit` (tty3): barra de
 > decoração duplicada e move/resize que não funcionam. Um cartão por sessão; se o objetivo mudar, PARE e pergunte.

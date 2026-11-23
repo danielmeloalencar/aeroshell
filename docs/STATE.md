@@ -51,7 +51,15 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
       detecta `window.geometry().loc != (0,0)` e loga `CSD_DETECT ... reason=geometry`. Novo modo do harness
       (`f1_csd_gtk.py --geometry-only`) reproduz o gedit sem pedido de decoração: baseline FALHA
       (`geom-baseline1.log`) → 3× `VEREDITO: OK` (`geom-final{1,2,3}.log`). Gate `gate-final2.log` EXIT=0, clippy
-      bench 0, `--no-default-features` 0. **Aguardando novo juiz visual no tty3; cartão ainda NÃO fechado.**
+      bench 0, `--no-default-features` 0.
+      **2º JUIZ VISUAL NEGOU (2026-11-22):** humano tornou a ver *"duas barras, a nossa e do gnome"*. O log
+      (`~/aeroshell-udev-20261122-222605.log`) mostrou `client_frame=false` e nenhum `CSD_DETECT`: o gedit define a
+      `window_geometry` **depois** do primeiro commit, e a consulta só acontecia no `frame_requested`. Correção: CSD
+      agora entra no **polling** de 1 s (`refresh_titles`), com `csd_late` e reenvio de `set_insets(6,0,6,6)` +
+      `set_titlebar_slices(0,0)` + `aeroHideFrame` quando detectado tarde. O cliente de teste `--geometry-only` passou
+      a definir a geometria depois do commit e a atualizá-la no resize: baseline FALHA → 3× `VEREDITO: OK`
+      (`geom-final{5,6,7}.log`); modo explícito `final12.log` OK; gate `gate-final4.log` EXIT=0, clippy bench 0.
+      **Aguardando 3º juiz visual no tty3; cartão ainda NÃO fechado.**
 - [x] **F1-toplevel-icon — ícone real na titlebar FECHADO PELO JUIZ VISUAL (2026-11-22).**
       Cartão `docs/tasks/F1-toplevel-icon.md` (humano escolheu um cartão único com as duas etapas).
       **Guia (não receita):** `domicile-engine` — base64 próprio (`packages/domicile-host/src/base64.rs:1`),
@@ -1604,10 +1612,10 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- **F1-csd-gtk — JUIZ VISUAL NEGOU e AGUARDA RETESTE (2026-11-22):** humano viu *"exatamente igual, com decoracao
-  nas janelas gnome"* no tty3. O pré-filtro sintético cobria só clientes que pedem `ClientSide`; o gedit real não
-  pede e foi detectado pela sombra em `window_geometry` (nova prova: `geom-final{1,2,3}.log`). Falta o humano repetir
-  `~/u` com o build novo e confirmar **uma barra só** e move/resize no gedit. Sem o "ok", o cartão NÃO fecha.
+- **F1-csd-gtk — 2 JUÍZES VISUAIS NEGARAM; AGUARDA 3º RETESTE (2026-11-22):** humano viu *"duas barras, a nossa e do
+  gnome"* mesmo após a 1ª correção. Causa: detecção tarde da `window_geometry` (log do tty3 sem `CSD_DETECT`).
+  Agora há polling + late-apply, provados pelo modo `--geometry-only` (`geom-final{5,6,7}.log`). Falta o humano repetir
+  `~/u` e confirmar **uma barra só** e move/resize no gedit. Sem o "ok", o cartão NÃO fecha.
   **Não medido:** temas/DPI alto e GPU real (VM sem 3D). **Bloqueio do pré-filtro visual:** o `gedit` não abre no
   nested (`(gedit): Gtk-ERROR: GTK 2/3 symbols detected. Using GTK 2/3 and GTK 4 in the same process is not
   supported`, log `/tmp/opencode/f1-csd/visual.log`); o julgamento tem de ser no tty3 com o binário novo. Já havia
@@ -1970,8 +1978,9 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
 - **Sessão atual: F1-csd-gtk-move-resize (2026-11-22) — código/teste/gate verdes (§3); JUIZ VISUAL PENDENTE (§7).**
   Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-compositor --example csd_client && cargo build -p aeroshell-shell --example frame_webview && python3 tests/integration/f1_csd_gtk.py`
   → `VEREDITO: OK` (`/tmp/opencode/f1-csd/final{7,8,9,10}.log`); baseline FALHA em `baseline2.log`.
-  Gate `gate-final2.log` EXIT=0, clippy bench 0, `--no-default-features` 0. Modo gedit: `--geometry-only` →
-  `geom-final{1,2,3}.log`; baseline FALHA em `geom-baseline1.log`.
+  Gate `gate-final4.log` EXIT=0, clippy bench 0, `--no-default-features` 0. Modo gedit (geometria tardia):
+  `geom-final{5,6,7}.log`; baseline FALHA em `geom-baseline1.log`. Verificação rápida no tty3, após `~/u`:
+  `grep -E "CSD_DETECT|csd_late|csd_applied" ~/aeroshell-udev-<mais-recente>.log`.
 - **Próximo passo:** humano reinicia `~/u` no tty3 (a sessão antiga PID 275271 é de antes da correção de geometria) e
   confirma com `gedit`: uma barra só e move/resize pelo headerbar. Só depois fechar o cartão. Não avançar de fase nem
   abrir spike do Nautilus/Tracker sem autorização. Instância nested sem gedit deixada aberta: socket

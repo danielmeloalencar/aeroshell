@@ -67,6 +67,7 @@ struct App {
     toplevel: Option<XdgToplevel>,
     serials: Vec<u32>,
     pending_size: Option<(i32, i32)>,
+    geometry_sent: bool,
     buffer_size: (i32, i32),
     phase: u8,
     done: bool,
@@ -191,18 +192,23 @@ impl App {
         let pool = shm.create_pool(file.as_fd(), stride * height, qh, ());
         let buffer = pool.create_buffer(0, width, height, stride, Format::Argb8888, qh, ());
         let surface = self.surface.clone().ok_or("sem surface")?;
-        if std::env::var_os("AERO_CSD_GEOMETRY_ONLY").is_some() {
-            // Imita o GTK4/gedit: NÃO pede ClientSide, mas desenha sombra fora
-            // da window geometry (Domicile: window_geometry.rs).
-            let gutter = 20;
-            if let Some(xdg) = self.xdg_surface.clone() {
-                xdg.set_window_geometry(gutter, gutter, width - 2 * gutter, height - 2 * gutter);
-            }
-        }
         surface.attach(Some(&buffer), 0, 0);
         surface.commit();
         self.buffer_size = size;
         Ok(())
+    }
+
+    /// Imita o GTK4/gedit: a window geometry (que exclui a sombra) é definida
+    /// DEPOIS do primeiro commit, não junto com ele.
+    fn send_csd_geometry(&mut self) {
+        let (Some(xdg), Some(surface)) = (self.xdg_surface.clone(), self.surface.clone()) else {
+            return;
+        };
+        let (w, h) = self.buffer_size;
+        let gutter = 20;
+        xdg.set_window_geometry(gutter, gutter, w - 2 * gutter, h - 2 * gutter);
+        surface.commit();
+        eprintln!("CSD_CLIENT geometry_set gutter={gutter} size={w}x{h}");
     }
 
     fn drive_requests(&mut self) {
@@ -249,6 +255,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         toplevel: None,
         serials: Vec::new(),
         pending_size: None,
+        geometry_sent: false,
         buffer_size: (WIDTH, HEIGHT),
         phase: 0,
         done: false,
@@ -293,10 +300,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let deadline = std::time::Instant::now() + Duration::from_secs(30);
     while std::time::Instant::now() < deadline {
         queue.roundtrip(&mut app)?;
+        if geometry_only && !app.geometry_sent {
+            app.send_csd_geometry();
+            app.geometry_sent = true;
+        }
         if let Some(size) = app.pending_size.take() {
             if size != app.buffer_size {
                 app.attach_buffer(&qh, size)?;
                 eprintln!("CSD_CLIENT recommit {}x{}", size.0, size.1);
+                if geometry_only {
+                    app.send_csd_geometry();
+                }
             }
         }
         app.drive_requests();
@@ -315,6 +329,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if size != app.buffer_size {
                 app.attach_buffer(&qh, size)?;
                 eprintln!("CSD_CLIENT recommit {}x{}", size.0, size.1);
+                if geometry_only {
+                    app.send_csd_geometry();
+                }
             }
         }
         std::thread::sleep(Duration::from_millis(250));

@@ -79,6 +79,9 @@ struct FrameEntry {
     last_title: Option<String>,
     /// Assinatura (base64) do último ícone aplicado; ícone ausente = None.
     last_icon: Option<String>,
+    /// Já escondemos a barra HTML deste frame por CSD (pedido explícito ou
+    /// detectado depois pela window_geometry, como no gedit real).
+    csd_active: bool,
 }
 
 struct PoolItem {
@@ -700,6 +703,47 @@ fn refresh_titles() {
             },
         );
         eprintln!("{log}");
+
+        // O gedit não pede ClientSide: a sombra aparece na window_geometry
+        // só depois do primeiro commit. Por isso CSD também é consultado no
+        // polling (como título e ícone), não apenas no frame_requested.
+        let detected = ipc_csd(window_id);
+        if detected {
+            let state_change = RUNTIME.with(|cell| {
+                let mut borrow = cell.borrow_mut();
+                let rt = borrow.as_mut()?;
+                let entry = rt
+                    .state
+                    .entries
+                    .iter_mut()
+                    .find(|entry| entry.window_id == window_id)?;
+                if entry.csd_active {
+                    return None;
+                }
+                entry.csd_active = true;
+                entry.insets = (BORDER, 0, BORDER, BORDER);
+                Some((entry.frame.clone(), entry.webview.clone()))
+            });
+            if let Some((frame, view)) = state_change {
+                frame.set_insets(BORDER, 0, BORDER, BORDER);
+                frame.set_titlebar_slices(0, 0);
+                view.evaluate_javascript(
+                    "window.aeroHideFrame && window.aeroHideFrame();",
+                    None,
+                    None,
+                    None::<&webkit6::gio::Cancellable>,
+                    |result| {
+                        if let Err(err) = result {
+                            eprintln!("FRAMEWEB: aeroHideFrame falhou: {err}");
+                        }
+                    },
+                );
+                eprintln!(
+                    "FRAMEWEB: csd_late window_id={window_id} reason=geometry t={}",
+                    bench_t()
+                );
+            }
+        }
     }
 }
 
@@ -900,6 +944,7 @@ fn associate_frame(
             window_id,
             last_title: None,
             last_icon: None,
+            csd_active: client_frame,
         });
         eprintln!("FRAMEWEB: associate(window_id={window_id}) + set_insets({BORDER},{top},{BORDER},{BORDER}) \
                    + set_titlebar_slices({title_left},{title_right}) client_frame={client_frame} t={}", bench_t());
