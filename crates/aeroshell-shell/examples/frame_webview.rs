@@ -21,7 +21,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 use wayland_client::{
     protocol::{wl_callback, wl_registry},
-    Dispatch, Proxy, QueueHandle,
+    Dispatch, Proxy, QueueHandle, WEnum,
 };
 use webkit6::prelude::*;
 use webkit6::{UserContentManager, WebView};
@@ -45,7 +45,7 @@ mod aero {
 }
 
 use aero::aero_frame_manager_v1::AeroFrameManagerV1;
-use aero::aero_frame_v1::{AeroFrameV1, Event as FrameEvent, ResizeEdge};
+use aero::aero_frame_v1::{AeroFrameV1, Event as FrameEvent, ResizeEdge, State as FrameState};
 use aero::{wl_pointer, wl_seat};
 
 const TITLEBAR_H: i32 = 30;
@@ -88,6 +88,8 @@ struct FrameEntry {
     csd_active: bool,
     /// Até quando vale a pena consultar `csd <id>` a cada 100 ms nesta janela.
     csd_probe_until: Instant,
+    /// Último estado de fullscreen recebido no configure do aero_frame.
+    fullscreen: bool,
 }
 
 struct PoolItem {
@@ -356,6 +358,7 @@ impl Dispatch<AeroFrameV1, ()> for SpikeState {
                 serial,
                 width,
                 height,
+                state: frame_state,
                 ..
             } => {
                 state.configures += 1;
@@ -387,6 +390,48 @@ impl Dispatch<AeroFrameV1, ()> for SpikeState {
                     return;
                 }
                 apply_configure(state, frame, serial, width, height);
+                // F1-xdg-toplevel-states: o estado FULLSCREEN já vem no configure
+                // do aero_frame (XML inalterado). Escondemos/restauramos a barra
+                // HTML e o placeholder é suprimido pelo compositor.
+                let is_fullscreen = match frame_state {
+                    WEnum::Value(bits) => bits.contains(FrameState::Fullscreen),
+                    _ => false,
+                };
+                let view = state
+                    .entries
+                    .iter_mut()
+                    .find(|entry| &entry.frame == frame)
+                    .and_then(|entry| {
+                        let changed = entry.fullscreen != is_fullscreen;
+                        entry.fullscreen = is_fullscreen;
+                        if changed {
+                            Some(entry.webview.clone())
+                        } else {
+                            None
+                        }
+                    });
+                if let Some(view) = view {
+                    let script = if is_fullscreen {
+                        "window.aeroHideFrame && window.aeroHideFrame();"
+                    } else {
+                        "window.aeroShowFrame && window.aeroShowFrame();"
+                    };
+                    view.evaluate_javascript(
+                        script,
+                        None,
+                        None,
+                        None::<&webkit6::gio::Cancellable>,
+                        |result| {
+                            if let Err(err) = result {
+                                eprintln!("FRAMEWEB: fullscreen JS falhou: {err}");
+                            }
+                        },
+                    );
+                    eprintln!(
+                        "FRAMEWEB: fullscreen_state t={} fullscreen={is_fullscreen}",
+                        bench_t()
+                    );
+                }
             }
             FrameEvent::Closed => {
                 state.closed += 1;
@@ -882,6 +927,18 @@ const TITLEBAR_HTML: &str = r#"<!doctype html>
         border: getComputedStyle(border).display
       });
     };
+    // F1-xdg-toplevel-states: restaura a moldura ao sair do fullscreen.
+    window.aeroShowFrame = () => {
+      const bar = document.getElementById('bar');
+      const border = document.getElementById('border');
+      bar.style.display = '';
+      border.style.display = '';
+      window.webkit.messageHandlers.aero.postMessage({
+        action: 'frame_restored',
+        bar: getComputedStyle(bar).display,
+        border: getComputedStyle(border).display
+      });
+    };
     window.aeroSetTitle = (title) => {
       const el = document.getElementById('title');
       el.textContent = title;
@@ -1044,6 +1101,7 @@ fn associate_frame(
             last_icon: None,
             csd_active: client_frame,
             csd_probe_until: Instant::now() + Duration::from_secs(5),
+            fullscreen: false,
         });
         eprintln!("FRAMEWEB: associate(window_id={window_id}) + set_insets({left},{top},{right},{bottom}) \
                    + set_titlebar_slices({title_left},{title_right}) client_frame={client_frame} t={}", bench_t());
@@ -1221,6 +1279,17 @@ fn prewarm_frame() {
                     bench_t(),
                     if bar == "none" { "hidden" } else { bar },
                     if border == "none" { "hidden" } else { border }
+                );
+            }
+            Some("frame_restored") => {
+                let bar = parsed.get("bar").and_then(|v| v.as_str()).unwrap_or("");
+                let border = parsed.get("border").and_then(|v| v.as_str()).unwrap_or("");
+                let Some(window_id) = callback_window_id.get() else {
+                    return;
+                };
+                eprintln!(
+                    "FRAMEWEB: frame_restored t={} window_id={window_id} bar={bar} border={border}",
+                    bench_t()
                 );
             }
             Some("title_applied") => {

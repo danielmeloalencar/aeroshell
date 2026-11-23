@@ -100,7 +100,9 @@ impl AeroState {
         let canvas_size = canvas.configured_size();
         let canvas_growing = canvas.pending_growth.is_some();
 
-        let frame_state = crate::aero_frame_protocol::aero_frame_v1::State::empty();
+        // F1-xdg-toplevel-states: o estado (maximized/fullscreen) já existe no
+        // XML; apenas o reenviamos ao shell, sem novo protocolo.
+        let frame_state = crate::protocols::toplevel_states::frame_state_for(self, window_id);
         frame.configure(serial, content.0, content.1, frame_state);
         self.pending_configures
             .push((serial, std::time::Instant::now()));

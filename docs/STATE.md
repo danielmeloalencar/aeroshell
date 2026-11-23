@@ -21,6 +21,35 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [~] **F1-xdg-toplevel-states (2026-11-23) — código, teste-first e gates verdes; JUIZ VISUAL PENDENTE (§7).**
+      Cartão `docs/tasks/F1-xdg-toplevel-states.md` aprovado e executado. APIs confirmadas no Smithay 0.7.0 fixado
+      antes de editar: `XdgShellHandler::maximize_request/fullscreen_request/parent_changed` são no-op default
+      (`wayland/shell/xdg/mod.rs:1144-1157,1211-1212`), `SurfaceCachedState.min_size/max_size` (`:1060-1077`),
+      `ToplevelSurface::parent()` (`:1749-1751`). **Nenhum XML/ADR/dependência nova** — o `aero_frame_v1` já tem os
+      bits `maximized`/`fullscreen` no enum `state` (`protocols/aero_frame_v1.xml:115-121`).
+      Código: `protocols/toplevel_states.rs` novo (`clamp_size`, `apply_maximize` reaproveitando `work_area()` da
+      02r, `apply_fullscreen` com geometria do output e restauração, `apply_parent` com posição relativa/raise/foco
+      e hook de destruição do pai que fecha o filho, `frame_state_for`, `app_id_for`); handlers ligados em
+      `xdg_shell.rs`; `grab.rs` também limita resize por min/max; `render/scene.rs` NÃO desenha frame nem
+      placeholder em fullscreen; `window_ipc.rs::list` ganha campos no FIM (`app_id-json csd=N transient=N
+      mode=...`, leitores antigos com `splitn(7)` continuam válidos); `frame_webview.rs` esconde/restaura a barra
+      HTML via bits do configure (`aeroHideFrame`/`aeroShowFrame`). O maximize do IPC agora chama o MESMO helper.
+      **Teste-first:** `examples/toplevel_states_client.rs` + `tests/integration/f1_toplevel_states.py` escritos
+      antes; baseline `VEREDITO: FALHA` (8 checks falhando, incluindo fullscreen/maximize/parent). Depois:
+      **3× `VEREDITO: OK`** (`stable-run{1,2,3}.log`): `XDG_STATE … fullscreen=true w=800 h=600 loc=(0,0)`,
+      `FRAME_STATE … fullscreen=true`, `FRAMEWEB: csd_applied … bar=hidden border=hidden`,
+      `FRAMEWEB: frame_restored … bar=flex border=block`, maximize com clamp e `unmaximize` restaurando,
+      `XDG_PARENT … z=above focus=child`, IPC `transient=1 mode=fullscreen`, `parent_destroyed child_closed=true`.
+      Três correções de INSTRUMENTO (sem mudar comportamento): o cliente responde ao configure redimensionando o
+      buffer; o frame lê o estado PENDENTE (o commit do cliente ainda não ocorreu quando o configure é reenviado);
+      o harness mede geometria pelo IPC e transições pelo log do cliente porque a saída do compositor se intercala
+      com a do shell. Gates: `check.sh` EXIT=0 (`gate-final3.log`), clippy `--features bench -D warnings` EXIT=0,
+      `cargo check --workspace --no-default-features` EXIT=0. Vizinhos: `maximize_workarea`, `frame_buttons`,
+      `f1_csd_gtk` → OK; `frame_resize_glue` falhou 1× por `SLICE_GEOM` intercalada e passou na repetição;
+      `frame_title` falhou 2×, mas **A/B no HEAD sem minhas mudanças falha igual** (worktree `cd406b1`) —
+      pré-existente, não regressão. **PARAR no juiz visual.** Instância nested deixada aberta: compositor PID
+      24370, socket `wayland-aero-xdgstates-visual`, log `/tmp/opencode/f1-xdgstates/visual/compositor.log`,
+      `gedit` PID 24379; agente NÃO encerrou nada (§7).
 - [x] **F1-clipboard-two-clients (2026-11-23) — round-trip A→B em headless e winit; sem mudança de produto.**
       Cartão `docs/tasks/F1-clipboard-two-clients.md` aprovado e executado; humano requalificou o gate do VSCode
       (F1-dmabuf) como compatibilidade de ambiente/DX, não bloqueante do núcleo. **Não houve bug de produto:**
@@ -1280,7 +1309,11 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
-- **F1-clipboard-two-clients FECHADO nesta sessão (§3): A→B em headless + winit, 3× OK, gates verdes.**
+- **F1-xdg-toplevel-states (2026-11-23): código/teste/gates verdes, 3× harness OK; JUIZ VISUAL PENDENTE (§7).**
+  Instância nested com `gedit` deixada aberta para o humano (PID 24370, socket `wayland-aero-xdgstates-visual`,
+  gedit 24379). Verificar F11 (sem barra), maximize (não cobre painel) e diálogo modal (Ctrl+O) acima do pai.
+  **PARAR — não abrir presentation-time sem "ok" do humano.** Nenhum processo foi encerrado pelo agente.
+- **F1-clipboard-two-clients FECHADO (§3): A→B em headless + winit, 3× OK, gates verdes.**
   Sem mudança de produto; o fluxo já funcionava por default e a lacuna era de evidência/instrumento (§6).
   **PARAR — não abrir `F1-xdg-toplevel-states.md` sem "ok" explícito.** Nenhuma instância deixada aberta.
 - **F1-dmabuf FECHADO com ressalvas (§3): VSCode é compatibilidade de ambiente/DX, não bloqueante.** O snap força
@@ -1348,12 +1381,13 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
 0. **SEQUÊNCIA F1-FINAL REVISADA (humano, 2026-11-23): F1-dmabuf → clipboard 2 clientes → xdg-toplevel-states →
    presentation-time. Um cartão por sessão; PARAR antes do próximo cartão e antes da F2.** F1-dmabuf FECHADO com
    ressalvas (VSCode requalificado como compatibilidade de ambiente/DX, não bloqueante); F1-clipboard-two-clients
-   executado nesta sessão (§3): A→B em headless+winit, 3× OK, sem mudança de produto. Cartões seguintes:
-   `F1-xdg-toplevel-states.md` (próximo), `F1-presentation-time.md` (rascunhos aguardando ok).
+   FECHADO (A→B em headless+winit, 3× OK, sem mudança de produto); F1-xdg-toplevel-states executado nesta sessão
+   (§3): 4 estados com harness estável 3× OK, gates verdes, juiz visual pendente. Cartão seguinte:
+   `F1-presentation-time.md` (rascunho aguardando ok).
    **cursor-shape e primary-selection JÁ FECHADOS — removidos da fila pelo humano**; F1f FECHADO; xdg_activation
    sanada na F1i+. Decoração: manter ServerSide+CSD e expor estado via IPC para a política Bun na F2, sem mudar
    arquitetura. STATE.md >150 linhas: cartão de docs próprio depois.
-   **Próximo passo: SÓ com "ok" do humano, abrir `F1-xdg-toplevel-states.md`.**
+   **Próximo passo: SÓ com "ok" do humano (inclusive o visual do xdg-states), abrir `F1-presentation-time.md`.**
 1. **NENHUMA AUTORIZADA — PARAR.** F1-csd-sem-flash, F1-csd-gtk-move-resize, F1-toplevel-icon, título real e F1i+
    FECHADOS PELO JUIZ (§3/§7). O próximo cartão só com decisão explícita; não avançar de fase nem abrir spike D-Bus.
    02s FECHADA pelo juiz (§3), 02r FECHADA pelo juiz (§3),
@@ -1387,6 +1421,19 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **F1-xdg-toplevel-states (2026-11-23): 3 correções de instrumento + 2 vizinhos intermitentes.** O cliente sintético
+  precisou responder ao configure com um buffer do tamanho pedido; `frame_state_for` precisa ler o estado PENDENTE
+  (o commit do cliente ainda não chegou quando o configure do frame é reenviado); a saída do compositor se
+  intercala com a do `frame_webview` na mesma pipeline, corrompendo linhas de log (`XDG_STATE … maximized=FRAMEWEB:…`)
+  — por isso o harness mede geometria pelo IPC e transições pelo log do CLIENTE. `frame_resize_glue` falhou 1× em
+  `SLICE_GEOM` intercalada e passou na repetição; `frame_title` falhou 2× no DOM do 2º título, mas o A/B no HEAD
+  sem minhas mudanças (worktree `cd406b1`) falha da mesma forma — pré-existente, não regressão.
+- **F1-xdg-toplevel-states (2026-11-23): armadilha de build com `bench`.** `cargo build --workspace --examples`
+  (e o próprio `check.sh`) reapaga `target/debug/aeroshell-compositor` sem `bench`, e o harness de sondas passa a
+  dar FALHA por ausência de `XDG_STATE`. Reconstrouir `cargo build -p aeroshell-compositor --features bench`
+  **por último**. Além disso, um A/B em worktree com target compartilhado deixou binários do HEAD no target e o
+  Cargo não os recompilou; foi preciso `cargo clean -p aeroshell-compositor` e `-p aeroshell-shell`. Worktree
+  removido; nenhum processo de A/B ficou vivo.
 - **F1-clipboard-two-clients (2026-11-23): o baseline FALHOU por corrida do INSTRUMENTO, não do produto.**
   Amostras preservadas: `baseline.log` (fixed points + foco B antes da seleção), `final.log` (ordem de map A/B
   invertida) e `baseline-racy-final.log` (modo `--no-sync` do instrumento final, FALHA determinística nos dois
@@ -1920,6 +1967,13 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- **F1-xdg-toplevel-states (2026-11-23): JUIZ VISUAL PENDENTE.** Instância nested aberta e deixada para o humano:
+  compositor PID 24370, socket `wayland-aero-xdgstates-visual`, log `/tmp/opencode/f1-xdgstates/visual/compositor.log`,
+  IPC `/tmp/opencode/f1-xdgstates/visual/ipc.sock` (`W 0 60 80 800 600 "…gedit" "gedit" csd=1 transient=0
+  mode=normal`), gedit PID 24379. O humano deve: F11 → confirmar que a barra HTML e a borda DESAPARECEM e o
+  conteúdo ocupa o output; F11 de volta → barra volta; maximizar → área útil sem cobrir painel; Ctrl+O →
+  diálogo modal acima do gedit, com foco nele, sem decoração duplicada. **Sem o "ok" o cartão NÃO está fechado.**
+  Agente NÃO encerrou a aplicação (AGENTS §0.9). DRM/tty3 e GPU real seguem sem medição nesta VM.
 - **F1-dmabuf (2026-11-23): VSCode NÃO abriu; juiz visual NÃO SE APLICA a import offscreen (decisão do humano).**
   O app crítico não abriu por causa do snap (§6), mas o baseline já falhava igual antes da correção; humano
   requalificou como compatibilidade de ambiente/DX, fora do núcleo. A instância de diagnóstico (PID 11925)
@@ -2335,7 +2389,16 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **SESSÃO ATUAL (2026-11-23): F1-clipboard-two-clients — A→B em headless + winit, 3× OK; sem mudança de produto.**
+- **SESSÃO ATUAL (2026-11-23): F1-xdg-toplevel-states — 4 estados implementados, harness 3× OK, gates verdes;
+  juiz visual PENDENTE.**
+  Código: `protocols/toplevel_states.rs` + handlers em `xdg_shell.rs`, `render/scene.rs`, `grab.rs`, `window_ipc.rs`,
+  `frame_webview.rs`; nenhum XML/ADR/dep nova. Reproduzir (build do bench POR ÚLTIMO):
+  `cargo build --workspace --examples && cargo build -p aeroshell-compositor --features bench && python3 tests/integration/f1_toplevel_states.py`
+  → `VEREDITO: OK` (fullscreen sem frame, maximize work area, parent/transient, min/max). Baseline sem os handlers
+  dava `VEREDITO: FALHA`. `check.sh` EXIT=0, clippy bench 0, no-default 0; vizinhos e A/B em §6.
+  Instância para o juiz: PID 24370, socket `wayland-aero-xdgstates-visual`, gedit 24379, aberta — quem fecha é o humano. **Próximo passo: só com "ok" (inclusive visual), cartão
+  `F1-presentation-time.md`.** Sem push.
+- **SESSÃO ANTERIOR (2026-11-23): F1-clipboard-two-clients — A→B em headless + winit, 3× OK; sem mudança de produto.**
   Cliente `examples/clipboard_client.rs` e harness `tests/integration/f1_clipboard_two_clients.py` (novos).
   Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-compositor --example clipboard_client && python3 tests/integration/f1_clipboard_two_clients.py`
   → `VEREDITO: OK` em headless e winit, `CLIP_B GOT aero-clipboard-cross-client-2026`, 0 erros de protocolo.

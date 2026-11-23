@@ -194,6 +194,10 @@ pub struct AeroState {
     /// 02r: geometria (origem no Space + tamanho do cliente) guardada no maximize
     /// para o desmaximizar devolver a janela exatamente ao lugar de origem.
     pub maximized_restore: HashMap<u32, SavedGeometry>,
+    /// F1-xdg-toplevel-states: geometria salva antes do fullscreen (02r para maximize).
+    pub fullscreen_restore: HashMap<u32, SavedGeometry>,
+    /// F1-xdg-toplevel-states: pares (filho, pai) para relate de transient no IPC.
+    pub transient_parents: Vec<(WlSurface, WlSurface)>,
     /// Lista de clientes inseridos (usada só para sinalizar prontidão em testes).
     #[allow(dead_code)]
     pub test_client_count: usize,
@@ -299,6 +303,27 @@ impl AeroState {
                 insets: self.default_frame_insets,
                 ..Default::default()
             })
+    }
+
+    /// F1-xdg-toplevel-states: em fullscreen a janela ocupa o output inteiro e
+    /// NENHUMA decoração (9-slice ou placeholder) é desenhada.
+    pub fn window_fullscreen(&self, window_id: u32) -> bool {
+        self.window_for_id(window_id)
+            .and_then(|w| w.toplevel())
+            .map(|t| {
+                t.current_state().states.contains(
+                    smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel::State::Fullscreen,
+                )
+            })
+            .unwrap_or(false)
+    }
+
+    pub fn frame_suppressed(&self, frame_surface: &WlSurface) -> bool {
+        self.associated_frames
+            .iter()
+            .find(|(s, _, _, _)| s == frame_surface)
+            .map(|(_, _, id, _)| self.window_fullscreen(*id))
+            .unwrap_or(false)
     }
 
     /// True se o frame já tem cliente mapeado no space. Nesse caso o frame é
@@ -429,6 +454,8 @@ impl AeroState {
             test_window_count: 0,
             default_frame_insets: (0, 0, 0, 0),
             maximized_restore: HashMap::new(),
+            fullscreen_restore: HashMap::new(),
+            transient_parents: Vec::new(),
             suggested_window_size: HashMap::new(),
             test_client_count: 0,
             compositor_state,

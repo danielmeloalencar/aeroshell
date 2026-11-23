@@ -24,11 +24,12 @@ use smithay::{
         wayland_protocols::xdg::shell::server::xdg_toplevel,
         wayland_server::protocol::wl_surface::WlSurface,
     },
-    utils::{Logical, Point, Size, SERIAL_COUNTER},
+    utils::SERIAL_COUNTER,
     wayland::{compositor::with_states, shell::xdg::XdgToplevelSurfaceData},
 };
 
 use crate::protocols::toplevel_icon::IconPixels;
+use crate::protocols::toplevel_states::{app_id_for, frame_state_for};
 use crate::protocols::xdg_shell::client_draws_frame;
 use crate::state::AeroState;
 
@@ -140,9 +141,43 @@ impl AeroState {
                     };
                     let title = serde_json::to_string(&window_title(window))
                         .unwrap_or_else(|_| "\"\"".to_owned());
+                    let app_id = serde_json::to_string(&app_id_for(window))
+                        .unwrap_or_else(|_| "\"\"".to_owned());
+                    let transient = window.toplevel().and_then(|t| t.parent()).is_some();
+                    // Campos novos no FIM da linha: leitores antigos usam
+                    // splitn(7, ' ') e continuam funcionando (F2 consumirá estado).
+                    let state = frame_state_for(self, id);
+                    let mode = if state
+                        .contains(crate::aero_frame_protocol::aero_frame_v1::State::Fullscreen)
+                    {
+                        "fullscreen"
+                    } else if state
+                        .contains(crate::aero_frame_protocol::aero_frame_v1::State::Maximized)
+                    {
+                        "maximized"
+                    } else {
+                        "normal"
+                    };
                     out.push_str(&format!(
-                        "W {} {} {} {} {} {}\n",
-                        id, geo.loc.x, geo.loc.y, geo.size.w, geo.size.h, title
+                        "W {} {} {} {} {} {} {} csd={} transient={} mode={}\n",
+                        id,
+                        geo.loc.x,
+                        geo.loc.y,
+                        geo.size.w,
+                        geo.size.h,
+                        title,
+                        app_id,
+                        if window
+                            .toplevel()
+                            .map(|t| client_draws_frame(t.wl_surface()))
+                            .unwrap_or(false)
+                        {
+                            1
+                        } else {
+                            0
+                        },
+                        if transient { 1 } else { 0 },
+                        mode
                     ));
                 }
                 out.push('.');
@@ -173,66 +208,27 @@ impl AeroState {
                 "OK".to_owned()
             }
             "maximize" => {
+                // Mesma mecânica da 02r, agora compartilhada com o pedido
+                // xdg_toplevel.set_maximized (F1-xdg-toplevel-states).
                 let Some(id) = id else {
                     return "ERR janela inexistente".to_owned();
                 };
-                let Some(window) = self.window_for_id(id as u32).cloned() else {
+                let Some(window) = self.window_for_id(id as u32) else {
                     return "ERR janela inexistente".to_owned();
                 };
-                let Some(toplevel) = window.toplevel() else {
-                    return "ERR sem toplevel".to_owned();
-                };
-                // O toggle usa o estado JÁ COMITADO pelo cliente (current_state),
-                // não o pending: um duplo clique antes do commit não inverte o
-                // estado. Fonte: Smithay 0.7.0 xdg/mod.rs:1735-1747.
-                if toplevel
-                    .current_state()
-                    .states
-                    .contains(xdg_toplevel::State::Maximized)
-                {
-                    if let Some((loc, size)) = self.maximized_restore.remove(&(id as u32)) {
-                        // map_element reposiciona um elemento já mapeado e preserva
-                        // seus outputs (Smithay 0.7.0 space/mod.rs:96-119).
-                        self.space.map_element(window.clone(), loc, false);
-                        toplevel.with_pending_state(|state| {
-                            state.states.unset(xdg_toplevel::State::Maximized);
-                            state.size = Some(size);
-                        });
-                    } else {
-                        // Maximizado sem geometria salva (cliente pediu o estado
-                        // por conta própria): só limpa o estado, sem inventar loc.
-                        toplevel.with_pending_state(|state| {
-                            state.states.unset(xdg_toplevel::State::Maximized);
-                            state.size = None;
-                        });
-                    }
+                let target = !window
+                    .toplevel()
+                    .map(|t| {
+                        t.current_state()
+                            .states
+                            .contains(xdg_toplevel::State::Maximized)
+                    })
+                    .unwrap_or(false);
+                if crate::protocols::toplevel_states::apply_maximize(self, id as u32, target) {
+                    "OK".to_owned()
                 } else {
-                    let Some(area) = self.work_area() else {
-                        return "ERR sem área útil".to_owned();
-                    };
-                    if let Some(geo) = self.space.element_geometry(&window) {
-                        self.maximized_restore
-                            .insert(id as u32, (geo.loc, geo.size));
-                    }
-                    let fgeo = self.frame_geometry_for_window(id as u32);
-                    let (dx, dy) = fgeo.offset();
-                    // frame_loc = cliente + offset; queremos frame_loc == origem
-                    // da área útil (nem um pixel embaixo do painel).
-                    let client_loc = Point::<i32, Logical>::new(area.loc.x - dx, area.loc.y - dy);
-                    // frame_target = conteúdo + extras; queremos == tamanho da
-                    // área útil, nunca o tamanho bruto do output.
-                    let client_size = Size::<i32, Logical>::new(
-                        (area.size.w - fgeo.extra_w()).max(1),
-                        (area.size.h - fgeo.extra_h()).max(1),
-                    );
-                    self.space.map_element(window.clone(), client_loc, false);
-                    toplevel.with_pending_state(|state| {
-                        state.states.set(xdg_toplevel::State::Maximized);
-                        state.size = Some(client_size);
-                    });
+                    "ERR sem área útil".to_owned()
                 }
-                toplevel.send_configure();
-                "OK".to_owned()
             }
             "icon" => {
                 let Some(id) = id else {

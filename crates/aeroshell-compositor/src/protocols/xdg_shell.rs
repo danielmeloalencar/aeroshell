@@ -14,7 +14,7 @@ use smithay::{
             Mode as KdeMode, OrgKdeKwinServerDecoration,
         },
         wayland_server::{
-            protocol::{wl_seat, wl_surface::WlSurface},
+            protocol::{wl_output::WlOutput, wl_seat, wl_surface::WlSurface},
             Resource, WEnum,
         },
     },
@@ -41,6 +41,9 @@ use smithay::wayland::shell::xdg::decoration::XdgDecorationHandler;
 use crate::aero_frame_protocol::aero_frame_v1::ResizeEdge as FrameResizeEdge;
 use crate::grab::start_geometry_grab;
 use crate::protocols::aero_frame::serial_valid;
+use crate::protocols::toplevel_states::{
+    apply_fullscreen, apply_maximize, apply_parent, clamp_size,
+};
 
 /// Mapa superfície → window_id lógico (inverso de `window_surfaces`).
 fn window_id_for(state: &AeroState, surface: &WlSurface) -> Option<u32> {
@@ -104,6 +107,7 @@ impl XdgShellHandler for AeroState {
             return;
         }
         tracing::info!("novo toplevel xdg-surface mapeado");
+        let wl_surface = surface.wl_surface().clone();
         let window = Window::new_wayland_window(surface);
         let client_surface = window.toplevel().map(|t| t.wl_surface().clone());
         // Margem para a decoração do frame (insets superiores) ficar visível e
@@ -119,7 +123,8 @@ impl XdgShellHandler for AeroState {
         // compositor virar só as insets (12×36). 800×600 é a sugestão padrão
         // neutra (o cliente é livre para escolher o seu): não é constante do
         // tema, não depende do output e não estoura o canvas fixo da 02p.
-        let suggested = Size::<i32, Logical>::new(800, 600);
+        // F1-xdg-toplevel-states: respeitar min/max já no configure inicial.
+        let suggested = clamp_size(&wl_surface, Size::<i32, Logical>::new(800, 600), true);
         self.suggested_window_size.insert(window_id, suggested);
         if let Some(toplevel) = window.toplevel() {
             toplevel.with_pending_state(|state| state.size = Some(suggested));
@@ -199,6 +204,36 @@ impl XdgShellHandler for AeroState {
         });
         self.unconstrain_popup(&surface);
         surface.send_repositioned(token);
+    }
+
+    // F1-xdg-toplevel-states: os defaults do Smithay são no-op; honrar os
+    // pedidos reaproveitando a mecânica da 02r (work area + frame geometry).
+    fn maximize_request(&mut self, surface: ToplevelSurface) {
+        if let Some(id) = window_id_for(self, surface.wl_surface()) {
+            apply_maximize(self, id, true);
+        }
+    }
+
+    fn unmaximize_request(&mut self, surface: ToplevelSurface) {
+        if let Some(id) = window_id_for(self, surface.wl_surface()) {
+            apply_maximize(self, id, false);
+        }
+    }
+
+    fn fullscreen_request(&mut self, surface: ToplevelSurface, _output: Option<WlOutput>) {
+        if let Some(id) = window_id_for(self, surface.wl_surface()) {
+            apply_fullscreen(self, id, true);
+        }
+    }
+
+    fn unfullscreen_request(&mut self, surface: ToplevelSurface) {
+        if let Some(id) = window_id_for(self, surface.wl_surface()) {
+            apply_fullscreen(self, id, false);
+        }
+    }
+
+    fn parent_changed(&mut self, surface: ToplevelSurface) {
+        apply_parent(self, surface.wl_surface());
     }
 
     // F1-csd-gtk: o GTK chama xdg_toplevel.move/resize a partir do próprio

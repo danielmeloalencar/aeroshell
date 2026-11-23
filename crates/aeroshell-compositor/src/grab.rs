@@ -266,6 +266,9 @@ impl PointerGrab<AeroState> for ResizeGrab {
         // reenviar tamanhos obsoletos a cada motion causava a pulsação. O
         // configure do cliente (abaixo) continua em TODOS os motions.
         if let Some(toplevel) = self.window.toplevel() {
+            // F1-xdg-toplevel-states: o resize por grab também respeita min/max.
+            let size =
+                crate::protocols::toplevel_states::clamp_size(toplevel.wl_surface(), size, false);
             toplevel.with_pending_state(|state| state.size = Some(size));
             toplevel.send_configure();
             #[cfg(feature = "bench")]

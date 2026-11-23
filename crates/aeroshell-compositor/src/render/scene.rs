@@ -196,67 +196,78 @@ pub fn collect_output_elements(
 
             // Frame deste cliente: depois do cliente = abaixo dele.
             render_order.push(format!("client@{:?}", client_surface.map(|s| s.id())));
-            if let Some((frame_surface, _, _window_id, _)) = state
-                .associated_frames
-                .iter()
-                .find(|(_, _, _, cs)| cs.as_ref() == client_surface)
-            {
-                let fgeo = state
-                    .frame_geometries
-                    .get(frame_surface)
-                    .copied()
-                    .unwrap_or_default();
-                // F1f: o 9-slice precisa da MESMA escala do cliente (preferred_scale),
-                // não a do frame/output — senão `geo.loc + fgeo.offset()` e o
-                // WaylandSurfaceRenderElement divergem e a borda "descola" 1 px.
-                let (dx, dy) = fgeo.offset();
-                let loc: smithay::utils::Point<i32, smithay::utils::Physical> =
-                    smithay::utils::Point::<i32, smithay::utils::Logical>::new(
-                        local_loc.x + dx,
-                        local_loc.y + dy,
-                    )
-                    .to_physical_precise_round(output_scale);
+            let fullscreen = client_surface
+                .and_then(|surface| {
+                    state
+                        .window_surfaces
+                        .iter()
+                        .find(|(_, candidate)| *candidate == surface)
+                        .map(|(id, _)| *id)
+                })
+                .map(|id| state.window_fullscreen(id))
+                .unwrap_or(false);
+            if !fullscreen {
+                if let Some((frame_surface, _, _window_id, _)) = state
+                    .associated_frames
+                    .iter()
+                    .find(|(_, _, _, cs)| cs.as_ref() == client_surface)
+                {
+                    let fgeo = state
+                        .frame_geometries
+                        .get(frame_surface)
+                        .copied()
+                        .unwrap_or_default();
+                    // F1f: o 9-slice precisa da MESMA escala do cliente (preferred_scale),
+                    // não a do frame/output — senão `geo.loc + fgeo.offset()` e o
+                    // WaylandSurfaceRenderElement divergem e a borda "descola" 1 px.
+                    let (dx, dy) = fgeo.offset();
+                    let loc: smithay::utils::Point<i32, smithay::utils::Physical> =
+                        smithay::utils::Point::<i32, smithay::utils::Logical>::new(
+                            local_loc.x + dx,
+                            local_loc.y + dy,
+                        )
+                        .to_physical_precise_round(output_scale);
 
-                #[cfg(feature = "bench")]
-                if FSCALE_LOG.fetch_add(1, Ordering::Relaxed).is_multiple_of(5) {
-                    let foot_bs = client_surface
-                        .as_ref()
-                        .map(|surface| {
+                    #[cfg(feature = "bench")]
+                    if FSCALE_LOG.fetch_add(1, Ordering::Relaxed).is_multiple_of(5) {
+                        let foot_bs = client_surface
+                            .as_ref()
+                            .map(|surface| {
+                                with_states(surface, |states| {
+                                    states
+                                        .cached_state
+                                        .get::<SurfaceAttributes>()
+                                        .current()
+                                        .buffer_scale
+                                })
+                            })
+                            .unwrap_or(-1);
+                        let frame_pref = surface_scale(frame_surface, output_scale);
+                        let frame_bs = with_states(frame_surface, |states| {
+                            states
+                                .cached_state
+                                .get::<SurfaceAttributes>()
+                                .current()
+                                .buffer_scale
+                        });
+                        let viewport_dst = client_surface.as_ref().and_then(|surface| {
                             with_states(surface, |states| {
                                 states
                                     .cached_state
-                                    .get::<SurfaceAttributes>()
+                                    .get::<ViewportCachedState>()
                                     .current()
-                                    .buffer_scale
+                                    .dst
                             })
-                        })
-                        .unwrap_or(-1);
-                    let frame_pref = surface_scale(frame_surface, output_scale);
-                    let frame_bs = with_states(frame_surface, |states| {
-                        states
-                            .cached_state
-                            .get::<SurfaceAttributes>()
-                            .current()
-                            .buffer_scale
-                    });
-                    let viewport_dst = client_surface.as_ref().and_then(|surface| {
-                        with_states(surface, |states| {
-                            states
-                                .cached_state
-                                .get::<ViewportCachedState>()
-                                .current()
-                                .dst
-                        })
-                    });
-                    let foot_dst: Size<i32, Physical> =
-                        client_logical.to_physical_precise_round(output_scale);
-                    let foot_loc: smithay::utils::Point<i32, Physical> =
-                        render_loc.to_physical_precise_round(output_scale);
-                    let frame_dst: Size<i32, Physical> =
-                        crate::render::elements::frame_target(client_logical, &fgeo)
-                            .to_physical_precise_round(output_scale);
-                    let t = crate::frame_diagnostics::now_ns();
-                    eprintln!(
+                        });
+                        let foot_dst: Size<i32, Physical> =
+                            client_logical.to_physical_precise_round(output_scale);
+                        let foot_loc: smithay::utils::Point<i32, Physical> =
+                            render_loc.to_physical_precise_round(output_scale);
+                        let frame_dst: Size<i32, Physical> =
+                            crate::render::elements::frame_target(client_logical, &fgeo)
+                                .to_physical_precise_round(output_scale);
+                        let t = crate::frame_diagnostics::now_ns();
+                        eprintln!(
                         "FSCALE_FRAME t={t} backend=scene output={} window_id={} output_scale={} client_scale={} frame_pref={} foot_buffer_scale={} frame_buffer_scale={} foot_logical={:?} viewport_dst={:?} foot_loc={:?} foot_dst={:?} frame_dst={:?} frame_loc={:?}",
                         output.name(),
                         *_window_id,
@@ -272,83 +283,84 @@ pub fn collect_output_elements(
                         frame_dst,
                         loc
                     );
-                }
+                    }
 
-                let result = crate::render::elements::push_frame_elements(
-                    renderer,
-                    &mut elements,
-                    FrameRenderInput {
-                        surface: frame_surface,
-                        fgeo,
-                        loc,
-                        client_origin: local_loc,
-                        committed: client_logical,
-                        output_scale,
-                        #[cfg(feature = "bench")]
-                        output,
-                        window_id: *_window_id,
-                        #[cfg(feature = "bench")]
-                        resize_active: state.resize_grab_active == Some(*_window_id),
-                    },
-                    #[cfg(feature = "bench")]
-                    &mut state.frame_diag,
-                );
-                if let Some(result) = result {
-                    placed_frames.push(frame_surface.clone());
-                    let kind = match result.kind {
-                        FrameRenderKind::Frame => "frame",
-                        FrameRenderKind::Placeholder => "placeholder",
-                    };
-                    render_order.push(format!("{kind}@{:?}", frame_surface.id()));
-                    #[cfg(feature = "bench")]
-                    {
-                        if _log_render_shared {
-                            eprintln!("RENDER_SHARED window_id={_window_id} kind={kind}");
-                        }
-                        if let Some(probe) = result.titlebar_probe {
-                            titlebar_probe = Some(probe);
-                        }
-                    }
-                } else {
-                    // 02q: decoração do compositor para janelas que mapeiam antes
-                    // do WebView associar. Mesma geometria/insets do caminho winit.
-                    let mut window_id = 0;
-                    for (id, surface) in state.window_surfaces.iter() {
-                        if client_surface == Some(surface) {
-                            window_id = *id;
-                            break;
-                        }
-                    }
-                    let content = if geo.size.w > 0 && geo.size.h > 0 {
-                        client_logical
-                    } else {
-                        state
-                            .suggested_window_size
-                            .get(&window_id)
-                            .copied()
-                            .unwrap_or(client_logical)
-                    };
-                    let fgeo = crate::state::FrameGeometry {
-                        insets: state.default_frame_insets,
-                        ..Default::default()
-                    };
-                    let (dx, dy) = fgeo.offset();
-                    let loc: smithay::utils::Point<i32, smithay::utils::Physical> =
-                        smithay::utils::Point::<i32, smithay::utils::Logical>::new(
-                            local_loc.x + dx,
-                            local_loc.y + dy,
-                        )
-                        .to_physical_precise_round(output_scale);
-                    crate::render::elements::push_window_placeholder(
+                    let result = crate::render::elements::push_frame_elements(
+                        renderer,
                         &mut elements,
-                        &fgeo,
-                        loc,
-                        content,
-                        output_scale,
-                        local_loc,
-                        window_id,
+                        FrameRenderInput {
+                            surface: frame_surface,
+                            fgeo,
+                            loc,
+                            client_origin: local_loc,
+                            committed: client_logical,
+                            output_scale,
+                            #[cfg(feature = "bench")]
+                            output,
+                            window_id: *_window_id,
+                            #[cfg(feature = "bench")]
+                            resize_active: state.resize_grab_active == Some(*_window_id),
+                        },
+                        #[cfg(feature = "bench")]
+                        &mut state.frame_diag,
                     );
-                    render_order.push(format!("placeholder-sem-frame@{window_id}"));
+                    if let Some(result) = result {
+                        placed_frames.push(frame_surface.clone());
+                        let kind = match result.kind {
+                            FrameRenderKind::Frame => "frame",
+                            FrameRenderKind::Placeholder => "placeholder",
+                        };
+                        render_order.push(format!("{kind}@{:?}", frame_surface.id()));
+                        #[cfg(feature = "bench")]
+                        {
+                            if _log_render_shared {
+                                eprintln!("RENDER_SHARED window_id={_window_id} kind={kind}");
+                            }
+                            if let Some(probe) = result.titlebar_probe {
+                                titlebar_probe = Some(probe);
+                            }
+                        }
+                    } else {
+                        // 02q: decoração do compositor para janelas que mapeiam antes
+                        // do WebView associar. Mesma geometria/insets do caminho winit.
+                        let mut window_id = 0;
+                        for (id, surface) in state.window_surfaces.iter() {
+                            if client_surface == Some(surface) {
+                                window_id = *id;
+                                break;
+                            }
+                        }
+                        let content = if geo.size.w > 0 && geo.size.h > 0 {
+                            client_logical
+                        } else {
+                            state
+                                .suggested_window_size
+                                .get(&window_id)
+                                .copied()
+                                .unwrap_or(client_logical)
+                        };
+                        let fgeo = crate::state::FrameGeometry {
+                            insets: state.default_frame_insets,
+                            ..Default::default()
+                        };
+                        let (dx, dy) = fgeo.offset();
+                        let loc: smithay::utils::Point<i32, smithay::utils::Physical> =
+                            smithay::utils::Point::<i32, smithay::utils::Logical>::new(
+                                local_loc.x + dx,
+                                local_loc.y + dy,
+                            )
+                            .to_physical_precise_round(output_scale);
+                        crate::render::elements::push_window_placeholder(
+                            &mut elements,
+                            &fgeo,
+                            loc,
+                            content,
+                            output_scale,
+                            local_loc,
+                            window_id,
+                        );
+                        render_order.push(format!("placeholder-sem-frame@{window_id}"));
+                    }
                 }
             }
         }
@@ -372,6 +384,7 @@ pub fn collect_output_elements(
             if !layer.alive()
                 || placed_frames.contains(layer.wl_surface())
                 || state.frame_has_mapped_client(layer.wl_surface())
+                || state.frame_suppressed(layer.wl_surface())
             {
                 continue;
             }
