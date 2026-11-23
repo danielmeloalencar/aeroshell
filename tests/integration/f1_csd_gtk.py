@@ -18,6 +18,7 @@ import sys
 import time
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
+GEOMETRY_ONLY = "--geometry-only" in sys.argv
 OUT = pathlib.Path("/tmp/opencode/f1-csd")
 OUT.mkdir(parents=True, exist_ok=True)
 SOCK = f"wayland-aero-csd-{os.getpid()}"
@@ -37,6 +38,8 @@ env.update(
     RUST_LOG="debug", AERO_WINDOW_IPC_SOCK=str(IPC),
     AERO_TEST_INPUT_SOCK=str(INPUT), AERO_CSD_GO=str(GO),
 )
+if GEOMETRY_ONLY:
+    env["AERO_CSD_GEOMETRY_ONLY"] = "1"
 
 comp = subprocess.Popen(
     [str(ROOT / "target/debug/aeroshell-compositor"), "--backend", "winit",
@@ -145,7 +148,11 @@ try:
         if before and resized else 0
     )
     checks = {
-        "cliente pediu ClientSide": "CSD_CLIENT mode_requested=ClientSide" in text,
+        "cliente pediu sinal CSD": (
+            "CSD_CLIENT mode_requested=ClientSide" in text
+            if not GEOMETRY_ONLY
+            else "CSD_CLIENT mode_requested=GeometryOnly" in text
+        ),
         "pedido com serial invalido": "CSD_CLIENT invalid_move_requested serial=0" in text,
         "CSD detectado (bench)": bool(re.search(r"CSD_DETECT t=\d+ window_id=0 client_frame=true", text)),
         "serial invalido recusado": bool(re.search(r"CSD_MOVE t=\d+ window_id=0 decisao=deny", text)),

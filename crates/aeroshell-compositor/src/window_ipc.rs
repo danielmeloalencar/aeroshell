@@ -316,14 +316,22 @@ impl AeroState {
                 let Some(toplevel) = window.toplevel() else {
                     return "ERR sem toplevel".to_owned();
                 };
-                format!(
-                    "CSD {id} {}",
-                    if client_draws_frame(toplevel.wl_surface()) {
-                        1
-                    } else {
-                        0
-                    }
-                )
+                let explicit = client_draws_frame(toplevel.wl_surface());
+                // GTK4/gedit NÃO pede ClientSide, mas desenha sombra fora da
+                // window geometry (Domicile: window_geometry.rs). Origem != 0
+                // é o sinal observável no caso real.
+                let geo = window.geometry();
+                let from_geometry = geo.loc.x != 0 || geo.loc.y != 0;
+                #[cfg(feature = "bench")]
+                if from_geometry && !explicit {
+                    eprintln!(
+                        "CSD_DETECT t={} window_id={id} client_frame=true reason=geometry loc=({},{})",
+                        crate::frame_diagnostics::now_ns(),
+                        geo.loc.x,
+                        geo.loc.y
+                    );
+                }
+                format!("CSD {id} {}", if explicit || from_geometry { 1 } else { 0 })
             }
             _ => "ERR comando desconhecido".to_owned(),
         }

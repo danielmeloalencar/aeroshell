@@ -63,6 +63,7 @@ struct App {
     seat: Option<WlSeat>,
     decoration_manager: Option<ZxdgDecorationManagerV1>,
     surface: Option<WlSurface>,
+    xdg_surface: Option<XdgSurface>,
     toplevel: Option<XdgToplevel>,
     serials: Vec<u32>,
     pending_size: Option<(i32, i32)>,
@@ -190,6 +191,14 @@ impl App {
         let pool = shm.create_pool(file.as_fd(), stride * height, qh, ());
         let buffer = pool.create_buffer(0, width, height, stride, Format::Argb8888, qh, ());
         let surface = self.surface.clone().ok_or("sem surface")?;
+        if std::env::var_os("AERO_CSD_GEOMETRY_ONLY").is_some() {
+            // Imita o GTK4/gedit: NÃO pede ClientSide, mas desenha sombra fora
+            // da window geometry (Domicile: window_geometry.rs).
+            let gutter = 20;
+            if let Some(xdg) = self.xdg_surface.clone() {
+                xdg.set_window_geometry(gutter, gutter, width - 2 * gutter, height - 2 * gutter);
+            }
+        }
         surface.attach(Some(&buffer), 0, 0);
         surface.commit();
         self.buffer_size = size;
@@ -236,6 +245,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         seat: None,
         decoration_manager: None,
         surface: None,
+        xdg_surface: None,
         toplevel: None,
         serials: Vec::new(),
         pending_size: None,
@@ -245,6 +255,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     queue.roundtrip(&mut app)?;
 
+    let geometry_only = std::env::var_os("AERO_CSD_GEOMETRY_ONLY").is_some();
     let manager = app
         .decoration_manager
         .clone()
@@ -258,15 +269,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let xdg_surface = wm_base.get_xdg_surface(&surface, &qh, 0);
     let toplevel = xdg_surface.get_toplevel(&qh, 0u32);
     toplevel.set_title("aero-csd-probe".into());
-    let decoration = manager.get_toplevel_decoration(&toplevel, &qh, ());
-    decoration.set_mode(DecorationMode::ClientSide);
-    app.surface = Some(surface);
+    if !geometry_only {
+        let decoration = manager.get_toplevel_decoration(&toplevel, &qh, ());
+        decoration.set_mode(DecorationMode::ClientSide);
+    }
+    app.surface = Some(surface.clone());
+    app.xdg_surface = Some(xdg_surface.clone());
     app.toplevel = Some(toplevel.clone());
     app.attach_buffer(&qh, (WIDTH, HEIGHT))?;
     // Pedido com serial inválido: o compositor deve recusar sem criar grab.
     toplevel._move(&seat, 0);
     eprintln!("CSD_CLIENT invalid_move_requested serial=0");
-    eprintln!("CSD_CLIENT mode_requested=ClientSide");
+    eprintln!(
+        "CSD_CLIENT mode_requested={}",
+        if geometry_only {
+            "GeometryOnly"
+        } else {
+            "ClientSide"
+        }
+    );
     eprintln!("CSD_CLIENT pronto_para_input");
 
     let deadline = std::time::Instant::now() + Duration::from_secs(30);

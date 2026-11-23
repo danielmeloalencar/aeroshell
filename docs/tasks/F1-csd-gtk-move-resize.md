@@ -1,4 +1,8 @@
-# Tarefa F1-csd-gtk-move-resize — apps GTK/CSD sem barra dupla e com move/resize (EM EXECUÇÃO — aguarda juiz visual)
+# Tarefa F1-csd-gtk-move-resize — apps GTK/CSD sem barra dupla e com move/resize (EM EXECUÇÃO — aguarda reteste visual)
+
+> **1º juiz visual NEGOU (2026-11-22):** humano viu decoração dupla no gedit no tty3. Causa lida no log dele: o gedit
+> não pede `ClientSide`; detecta-se CSD pela sombra fora da `window_geometry` (guia do Domicile). Corrigido e provado
+> com `f1_csd_gtk.py --geometry-only`. Aguardando novo "ok" no tty3.
 
 > Decisão do humano (2026-11-22): cartão **único** para os dois sintomas observados no `gedit` (tty3): barra de
 > decoração duplicada e move/resize que não funcionam. Um cartão por sessão; se o objetivo mudar, PARE e pergunte.
