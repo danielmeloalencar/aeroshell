@@ -721,11 +721,11 @@ fn refresh_titles() {
                     return None;
                 }
                 entry.csd_active = true;
-                entry.insets = (BORDER, 0, BORDER, BORDER);
+                entry.insets = (0, 0, 0, 0);
                 Some((entry.frame.clone(), entry.webview.clone()))
             });
             if let Some((frame, view)) = state_change {
-                frame.set_insets(BORDER, 0, BORDER, BORDER);
+                frame.set_insets(0, 0, 0, 0);
                 frame.set_titlebar_slices(0, 0);
                 view.evaluate_javascript(
                     "window.aeroHideFrame && window.aeroHideFrame();",
@@ -739,7 +739,7 @@ fn refresh_titles() {
                     },
                 );
                 eprintln!(
-                    "FRAMEWEB: csd_late window_id={window_id} reason=geometry t={}",
+                    "FRAMEWEB: csd_late window_id={window_id} insets=(0,0,0,0) reason=geometry t={}",
                     bench_t()
                 );
             }
@@ -918,10 +918,16 @@ fn associate_frame(
     client_frame: bool,
 ) {
     let hide_view = webview.clone();
-    let (top, title_left, title_right) = if client_frame {
-        (0, 0, 0)
+    // GTK3/gedit desenham a própria moldura: SEM titlebar e SEM bordas.
+    let (left, top, right, bottom) = if client_frame {
+        (0, 0, 0, 0)
     } else {
-        (TITLEBAR_H, TITLE_TEXT_W, RIGHT_CONTROLS)
+        (BORDER, TITLEBAR_H, BORDER, BORDER)
+    };
+    let (title_left, title_right) = if client_frame {
+        (0, 0)
+    } else {
+        (TITLE_TEXT_W, RIGHT_CONTROLS)
     };
     RUNTIME.with(|cell| {
         let mut borrow = cell.borrow_mut();
@@ -929,7 +935,7 @@ fn associate_frame(
         let qh = rt.queue.handle();
         let manager = rt.state.manager.clone().expect("manager ausente");
         let frame = manager.associate(&wl_surface, window_id, &qh, ());
-        frame.set_insets(BORDER, top, BORDER, BORDER);
+        frame.set_insets(left, top, right, bottom);
         frame.set_titlebar_slices(title_left, title_right);
         let _ = rt.queue.flush();
         rt.state.entries.push(FrameEntry {
@@ -937,7 +943,7 @@ fn associate_frame(
             wl_surface,
             window,
             webview,
-            insets: (BORDER, top, BORDER, BORDER),
+            insets: (left, top, right, bottom),
             total: (0, 0),
             canvas,
             presented: false,
@@ -946,7 +952,7 @@ fn associate_frame(
             last_icon: None,
             csd_active: client_frame,
         });
-        eprintln!("FRAMEWEB: associate(window_id={window_id}) + set_insets({BORDER},{top},{BORDER},{BORDER}) \
+        eprintln!("FRAMEWEB: associate(window_id={window_id}) + set_insets({left},{top},{right},{bottom}) \
                    + set_titlebar_slices({title_left},{title_right}) client_frame={client_frame} t={}", bench_t());
         let pending = PENDING_CONFIGURES.with(|cell| std::mem::take(&mut *cell.borrow_mut()));
         for (pending_frame, serial, width, height) in pending {

@@ -158,6 +158,10 @@ try:
         "serial invalido recusado": bool(re.search(r"CSD_MOVE t=\d+ window_id=0 decisao=deny", text)),
         "barra HTML escondida (DOM)": bool(re.search(
             r"FRAMEWEB: csd_applied window_id=0 client_frame=true bar=hidden", text)),
+        "sem bordas do frame": (
+            bool(re.search(r"FRAMEWEB: associate\(window_id=0\) \+ set_insets\(0,0,0,0\)", text))
+            or bool(re.search(r"FRAMEWEB: csd_late window_id=0 insets=\(0,0,0,0\)", text))
+        ),
         "move pelo cliente": delta_loc >= 150,
         "resize pelo cliente": delta_size >= 80,
         "sem erro de protocolo": not re.search(r"error \d+:|protocol error", text, re.I),
