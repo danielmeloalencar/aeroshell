@@ -18,6 +18,7 @@ use smithay::{
     wayland::{
         compositor::{with_states, CompositorClientState, CompositorState},
         cursor_shape::CursorShapeManagerState,
+        dmabuf::{DmabufGlobal, DmabufState},
         fractional_scale::{with_fractional_scale, FractionalScaleManagerState},
         input_method::InputMethodManagerState,
         output::OutputManagerState,
@@ -204,6 +205,9 @@ pub struct AeroState {
     pub kde_decoration_state: KdeDecorationState,
     pub layer_shell_state: WlrLayerShellState,
     pub shm_state: ShmState,
+    /// F1-dmabuf: global `zwp_linux_dmabuf_v1` (vivo enquanto o estado existe).
+    pub dmabuf_state: DmabufState,
+    pub dmabuf_global: Option<DmabufGlobal>,
     pub output_manager_state: OutputManagerState,
     pub seat_state: SeatState<AeroState>,
     pub data_device_state: DataDeviceState,
@@ -333,6 +337,8 @@ impl AeroState {
             (),
         >(1, ());
         let shm_state = ShmState::new::<Self>(&dh, vec![]);
+        // O global dmabuf é criado por cada backend assim que o renderer existe.
+        let dmabuf_state = DmabufState::new();
         let output_manager_state = OutputManagerState::new_with_xdg_output::<Self>(&dh);
         let mut seat_state = SeatState::new();
         let data_device_state = DataDeviceState::new::<Self>(&dh);
@@ -431,6 +437,8 @@ impl AeroState {
             kde_decoration_state,
             layer_shell_state,
             shm_state,
+            dmabuf_state,
+            dmabuf_global: None,
             output_manager_state,
             seat_state,
             data_device_state,

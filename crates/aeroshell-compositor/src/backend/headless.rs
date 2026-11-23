@@ -79,6 +79,9 @@ pub fn init_headless(
     // SAFETY: o contexto foi criado a partir do display surfaceless válido acima e
     // passa a pertencer ao renderer; nenhum outro contexto EGL é usado nesta thread.
     let mut renderer = unsafe { GlesRenderer::new(context)? };
+    // F1-dmabuf: o global só existe quando há um renderer para dizer quais
+    // formatos são importáveis (formatos anunciados = formatos importáveis).
+    crate::protocols::dmabuf::announce(&mut data.state, &renderer, &data.display_handle)?;
     let buffer_size: Size<i32, BufferCoord> = Size::new(size.w, size.h);
     let mut renderbuffer = renderer.create_buffer(Fourcc::Abgr8888, buffer_size)?;
     let mut tracker = OutputDamageTracker::from_output(&output);

@@ -119,6 +119,8 @@ pub fn init_udev(
     // SAFETY: contexto EGL recém-criado e válido; nenhum outro contexto ativo na thread.
     let mut renderer = unsafe { GlesRenderer::new(context)? };
     tracing::info!("udev: renderer EGL/GLES criado");
+    // F1-dmabuf: anunciar os formatos importáveis pelo renderer GLES/GBM.
+    crate::protocols::dmabuf::announce(&mut data.state, &renderer, &data.display_handle)?;
 
     let allocator = GbmAllocator::new(
         gbm.clone(),

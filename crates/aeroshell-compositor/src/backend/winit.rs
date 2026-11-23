@@ -69,6 +69,8 @@ pub fn init_winit(
     data: &mut CalloopData,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let (mut backend, winit_source) = winit::init::<GlesRenderer>()?;
+    // F1-dmabuf: renderer de EGL já existe; anunciar só os formatos que ele importa.
+    crate::protocols::dmabuf::announce(&mut data.state, backend.renderer(), &data.display_handle)?;
 
     let multi = opts.outputs > 1;
     let initial_host_size = backend.window_size();
