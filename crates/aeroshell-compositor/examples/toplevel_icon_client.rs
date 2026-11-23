@@ -227,6 +227,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         queue.roundtrip(&mut app)?;
     }
     eprintln!("ICON_CLIENT OK");
+
+    // F1-toplevel-icon-protocol: reproduz a sequência do Qt (kwrite) que
+    // destrói o ícone e o wl_buffer DEPOIS do set_icon. Sob env de teste.
+    if std::env::var_os("AERO_ICON_DESTROY_AFTER_SET").is_some() {
+        if let (Some(icon), Some(buffer)) = (app.icon.take(), app.buffer.take()) {
+            icon.destroy();
+            buffer.destroy();
+            for _ in 0..4 {
+                queue.roundtrip(&mut app)?;
+            }
+            eprintln!("ICON_CLIENT DESTROY_AFTER_SET_OK");
+        }
+        return Ok(());
+    }
     // Mantém a janela viva para o harness consultar `icon 0` no IPC.
     for tick in 0..120 {
         queue.roundtrip(&mut app)?;
