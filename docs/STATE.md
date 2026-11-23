@@ -11,7 +11,7 @@ Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (pain
 lock, login) é TSX renderizado por WebKitGTK; runtime de política em Bun. Dev em nested (winit).
  
 ## 2. Objetivo atual (F1 autorizada)
-**Fase atual: F1 FECHADA (F2 ainda não aberta)** — núcleo do compositor completo; ver §3/§9. F0/fatia vertical FECHADA pelo humano em 2026-11-21: `foot` com
+**Fase atual: F2 ABERTA — primeiro cartão `F2-event-stream` em execução** (F1 FECHADA em `585fa6f`; ver §3/§9). F0/fatia vertical FECHADA pelo humano em 2026-11-21: `foot` com
 decoração HTML funcional e painel React/TSX; fechamento formal em `docs/f0-relatorio-go-no-go.md` (quadro
 S1–S5, ratificação registrada dos ADRs, S4→F2/F9 e S5→F5/F6 deferidos com justificativa).
 F1 em andamento por cartões pequenos: F1a, F1b e F1c FECHADAS (juiz visual OK nas três; F1c em 2026-11-21);
@@ -1423,8 +1423,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
    FECHADO (A→B em headless+winit, 3× OK, sem mudança de produto); F1-xdg-toplevel-states FECHADO PELO JUIZ
    ("aprovado"); F1-presentation-time FECHADO (3× OK headless+winit, gates verdes, sonda fora do binário normal,
    juiz visual N/A). **GATE FINAL executado e F1 FECHADA (§3).**
-   **Próximo cartão do humano: `docs/tasks/F7-compat-snap.md` (rascunho criado, aguarda "ok") — integração/sessão
-   snap, NÃO protocolo e não ambiente descartável. F2 permanece sem abertura autorizada até decisão explícita.**
+   **F2 ABERTA pelo humano (2026-11-23): primeiro cartão `docs/tasks/F2-event-stream-typed-sdk.md` aprovado e em
+   execução (stream tipado substituindo poll; S4 deferido). `F7-compat-snap.md` segue como cartão nosso de sessão,
+   sem snapd/slot neste cartão.**
    **cursor-shape e primary-selection JÁ FECHADOS — removidos da fila pelo humano**; F1f FECHADO; xdg_activation
    sanada na F1i+. Decoração: manter ServerSide+CSD e expor estado via IPC para a política Bun na F2, sem mudar
    arquitetura. STATE.md >150 linhas: cartão de docs próprio depois.
