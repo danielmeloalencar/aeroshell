@@ -624,12 +624,12 @@ pub struct ClientState {
 
 impl ClientData for ClientState {
     fn initialized(&self, _client_id: ClientId) {}
-    fn disconnected(&self, client_id: ClientId, reason: DisconnectReason) {
+    fn disconnected(&self, _client_id: ClientId, reason: DisconnectReason) {
         #[cfg(feature = "bench")]
         {
             let t = crate::frame_diagnostics::now_ns();
             eprintln!(
-                "CLIENT_DISCONNECT t={t} client={client_id:?} is_shell={} reason={reason:?}",
+                "CLIENT_DISCONNECT t={t} client={_client_id:?} is_shell={} reason={reason:?}",
                 self.is_shell
             );
         }
