@@ -21,7 +21,32 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
-- [x] **F1-dmabuf (2026-11-23) — código/teste/gates verdes; gate VSCode NÃO passou (snap força X11).**
+- [x] **F1-clipboard-two-clients (2026-11-23) — round-trip A→B em headless e winit; sem mudança de produto.**
+      Cartão `docs/tasks/F1-clipboard-two-clients.md` aprovado e executado; humano requalificou o gate do VSCode
+      (F1-dmabuf) como compatibilidade de ambiente/DX, não bloqueante do núcleo. **Não houve bug de produto:**
+      `DataDeviceState`, `set_data_device_focus` no `focus_changed` e `delegate_data_device!` já existem
+      (`state.rs:209`, `seat.rs:67-89,120-137`). A lacuna era de EVIDÊNCIA com dois clientes reais.
+      Código de teste: `examples/clipboard_client.rs` (`--offer` cria `wl_data_source`, oferece
+      `text/plain;charset=utf-8` e chama `set_selection` com o serial do botão; `--receive` lê `data_offer`+
+      `selection`, pede `receive` e valida os bytes) + `tests/integration/f1_clipboard_two_clients.py`
+      (dois clientes, foco A→B por `AERO_TEST_INPUT_SOCK`, janelas localizadas pelo IPC `list` pelo título,
+      pontos de clique escolhidos fora da janela sobreposta). Nenhuma dependência nova, nenhum protocolo/ADR.
+      **Teste-first:** `--no-sync` (foco B antes de A processar a seleção) → `VEREDITO: FALHA` nos dois backends,
+      `A nunca definiu a seleção`, `B recebeu...=FALHA`; amostra em `baseline-racy-final.log`.
+      Causa da falha era do INSTRUMENTO (3 corridas): (1) seleção ainda não processada, (2) ordem de mapeamento
+      das janelas invertida, (3) leitura do arquivo antes da escrita. Corrigidas no harness/cliente, sem tocar
+      no compositor. Depois: **3× `VEREDITO: OK`** (`final-run{1,2,3}.log`): `CLIP_A SELECTION_SET/SEND`,
+      `CLIP_B GOT aero-clipboard-cross-client-2026`, `CLIP_B OK`, 0 erros de protocolo, headless + winit.
+      Descoberta da API confirmada no Smithay 0.7.0 fixado: `set_data_device_focus` anuncia a seleção com
+      `data_offer` + `selection` (o evento `enter` é só drag-and-drop); o cliente precisa de
+      `event_created_child!` para o opcode 0 de `wl_data_device`, senão o wayland-client aborta.
+      Gates: `check.sh` EXIT=0 (`gate-final2.log`), clippy `--features bench -D warnings` EXIT=0,
+      `--no-default-features` EXIT=0. Vizinhos: `f1i_protocols`, `headless_render_damage`, `frame_buttons`
+      → OK; `frame_window_id` falhou 2× em "sem configure de conteúdo para window_id=1" com
+      `warn: terminal.c:2029: slave exited with signal 1 (Hangup)` — flake pré-existente (§6), não regressão
+      (nenhuma linha de produto mudou nesta sessão). Sem critério visual: não houve mudança visível, juiz
+      humano não se aplica. **PARAR antes do cartão 3 (`xdg-toplevel-states`).**
+- [x] **F1-dmabuf (2026-11-23) — código/teste/gates verdes; requalificado pelo humano como NÃO bloqueante.**
       Cartão `docs/tasks/F1-dmabuf.md` aprovado pelo humano ("ok — ordem aprovada"). APIs lidas no Smithay 0.7.0
       fixado antes de editar (`wayland/dmabuf/mod.rs:315,341,390,588,645,881,992,1036`; `dispatch.rs:198-214`):
       **nenhuma dependência nova** (`gbm`, protocolos e bindings vêm dos reexports do Smithay; `wayland-client` já
@@ -45,13 +70,16 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
       ("sem configure de conteúdo") e passou na repetição sem mudança de código; `fractional_scale.py` falhou
       em "escalas independentes" **também no HEAD sem minhas mudanças** (A/B em worktree `cf38dd6`,
       `ab-head-fractional2.log`) → pré-existente, não regressão; `multi_output_damage.py` já era falha
-      conhecida em §6. **GATE CRÍTICO VSCode NÃO PASSOU:** com o global presente, `/snap/bin/code` ainda
+      conhecida em §6. **VSCode (decisão do humano 2026-11-23): requalificado como item de compatibilidade de
+      ambiente/DX, NÃO bloqueante do núcleo F1.** Com o global presente, `/snap/bin/code` ainda
       encerra em Ozone/X11 — prova crua: `Option 'ozone-platform' is defined more than once. Using value 'x11'.`
       e `Missing X server or $DISPLAY` (`ozone-evidence/comp.log`). O controle Electron não-snap
       (`/snap/code/current/usr/share/code/code`,-sem wrapper) falha antes disso com
       `GLib-GIO-ERROR: Settings schema 'org.gnome.settings-daemon.plugins.xsettings' … 'antialiasing'`.
       Ou seja a causa do VSCode é o launcher snap (e o schema do host no controle), NÃO o dmabuf; sem terceira
-      via por conta própria, conforme determinado. **Juiz visual do VSCode pendente (§7); não fechar por log.**
+      via por conta própria, conforme determinado. O baseline já falhava igual ANTES da correção — logo não é
+      regressão do dmabuf. **Sem juiz visual aplicável ao import offscreen; cartão FECHADO com ressalvas.**
+      Prova app-level de dmabuf fica agrupada com a validação de hardware da F1d (GPU real).
 - [x] **F1-final-1c + F1-toplevel-icon-protocol — FECHADOS PELO JUIZ VISUAL NO NESTED E NO TTY3 (2026-11-23).**
       Humano operou a instância `wayland-aero-f1-final-visual` (Kate PID 45321 + Kwrite PID 45447, ambas vivas e
       com título/conteúdo reais) e aprovou: *"Aprovado"*. Depois **repetiu no tty3 com `./u` e relatou que
@@ -1252,13 +1280,12 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
-- **F1-dmabuf (2026-11-23): código, harness de cliente real, tranches/import e gates verdes (§3).** Falta o gate
-  crítico do VSCode: o snap força Ozone/X11 (§6) e o Electron não-snap de controle quebra por schema GLib (§6).
-  Não é regressão do dmabuf; **PARAR e reportar** — próximo cartão (`F1-clipboard-two-clients.md`) só com "ok".
-  Instância nested de diagnóstico: compositor PID 11925, socket `wayland-aero-f1-dmabuf-visual`, IPC
-  `/tmp/opencode/f1-dmabuf/visual/ipc.sock` (`list` → `.`). **Ela foi encerrada pelo restart do ambiente, não pelo
-  agente**; não há mais instância aberta para o humano julgar. Log sobreviveu em
-  `/tmp/opencode/f1-dmabuf/visual/compositor.log`.
+- **F1-clipboard-two-clients FECHADO nesta sessão (§3): A→B em headless + winit, 3× OK, gates verdes.**
+  Sem mudança de produto; o fluxo já funcionava por default e a lacuna era de evidência/instrumento (§6).
+  **PARAR — não abrir `F1-xdg-toplevel-states.md` sem "ok" explícito.** Nenhuma instância deixada aberta.
+- **F1-dmabuf FECHADO com ressalvas (§3): VSCode é compatibilidade de ambiente/DX, não bloqueante.** O snap força
+  Ozone/X11 (§6) e o Electron não-snap de controle quebra por schema GLib (§6); baseline já falhava igual antes
+  da correção. A instância de diagnóstico (PID 11925) foi encerrada pelo restart do ambiente, não pelo agente.
 - **F1-subsurfaces e F1-final-1b FECHADOS PELO JUIZ (2026-11-23) — ver §3.** Nenhuma instância encerrada pelo agente.
 - **F1f DRM: FECHADO pelo humano nesta sessão (decisão registrada) — não reabrir.**
 - **F1-csd-gtk-move-resize (2026-11-22): código, teste-first, 4× harness verde, regressões e gate prontos (§3). Falta
@@ -1319,13 +1346,14 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
 0. **SEQUÊNCIA F1-FINAL REVISADA (humano, 2026-11-23): F1-dmabuf → clipboard 2 clientes → xdg-toplevel-states →
-   presentation-time. Um cartão por sessão; PARAR para ok visual antes da F2.** F1-dmabuf executado nesta sessão
-   (§3): global/import/gates verdes, mas gate VSCode NÃO passou por causa do launcher snap (§6/§7). Cartões
-   seguintes: `F1-clipboard-two-clients.md` (próximo), `F1-xdg-toplevel-states.md`, `F1-presentation-time.md`
-   (rascunhos aguardando ok). **cursor-shape e primary-selection JÁ FECHADOS — removidos da fila pelo humano**;
-   F1f FECHADO; xdg_activation sanada na F1i+. Decoração: manter ServerSide+CSD e expor estado via IPC para a
-   política Bun na F2, sem mudar arquitetura. STATE.md >150 linhas: cartão de docs próprio depois.
-   **Próximo passo: SÓ com "ok" do humano, abrir `F1-clipboard-two-clients.md`.**
+   presentation-time. Um cartão por sessão; PARAR antes do próximo cartão e antes da F2.** F1-dmabuf FECHADO com
+   ressalvas (VSCode requalificado como compatibilidade de ambiente/DX, não bloqueante); F1-clipboard-two-clients
+   executado nesta sessão (§3): A→B em headless+winit, 3× OK, sem mudança de produto. Cartões seguintes:
+   `F1-xdg-toplevel-states.md` (próximo), `F1-presentation-time.md` (rascunhos aguardando ok).
+   **cursor-shape e primary-selection JÁ FECHADOS — removidos da fila pelo humano**; F1f FECHADO; xdg_activation
+   sanada na F1i+. Decoração: manter ServerSide+CSD e expor estado via IPC para a política Bun na F2, sem mudar
+   arquitetura. STATE.md >150 linhas: cartão de docs próprio depois.
+   **Próximo passo: SÓ com "ok" do humano, abrir `F1-xdg-toplevel-states.md`.**
 1. **NENHUMA AUTORIZADA — PARAR.** F1-csd-sem-flash, F1-csd-gtk-move-resize, F1-toplevel-icon, título real e F1i+
    FECHADOS PELO JUIZ (§3/§7). O próximo cartão só com decisão explícita; não avançar de fase nem abrir spike D-Bus.
    02s FECHADA pelo juiz (§3), 02r FECHADA pelo juiz (§3),
@@ -1359,6 +1387,20 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **F1-clipboard-two-clients (2026-11-23): o baseline FALHOU por corrida do INSTRUMENTO, não do produto.**
+  Amostras preservadas: `baseline.log` (fixed points + foco B antes da seleção), `final.log` (ordem de map A/B
+  invertida) e `baseline-racy-final.log` (modo `--no-sync` do instrumento final, FALHA determinística nos dois
+  backends). Correções apenas no harness/cliente: esperar `CLIP_A SELECTION_SET`, localizar janelas pelo IPC
+  `list` e escolher pontos não sobrepostos, e esperar o arquivo de leitura ter 32 bytes. Nenhuma linha do
+  compositor foi alterada; 3× `VEREDITO: OK` depois. Smithay anuncia seleção via `data_offer`+`selection`
+  (não `enter`, que é DnD) e exige `event_created_child!` para o opcode 0 de `wl_data_device`.
+- **F1-clipboard-two-clients (2026-11-23): `frame_window_id.py` falhou 2× nesta sessão** em "sem configure de
+  conteúdo para window_id=1", com `warn: terminal.c:2029: slave exited with signal 1 (Hangup)` no log cru.
+  É o mesmo intermitente documentado no cartão do dmabuf (lá falhou 1× e passou na repetição); nesta sessão
+  nenhum código de produto mudou, então não pode ser regressão do clipboard. Não insisti em terceira execução.
+- **F1-dmabuf / decisão do humano (2026-11-23): VSCode é item de compatibilidade de ambiente/DX, separado do
+  núcleo F1.** O baseline já falhava igual antes da correção; a prova app-level de dmabuf fica com a validação
+  de hardware da F1d (GPU real). Não bloqueia cartões seguintes.
 - **F1-dmabuf (2026-11-23): VSCode/Electron do snap não abre no nested — causa é o launcher, não o protocolo.**
   Com `linux-dmabuf-v1` presente e 41 formatos, `/snap/bin/code` liga `env WAYLAND_DEBUG=1` e morre em
   `ui/ozone/platform/x11/ozone_platform_x11.cc:257 Missing X server or $DISPLAY`. Ao passar
@@ -1878,10 +1920,11 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- **F1-dmabuf (2026-11-23): JUIZ VISUAL DO VSCODE PENDENTE / NÃO ABRIU.** O global e o import estão provados no
-  headless e no nested, mas o app crítico não abriu por causa do snap (§6). Instância nested deixada aberta
-  A instância aberta para o juiz (PID 11925) foi encerrada pelo restart do ambiente, não pelo agente;IPC
-  devolvia `list` → `.` antes disso. Sem o "ok" do humano este item NÃO está validado visualmente.
+- **F1-dmabuf (2026-11-23): VSCode NÃO abriu; juiz visual NÃO SE APLICA a import offscreen (decisão do humano).**
+  O app crítico não abriu por causa do snap (§6), mas o baseline já falhava igual antes da correção; humano
+  requalificou como compatibilidade de ambiente/DX, fora do núcleo. A instância de diagnóstico (PID 11925)
+  foi encerrada pelo restart do ambiente, não pelo agente; IPC devolvia `list` → `.` antes disso.
+  Prova app-level real fica agrupada com a validação de hardware da F1d (GPU real).
 - **F1-dmabuf (2026-11-23): DRM/udev NÃO medido.** O global é anunciado com os formatos do renderer GBM no udev,
   mas não há VT nesta VM; o import real em DRM e a aparência no tty3 (`~/u`) seguem sem medição nem juiz.
   Desempenho (FPS/latência) também não medido: VM VirtualBox sem 3D, só funcionamento vale (AGENTS §4.3).
@@ -2292,7 +2335,15 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **SESSÃO ATUAL (2026-11-23): F1-dmabuf — global/import/gates verdes; VSCode NÃO abriu (snap Ozone/X11).**
+- **SESSÃO ATUAL (2026-11-23): F1-clipboard-two-clients — A→B em headless + winit, 3× OK; sem mudança de produto.**
+  Cliente `examples/clipboard_client.rs` e harness `tests/integration/f1_clipboard_two_clients.py` (novos).
+  Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-compositor --example clipboard_client && python3 tests/integration/f1_clipboard_two_clients.py`
+  → `VEREDITO: OK` em headless e winit, `CLIP_B GOT aero-clipboard-cross-client-2026`, 0 erros de protocolo.
+  Baseline determinístico: mesmo comando com `--no-sync` → `VEREDITO: FALHA` (instrumento, não produto — §6).
+  Gate final `check.sh` EXIT=0 (`gate-final2.log`), clippy bench 0, no-default 0; vizinhos f1i,
+  headless_render_damage e frame_buttons OK; frame_window_id flake 2× (§6). Sem juiz visual aplicável.
+  **Próximo passo: só com "ok", cartão `F1-xdg-toplevel-states.md`.** Sem push.
+- **SESSÃO ANTERIOR (2026-11-23): F1-dmabuf — global/import/gates verdes; VSCode requalificado (ambiente/DX).**
   Código: `protocols/dmabuf.rs` (handler + feedback v5 com 41 formatos de `renderer.dmabuf_formats()`,
   `successful()` 1×), campos em `state.rs`, anúncio nos 3 backends; sem dep nova, sem XML/ADR/geometria.
   Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-compositor --example dmabuf_client && python3 tests/integration/f1_dmabuf.py`
@@ -2300,7 +2351,7 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
   Gate final `check.sh` EXIT=0 (`gate-final.log`), clippy bench 0, no-default 0. Vizinhos e A/B em §6.
   VSCode: `/snap/bin/code` morre em Ozone/X11 mesmo com o global; controle não-snap quebra em schema GLib — §6.
   Instância de diagnóstico (PID 11925) encerrada pelo restart do ambiente, não pelo agente; IPC devolvia
-  `list` → `.`. **Próximo passo: só com "ok", cartão `F1-clipboard-two-clients.md`.** Sem push.
+  `list` → `.`. Cartão FECHADO com ressalvas; clipboard executado na sessão seguinte (acima). Sem push.
 - **SESSÃO ANTERIOR (2026-11-23): F1-final-1c + F1-toplevel-icon-protocol — FECHADOS PELO JUIZ (*"Aprovado"*).**
   Dois fixes: (1) `0b31705` configure inicial do canvas na frame layer-surface; (2) `a3bd4fc` handler próprio de
   `xdg_toplevel_icon_v1` que copia pixels e não retém `wl_buffer` (bug do Smithay 0.7.0 `shm/mod.rs:496`).
