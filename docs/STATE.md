@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-22 · **Fase atual: F1** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · **F1i+ FECHADA PELO JUIZ VISUAL (digitação normal; só aviso de toplevel-icon, fora de escopo)** · **título real na titlebar FECHADO PELO JUIZ VISUAL ("ok")** · **F1-toplevel-icon FECHADO PELO JUIZ VISUAL ("vi o icone perfeitamente")** · **F1-csd-gtk-move-resize: código/teste/gate verdes, juiz visual PENDENTE (§3/§7)** · cursor invisível no udev segue em cartão separado · 02q REABERTA E FECHADA PELO JUIZ em 2026-11-22 (sem adiamento, spike 12×36 eliminado; harness de 300 ms segue como limitação de VM registrada) · **02r FECHADA PELO JUIZ (nested + tty3) e 02s FECHADA PELO JUIZ (duas instâncias no mesmo D-Bus, "ok aprovado")**
+Última atualização: 2026-11-22 · **Fase atual: F1** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · **F1i+ FECHADA PELO JUIZ VISUAL (digitação normal; só aviso de toplevel-icon, fora de escopo)** · **título real na titlebar FECHADO PELO JUIZ VISUAL ("ok")** · **F1-toplevel-icon FECHADO PELO JUIZ VISUAL ("vi o icone perfeitamente")** · **F1-csd-gtk-move-resize FECHADO PELO JUIZ VISUAL ("ok": gedit, gnome-disks e Calculadora OK)** · cursor invisível no udev segue em cartão separado · 02q REABERTA E FECHADA PELO JUIZ em 2026-11-22 (sem adiamento, spike 12×36 eliminado; harness de 300 ms segue como limitação de VM registrada) · **02r FECHADA PELO JUIZ (nested + tty3) e 02s FECHADA PELO JUIZ (duas instâncias no mesmo D-Bus, "ok aprovado")**
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -98,7 +98,11 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
       ficaram as bordas"*.** A detecção tardia funcionou; o que restou foi o `<div id="border">` do CSS (`6px` esquerda,
       direita e baixo), porque `aeroHideFrame` escondia só `#bar`. Agora esconde `#bar` **e** `#border`, e o readback do
       DOM passou a exigir `bar=hidden border=hidden` (`geom-late2.log`, `final20.log` OK). Gate `gate-final5.log` EXIT=0,
-      clippy bench 0, `--no-default-features` 0. **Aguardando 8º juiz; cartão NÃO fechado.**
+      clippy bench 0, `--no-default-features` 0.
+      **JUIZ VISUAL (2026-11-22): humano respondeu *"ok"* — gedit, gnome-disks e Calculadora sem nossa moldura e
+      move/resize funcionando. CARTÃO FECHADO.** Ele pediu como melhoria opcional posterior reduzir o ~0,5 s até a
+      moldura desaparecer no GTK4; fora deste cartão, cartão próprio se autorizado. Nenhuma instância encerrada pelo
+      agente.
 - [x] **F1-toplevel-icon — ícone real na titlebar FECHADO PELO JUIZ VISUAL (2026-11-22).**
       Cartão `docs/tasks/F1-toplevel-icon.md` (humano escolheu um cartão único com as duas etapas).
       **Guia (não receita):** `domicile-engine` — base64 próprio (`packages/domicile-host/src/base64.rs:1`),
@@ -1133,8 +1137,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. **NENHUMA AUTORIZADA — PARAR.** F1-csd-gtk-move-resize aguarda juiz visual (§4/§7); F1-toplevel-icon, título real
-   e F1i+ fechados (§3). O próximo cartão SÓ com autorização explícita.
+0. **NENHUMA AUTORIZADA — PARAR.** F1-csd-gtk-move-resize FECHADO PELO JUIZ (§3/§7), assim como F1-toplevel-icon,
+   título real e F1i+. O humano pediu uma melhoria opcional (reduzir o ~0,5 s até esconder a moldura no GTK4):
+   escrever cartão próprio e obter "ok" antes de executar. Não avançar de fase.
    02s FECHADA pelo juiz (§3), 02r FECHADA pelo juiz (§3),
    F1d3 FECHADA pelo juiz (§3).
    02r FECHADA pelo juiz (§3); F1d3 FECHADA pelo juiz (§3).
@@ -1651,9 +1656,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- **F1-csd-gtk — AGUARDA JUIZ VISUAL (2026-11-22):** gedit e gnome-disks OK; na Calculadora a barra já some sozinha
-  (~0,5 s), mas restavam as bordas CSS — corrigido escondendo `#border` junto com `#bar` (§3). Falta reiniciar `~/u`
-  e confirmar os três apps sem nenhuma decoração nossa. Sem o "ok", o cartão NÃO fecha.
+- **F1-csd-gtk — JUIZ VISUAL OBTIDO (2026-11-22): humano respondeu "ok".** gedit, gnome-disks e Calculadora sem a
+  moldura do AeroShell; move/resize funcionando. **Não medido:** latência até esconder a moldura no GTK4 (~0,5 s
+  observados pelo próprio humano) — ele pediu uma melhoria opcional, em cartão próprio, não executada aqui.
   **Não medido:** temas/DPI alto e GPU real (VM sem 3D). **Bloqueio do pré-filtro visual:** o `gedit` não abre no
   nested (`(gedit): Gtk-ERROR: GTK 2/3 symbols detected. Using GTK 2/3 and GTK 4 in the same process is not
   supported`, log `/tmp/opencode/f1-csd/visual.log`); o julgamento tem de ser no tty3 com o binário novo. Já havia
@@ -2013,17 +2018,16 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **Sessão atual: F1-csd-gtk-move-resize (2026-11-22) — código/teste/gate verdes (§3); JUIZ VISUAL PENDENTE (§7).**
+- **Sessão atual: F1-csd-gtk-move-resize FECHADO PELO JUIZ VISUAL (2026-11-22, "ok").**
   Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-compositor --example csd_client && cargo build -p aeroshell-shell --example frame_webview && python3 tests/integration/f1_csd_gtk.py`
   → `VEREDITO: OK` (`/tmp/opencode/f1-csd/final{7,8,9,10}.log`); baseline FALHA em `baseline2.log`.
   Gate `gate-final4.log` EXIT=0, clippy bench 0, `--no-default-features` 0. Modo gedit (geometria tardia):
   `geom-final{5,6,7}.log`; baseline FALHA em `geom-baseline1.log`. Verificação rápida no tty3, após `~/u`:
   `grep -E "CSD_DETECT|csd_late|csd_applied" ~/aeroshell-udev-<mais-recente>.log`.
-- **Próximo passo:** humano reinicia `~/u` no tty3 (o log anterior não tem as novas sondas → build velho) e confirma
-  gedit, gnome-disks **e Calculadora** sem nossa decoração; verificar
-  `grep -E "CSD_DETECT|csd_applied|set_insets\(0,0,0,0\)" ~/aeroshell-udev-<mais-recente>.log`. Só depois fechar. Não avançar de
-  fase nem abrir spike do Nautilus/Tracker sem autorização. Instância nested sem gedit deixada aberta: socket
-  `wayland-aero-csd-1795395710`, compositor PID 292134, log `/tmp/opencode/f1-csd/visual.log`.
+- **Próximo passo: NENHUM AUTORIZADO — PARAR (AGENTS.md §3.1).** Cartão fechado com "ok" no tty3. Se o humano quiser,
+   cartão novo para medir/reduzir o ~0,5 s até esconder a moldura no GTK4 (melhoria opcional que ele pediu). Não
+   avançar de fase nem abrir spike do Nautilus/Tracker sem autorização. Instância nested sem gedit deixada aberta:
+   socket `wayland-aero-csd-1795395710`, compositor PID 292134, log `/tmp/opencode/f1-csd/visual.log`.
 - **Sessão atual: F1-toplevel-icon (2026-11-22) — código/teste/gate verdes (§3); JUIZ VISUAL PENDENTE (§7).**
   Instância normal (sem bench) deixada aberta: compositor PID 266058, shell 266062, `foot` 266066, socket
   `wayland-aero-iconvisual-1795391114`, IPC `/tmp/opencode/f1-icon/visual-ipc-1795391114.sock`, log

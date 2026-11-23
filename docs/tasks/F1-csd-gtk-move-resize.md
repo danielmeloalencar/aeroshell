@@ -1,4 +1,9 @@
-# Tarefa F1-csd-gtk-move-resize — apps GTK/CSD sem barra dupla e com move/resize (EM EXECUÇÃO — aguarda reteste visual)
+# Tarefa F1-csd-gtk-move-resize — apps GTK/CSD sem barra dupla e com move/resize
+
+> **FECHADO PELO JUIZ VISUAL em 2026-11-22.** Humano respondeu **"ok"** após testar no tty3: gedit, gnome-disks e
+> Calculadora sem a moldura do AeroShell; move/resize confirmados funcionando. Nenhuma instância foi encerrada pelo
+> agente. O humano pediu ainda, como *melhoria opcional posterior*, reduzir o ~0,5 s até a moldura desaparecer no
+> GTK4 — isso **não** faz parte deste cartão e será tratado em cartão próprio, se autorizado.
 
 > **2 juízes visuais NEGARAM (2026-11-22); 3ª causa encontrada por medição:** humano confirmou move/resize OK, mas
 > nossa barra ainda aparece nos apps GNOME. O gedit é GTK3 (`ldd`) e `libgdk-3.so.0` usa
