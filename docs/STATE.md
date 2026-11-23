@@ -1336,8 +1336,13 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
 - **F1-presentation-time FECHADO (§3): global/feedback/gates verdes; juiz visual não se aplica.**
-  Falta o **GATE FINAL de apps reais** (foot, gedit, qterminal, kate, Firefox, nautilus; VSCode só se o ambiente
-  permitir) e o "ok" do humano para commitar `docs(state): F1 FECHADA`. Não abrir F2.
+  **GATE FINAL de apps reais executado no nested (2026-11-23): PARCIAL — 4/6 mapearam.** IPC list mostrou foot,
+  qterminal, gedit e Kate (0 erros de protocolo); **Firefox (snap) não conecta ao socket** (confinamento: procura
+  `/run/user/1000/snap.firefox/wayland-aero-f1-final`, `Permission denied`) e **Nautilus abre e sai** após
+  `Connecting to org.freedesktop.Tracker3.Miner.Files` sem criar janela (ambiente/D-Bus). VSCode não foi tentado
+  (snap já requalificado como ambiente/DX). **F1 NÃO foi fechada**: aguardando decisão do humano sobre essas
+  duas falhas de ambiente antes do commit `docs(state): F1 FECHADA`. Não abrir F2. Instância deixada aberta:
+  compositor PID 44480, socket `wayland-aero-f1-final`, apps 44496/44523/44599/44833.
 - **F1-xdg-toplevel-states FECHADO (§3): humano aprovou o juiz visual ("aprovado") no nested com gedit.**
   **PARAR — não abrir presentation-time sem "ok" do humano.** Nenhum processo foi encerrado pelo agente.
 - **F1-clipboard-two-clients FECHADO (§3): A→B em headless + winit, 3× OK, gates verdes.**
@@ -2002,6 +2007,12 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- **GATE FINAL F1 (2026-11-23): PARCIAL; juiz visual do humano PENDENTE.** Nested aberto (compositor PID 44480,
+  socket `wayland-aero-f1-final`, log `/tmp/opencode/f1-final-gate/compositor.log`) com foot (44496), gedit (44523),
+  qterminal (44599) e Kate (44833) mapeados no IPC e 0 erros de protocolo. Firefox e Nautilus NÃO mapearam por
+  ambiente/DX (§4); VSCode não testado (snap). Human deve olhar decoração/menus/clipboard cruzado nos 4 apps
+  abertos e decidir sobre as duas falhas de ambiente. **Sem isso não há commit `F1 FECHADA`.**
+  O compositor udev preexistente PID 29976 (tty3 do humano) NÃO foi tocado pelo agente.
 - **F1-presentation-time (2026-11-23): juiz visual NÃO se aplica (decisão do humano) — feedback é offscreen.**
   DRM/udev compilado com `presented()` no vblank de `frame_submitted()`, mas **não executado** (sem VT nesta VM).
   Desempenho/flicker em GPU real não medido; só funcionamento no nested/headless (VM sem 3D).
@@ -2424,7 +2435,13 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **SESSÃO ATUAL (2026-11-23): F1-presentation-time — código/teste/gates verdes; juiz visual N/A.**
+- **SESSÃO ATUAL (2026-11-23): F1-presentation-time FECHADA (785764b); GATE FINAL parcial, F1 NÃO fechada.**
+  Cartões F1-final concluídos. Gate final no nested: `python3 -` lendo IPC de `/tmp/opencode/f1-final-gate/ipc.sock`
+  → 4 janelas (foot, qterminal, gedit, Kate), 0 `ProtocolError`; Firefox snap e Nautilus/Tracker falham por ambiente
+  (§4/§6), VSCode não testado. Reproduzir o gate: ver §7 (instância PID 44480 deixada aberta).
+  **Próximo: humano julga os 4 apps abertos e decide sobre Firefox/Nautilus; só então commit
+  `docs(state): F1 FECHADA` e F2. Não encerrar processos (quem fecha é o humano).** Sem push.
+- **SESSÃO ANTERIOR (2026-11-23): F1-presentation-time — código/teste/gates verdes; juiz visual N/A.**
   `protocols/presentation.rs` (global v2 + CLOCK_MONOTONIC + seq por output), ligado nos 3 backends; headless usa
   tick do timer sem alegar Vsync, winit responde após submit/swap, udev no vblank de `frame_submitted`.
   Reproduzir (bench POR ÚLTIMO):
