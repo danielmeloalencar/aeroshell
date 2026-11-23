@@ -1598,7 +1598,10 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
 - **F1-csd-gtk — JUIZ VISUAL PENDENTE (2026-11-22):** cliente sintético provou CSD sem barra HTML e move/resize, mas
   **não** provou o `gedit` real (que o humano viu com barra dupla e sem mover no tty3). Falta confirmar na tela:
   uma barra só (a do GTK) e arrasto/redimensionamento pelo headerbar. Sem o "ok", o cartão NÃO fecha.
-  **Não medido:** temas/DPI alto e GPU real (VM sem 3D).
+  **Não medido:** temas/DPI alto e GPU real (VM sem 3D). **Bloqueio do pré-filtro visual:** o `gedit` não abre no
+  nested (`(gedit): Gtk-ERROR: GTK 2/3 symbols detected. Using GTK 2/3 and GTK 4 in the same process is not
+  supported`, log `/tmp/opencode/f1-csd/visual.log`); o julgamento tem de ser no tty3 com o binário novo. Já havia
+  uma sessão udev anterior em execução (PID 275271) — o humano precisa reiniciá-la (`~/u`) para pegar este build.
 - **F1-toplevel-icon — JUIZ VISUAL OBTIDO (2026-11-22): humano respondeu *"vi o icone perfeitamente"*.** O pré-filtro
   mediu `icon_applied` com data URI e `titlebar_icon ... source=nome name=foot`; a sentença final foi do humano.
   **Sintomas de §6 NÃO reproduzidos no reteste limpo:** humano confirmou ícone, mover, resize, maximizar e fechar
@@ -1958,8 +1961,10 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
   Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-compositor --example csd_client && cargo build -p aeroshell-shell --example frame_webview && python3 tests/integration/f1_csd_gtk.py`
   → `VEREDITO: OK` (`/tmp/opencode/f1-csd/final{7,8,9,10}.log`); baseline FALHA em `baseline2.log`.
   Gate `gate-final.log` EXIT=0, clippy bench 0, `--no-default-features` 0.
-- **Próximo passo:** juiz visual com `gedit` real. Só depois fechar o cartão. Não avançar de fase nem abrir spike do
-  Nautilus/Tracker sem autorização.
+- **Próximo passo:** humano reinicia `~/u` no tty3 (a sessão antiga PID 275271 é do build anterior) e confirma com
+  `gedit`: uma barra só e move/resize pelo headerbar. Só depois fechar o cartão. Não avançar de fase nem abrir spike
+  do Nautilus/Tracker sem autorização. Instância nested sem gedit deixada aberta: socket
+  `wayland-aero-csd-1795395710`, compositor PID 292134, log `/tmp/opencode/f1-csd/visual.log`.
 - **Sessão atual: F1-toplevel-icon (2026-11-22) — código/teste/gate verdes (§3); JUIZ VISUAL PENDENTE (§7).**
   Instância normal (sem bench) deixada aberta: compositor PID 266058, shell 266062, `foot` 266066, socket
   `wayland-aero-iconvisual-1795391114`, IPC `/tmp/opencode/f1-icon/visual-ipc-1795391114.sock`, log
