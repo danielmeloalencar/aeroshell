@@ -1492,15 +1492,18 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
 - **Avisos benignos / item menor (decisão do humano, 2026-11-23):** `atk-bridge` é aviso benigno do GTK (não é
   defeito do AeroShell); `xdg_system_bell_v1` ausente é item menor a registrar no F7, **não bloqueia** F1/F2.
-- **GATE DE SESSÃO DO SNAP (2026-11-23) — dado entregue, INCONCLUSIVO.** `~/u --socket wayland-0` chegou a logar
-  `iniciando AeroShell … socket=wayland-0` (`aeroshell-udev-20261123-202747.log`) mas morreu com
-  **`Error: AlreadyInUse`** antes de `Created new socket` — o nome `wayland-0` já estava ocupado no `XDG_RUNTIME_DIR`.
-  A execução seguinte (`aeroshell-udev-20261123-202837.log`) voltou ao nome custom `wayland-aero-tty3`. O
-  `firefox.log` entregue mostra WebRender/telemetria iniciando, **sem `Permission denied`**, mas não prova que a
-  janela foi mapeada no AeroShell (pode ter ido para o socket do host). **Não reduzir `F7-compat-snap`**: manter o
-  cartão com o dado e nem fazer snapd/slot sem aprovação. Causa do `AlreadyInUse` (quem segura `wayland-0`) fica como
-  pergunta para o humano/ambiente, não é protocolo Wayland.
-- **GATE DE SESSÃO DO SNAP — teste anterior foi INVÁLIDO para a hipótese:** usou nome custom
+- **GATE DE SESSÃO DO SNAP (2026-11-23) — dado entregue, INVÁLIDO para a hipótese (esclarecido pelo humano).**
+  Sequência real: (1) `~/u --socket wayland-0` deu **erro de permissão** no tty3; o log
+  `aeroshell-udev-20261123-202747.log` mostra `socket=wayland-0` e `Error: AlreadyInUse` antes de `Created new socket`;
+  (2) o humano então rodou `./u` **sem parâmetros** (socket custom `wayland-aero-tty3`,
+  `aeroshell-udev-20261123-202837.log`) e, dentro de um `foot`, `WAYLAND_DISPLAY=wayland-0 firefox` — foi isso que
+  gerou o `firefox.log`/`~/Projetos/aeroshell/firefox.log`. Ou seja, o Firefox apontava para `wayland-0`, que
+  **pertence ao GNOME Shell da sessão do host** (`/run/user/1000/wayland-0`, PID 3531), não ao AeroShell. O
+  `firefox.log` mostra WebRender/telemetria e nenhum `Permission denied`, mas isso prova apenas que o snap conectou
+  no compositor **do host**. **Não reduzir `F7-compat-snap`**: manter o cartão com o dado e nem fazer snapd/slot sem
+  aprovação. Para um teste válido é preciso uma sessão AeroShell com `wayland-0` livre (ou outro runtime dir de
+  sessão) — mudança de ambiente fora do repo, a decidir com o humano; não é protocolo Wayland.
+- **GATE DE SESSÃO DO SNAP — plano original (superseded pelo esclarecimento acima):** usou nome custom
   (`wayland-aero-tty3`), ou seja, caso NÃO provisionado. O teste correto pedido pelo humano é **como sessão, socket
   padrão**: no tty3 rodar `~/u --socket wayland-0` (args são repassados ao compositor; a última opção prevalece) e
   então `WAYLAND_DISPLAY=wayland-0 firefox`. **Atenção:** `scripts/run-udev-diag.sh:15,95` fixa `SOCKET=wayland-aero-tty3`
