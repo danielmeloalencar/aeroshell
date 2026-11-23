@@ -2036,8 +2036,11 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
 - **Sessão atual: F1-csd-sem-flash (2026-11-22) — código/teste/gate verdes (§3); JUIZ VISUAL PENDENTE (§7).**
   Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-compositor --example csd_client && cargo build -p aeroshell-shell --example frame_webview && python3 tests/integration/f1_csd_gtk.py --geometry-only`
   → `VEREDITO: OK`, `hide_ms` ≤ 200 (`/tmp/opencode/f1-flash/final-run{1,2,3}.log`); baseline FALHA.
-- **Próximo passo:** humano reinicia `~/u` no tty3 e confirma que a Calculadora não mostra nossa moldura nem por um
-  instante. Só depois fechar o cartão. Não avançar de fase nem abrir spike D-Bus sem autorização.
+- **Instância aberta para o juiz:** compositor PID 345258, shell 345263, `gnome-calculator` 345267, socket
+  `wayland-aero-flash-1795401410`, log `/tmp/opencode/f1-flash/visual.log` (com `csd_applied ... bar=hidden border=hidden`).
+  Quem fecha é o humano. Há também uma sessão udev anterior em `ps` (PID 336693) — não foi tocada.
+- **Próximo passo:** humano observa a Calculadora (nested aberta e/ou `~/u` no tty3) e confirma que nossa moldura não
+  aparece nem por um instante. Só depois fechar o cartão. Não avançar de fase nem abrir spike D-Bus sem autorização.
 - **Sessão atual: F1-csd-gtk-move-resize FECHADO PELO JUIZ VISUAL (2026-11-22, "ok").**
   Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-compositor --example csd_client && cargo build -p aeroshell-shell --example frame_webview && python3 tests/integration/f1_csd_gtk.py`
   → `VEREDITO: OK` (`/tmp/opencode/f1-csd/final{7,8,9,10}.log`); baseline FALHA em `baseline2.log`.
