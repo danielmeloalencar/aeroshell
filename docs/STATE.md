@@ -1810,6 +1810,20 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- **F1-final-1c / F1-toplevel-icon-protocol (2026-11-23): JUIZ VISUAL FINAL PENDENTE — instância aberta.**
+  Causa do "sem conteúdo" provada e corrigida: bug do Smithay 0.7.0 em `ShmBufferUserData::remove_destruction_hook`
+  (`shm/mod.rs:496`, `hook.id != hook_id` — correção upstream `39ee351a` só no master) fazia o hook de destruição
+  do `wl_buffer` do ícone não ser removido; o Qt (kwrite) destruía o ícone e o buffer após `set_icon` e o servidor
+  postava `xdg_toplevel_icon_v1.no_buffer`, matando a conexão principal. Correção (commit `a3bd4fc`): módulo próprio
+  `protocols/toplevel_icon.rs` que copia os pixels no `add_buffer` (`Vec<u8>`) e grava no cached state `IconPixels`,
+  sem registrar hooks nem reter `WlBuffer`; `no_buffer` só se a cópia falhar. Global reanunciado; `no_buffer` e
+  checagens intactas. Provas: `f1_icon_buffer_destroy.py` `VEREDITO: OK` (baseline FALHA, `/tmp/aero-f1-icon-destroy-*`);
+  `f1_client_visible.py` `VEREDITO: OK` com `frame_painted=2 protocol_errors=0 title_applied=1 titulos_reais=1 IPC list
+  com "Bem-vindo — Kate"` (`/tmp/aero-f1-client-visible-5ehyngy3`); `f1_toplevel_icon.py` `VEREDITO: OK` (ícone da
+  juiz anterior preservado); gate `check.sh` EXIT=0, clippy bench 0. Instância de julgamento: compositor PID 45305,
+  socket `wayland-aero-f1-final-visual`, log `/tmp/opencode/f1-final-visual/compositor.log`, Kate PID 45321 e Kwrite
+  PID 45447 vivos, ambos pintados com título real. **O humano ainda não olhou a tela nesta instância.** Não executado:
+  tty3/udev (sem VT aqui) — critério 5 do cartão F1-final-1c segue pendente até o ok no nested + tty3.
 - **F1-final-1c — JUIZ VISUAL PENDENTE E BLOQUEADO (2026-11-23):** o fix do configure inicial está provado por log
   cru no nested (sintético, Kate e Kwrite com `attach`+`buffer=Some`+`frame_painted`), mas **o humano ainda não
   olhou a tela**. Bloqueio descoberto no Passo 3: em `/tmp/opencode/f1-1c-visual3/compositor.log` AMBOS os clientes
@@ -2201,6 +2215,16 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
+- **SESSÃO ATUAL (2026-11-23): F1-final-1c + F1-toplevel-icon-protocol — CÓDIGO/GATE/TESTES VERDES; JUIZ VISUAL PENDENTE.**
+  Dois fixes: (1) `0b31705` configure inicial do canvas na frame layer-surface; (2) `a3bd4fc` handler próprio de
+  `xdg_toplevel_icon_v1` que copia pixels e não retém `wl_buffer` (bug do Smithay 0.7.0 `shm/mod.rs:496`).
+  Medi que o teste antigo era falso positivo (`f1_client_visible.py`, commit `402bc16`); agora ele dá OK.
+  Commits: `8294f26` (cartão+cliente), `a3bd4fc` (fix), `7622f1e` (teste). Gate `check.sh` EXIT=0, clippy bench 0.
+  Reproduzir: `python3 tests/integration/f1_client_visible.py` → `VEREDITO: OK` (`frame_painted=2 protocol_errors=0
+  título real IPC com janela`); `python3 tests/integration/f1_icon_buffer_destroy.py` → `VEREDITO: OK`.
+  Instância aberta: PID 45305, socket `wayland-aero-f1-final-visual`, Kate 45321 + Kwrite 45447 vivos.
+  **Próximo passo imediato:** humano olhar a instância e dar o ok (decoração HTML com título/conteúdo reais nas duas
+  janelas); depois repetir no tty3 via `~/u` com Kate. Quem fecha a aplicação é o humano. Não abrir cartão 2.
 - **SESSÃO ATUAL (2026-11-23): F1-final-1c — fix do configure inicial FEITO; JUIZ VISUAL PENDENTE.**
   Causa: sem `client_content_size`, `new_layer_surface` não enviava `zwlr_layer_surface_v1.configure` → GTK nunca
   anexava `wl_buffer`. Correção: `configure_frame_layer_canvas` (`aero_frame.rs`) envia configure do canvas no
