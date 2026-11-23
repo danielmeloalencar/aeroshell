@@ -40,6 +40,15 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
       ainda não confirmada: o frame layer surface não entra no mapa de `send_frame` do backend antes do 1º commit
       (`winit.rs:380-387`), então o WebView não recebe `wl_surface.frame` e não pinta. **Próximo passo exige decisão:**
       investigar esse caminho (compositor enviar frame callback/configure extra ao frame) ou autorizar outra via.
+      **Reteste do caminho completo (2026-11-23, sem correção CSD):** logs novos com `RUST_LOG=debug` em
+      `/tmp/opencode/f1-1c-trace/nested-{kate,kwrite,foot}.log`. Nos 3 casos: (1) compositor envia/reapresenta
+      `frame_requested` (`aero_frame.rs:254,371`); (2) shell recebe (`FRAMEWEB: frame_requested`); (3) WebView já
+      carregada é retirada do pool, associada e seu layer surface mapeia (`pool_take` → `associate` → `FRAMEWEB map`);
+      (4) Kate/Kwrite ficam em `FRAME_BUFFER_COMMIT buffer=None`, 0 `frame_painted`, após UMA configure. O `foot`
+      recebe uma segunda configure com o conteúdo real e chega a `buffer=Some((1292, 836))`. Kate e Kwrite voltaram
+      a logar `CSD_DECO ... kde-request mode=Value(Server)`; logo a correção ClientSide NÃO é fix deste sintoma.
+      Reprodução sintética repetida: `f1_frame_paint_no_commit.py` → `VEREDITO: FALHA`, `configures=1`,
+      `frame_painted=0`, `buffer_real=False`; log cru `/tmp/aero-frame-nocommit-rvbk9mi9/compositor.log`.
 - [x] **F1-final-1b — FECHADO PELO JUIZ VISUAL (2026-11-23): *"Funcionou tudo."*** Carta de juiz: itens de Arquivo/
       Editar/menu de contexto respondem; **tooltip ausente no qterminal NÃO é defeito** — o humano confirmou que o
       próprio qterminal não tem tooltip (testado no GNOME) e que no **gedit o tooltip aparece normal**. Nenhuma
@@ -2139,13 +2148,14 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **SESSÃO ATUAL (2026-11-23): F1-final-1c — causa do frame que não pinta encontrada (`frame_requested 0x0` →
-  uma configure → `aeroFramePainted` sem rAF), MAS 3 tentativas de correção falharam e foram revertidas. PARADO
-  (§4.1).** Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-compositor --example large_client && cargo build -p aeroshell-shell --example frame_webview && python3 tests/integration/f1_frame_paint_no_commit.py`
-  → baseline `VEREDITO: FALHA`, `frame_painted=0 buffer_real=False`. Controles: `nested-foot.log` e
-  `nested-large.log` (2 configures, pinta); `nested-late.log` (commit aos 3 s, pinta depois).
-  **Próximo passo (DECISÃO DO HUMANO):** autorizar investigar o caminho de `send_frame`/damage do frame layer
-  surface (`winit.rs:380-387`) como causa do WebView não pintar, ou escolher outra via. Não abrir cartão 2.
+- **SESSÃO ATUAL (2026-11-23): F1-final-1c — caminho completo reprovado; NENHUMA correção CSD aplicada.**
+  Kate/Kwrite pedem `Server`; envio/recepção de `frame_requested`, criação/associate/map da WebView ocorrem, mas o
+  caminho para em `FRAME_BUFFER_COMMIT buffer=None` após uma configure. `foot` tem segunda configure e `buffer=Some`.
+  Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-compositor --example large_client && cargo build -p aeroshell-shell --example frame_webview && python3 tests/integration/f1_frame_paint_no_commit.py`
+  → `VEREDITO: FALHA`, `configures=1`, `frame_painted=0`, `buffer_real=False`. Logs novos:
+  `/tmp/opencode/f1-1c-trace/nested-{kate,kwrite,foot}.log`; sintético `/tmp/aero-frame-nocommit-rvbk9mi9/`.
+  **Próximo passo (NÃO executado):** investigar `send_frame`/damage do frame layer surface (`winit.rs:380-387`);
+  não reabrir CSD como fix e não abrir cartão 2.
 - **SESSÃO ANTERIOR ENCERRADA (2026-11-23): F1-subsurfaces + F1-final-1b FECHADOS PELO JUIZ (*"Funcionou tudo"*).**
   Causa do menu Qt: `grab_popup()` só cria o `PopupGrab`; faltava `set_grab` no ponteiro/teclado. Corrigido em
   `protocols/xdg_shell.rs::grab`. Gate `f1-1b-gate2.log` EXIT=0, clippy bench 0, `--no-default-features` 0.
