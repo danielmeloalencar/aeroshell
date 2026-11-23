@@ -291,7 +291,8 @@ impl Dispatch<AeroFrameManagerV1, ()> for SpikeState {
         // Cria na próxima idle: este handler roda dentro do borrow do RUNTIME
         // (dispatch) e não pode reassumir o RUNTIME para associar a superfície.
         glib::idle_add_local(move || {
-            request_frame(window_id, initial_canvas.0, initial_canvas.1);
+            let client_frame = ipc_csd(window_id);
+            request_frame(window_id, initial_canvas.0, initial_canvas.1, client_frame);
             glib::ControlFlow::Break
         });
     }
@@ -314,38 +315,16 @@ impl Dispatch<AeroFrameV1, ()> for SpikeState {
                 ..
             } => {
                 state.configures += 1;
-                let Some(entry) = state.entries.iter_mut().find(|e| &e.frame == frame) else {
+                if !state.entries.iter().any(|e| &e.frame == frame) {
+                    // O configure pode chegar antes do associate terminar:
+                    // guardamos e aplicamos assim que a entry existe.
+                    PENDING_CONFIGURES.with(|cell| {
+                        cell.borrow_mut()
+                            .push((frame.clone(), serial, width, height));
+                    });
                     return;
-                };
-                let (l, t, r, b) = entry.insets;
-                let total_w = width + l + r;
-                let total_h = height + t + b;
-                entry.total = (total_w, total_h);
-                let grows = total_w > entry.canvas.0 || total_h > entry.canvas.1;
-                if grows {
-                    entry.canvas = (entry.canvas.0.max(total_w), entry.canvas.1.max(total_h));
-                    entry
-                        .window
-                        .set_default_size(entry.canvas.0, entry.canvas.1);
                 }
-                eprintln!(
-                    "FRAMEWEB: configure serial={serial} conteudo={width}x{height} target={total_w}x{total_h} canvas={}x{} grows={grows}",
-                    entry.canvas.0, entry.canvas.1
-                );
-                frame.ack_configure(serial);
-                let script =
-                    format!("window.aeroFramePainted && window.aeroFramePainted({serial});");
-                entry.webview.evaluate_javascript(
-                    &script,
-                    None,
-                    None,
-                    None::<&webkit6::gio::Cancellable>,
-                    |result| {
-                        if let Err(err) = result {
-                            eprintln!("FRAMEWEB: aeroFramePainted falhou: {err}");
-                        }
-                    },
-                );
+                apply_configure(state, frame, serial, width, height);
             }
             FrameEvent::Closed => {
                 state.closed += 1;
@@ -370,7 +349,7 @@ impl Dispatch<AeroFrameV1, ()> for SpikeState {
                 // e não reutiliza mais o id. Destruição segura fica em §6.
                 state.retired.push(entry);
                 PENDING_FRAMES.with(|cell| {
-                    cell.borrow_mut().retain(|(id, _, _)| *id != window_id);
+                    cell.borrow_mut().retain(|(id, _, _, _)| *id != window_id);
                 });
                 eprintln!(
                     "FRAMEWEB: closed recebido window_id={window_id} entradas_restantes={}",
@@ -379,6 +358,48 @@ impl Dispatch<AeroFrameV1, ()> for SpikeState {
             }
         }
     }
+}
+
+/// Aplica um configure a uma entry já existente. Também usado para configures
+/// que chegaram antes do associate (guardados em PENDING_CONFIGURES).
+fn apply_configure(
+    state: &mut SpikeState,
+    frame: &AeroFrameV1,
+    serial: u32,
+    width: i32,
+    height: i32,
+) {
+    let Some(entry) = state.entries.iter_mut().find(|e| &e.frame == frame) else {
+        return;
+    };
+    let (l, t, r, b) = entry.insets;
+    let total_w = width + l + r;
+    let total_h = height + t + b;
+    entry.total = (total_w, total_h);
+    let grows = total_w > entry.canvas.0 || total_h > entry.canvas.1;
+    if grows {
+        entry.canvas = (entry.canvas.0.max(total_w), entry.canvas.1.max(total_h));
+        entry
+            .window
+            .set_default_size(entry.canvas.0, entry.canvas.1);
+    }
+    eprintln!(
+        "FRAMEWEB: configure serial={serial} conteudo={width}x{height} target={total_w}x{total_h} canvas={}x{} grows={grows}",
+        entry.canvas.0, entry.canvas.1
+    );
+    frame.ack_configure(serial);
+    let script = format!("window.aeroFramePainted && window.aeroFramePainted({serial});");
+    entry.webview.evaluate_javascript(
+        &script,
+        None,
+        None,
+        None::<&webkit6::gio::Cancellable>,
+        |result| {
+            if let Err(err) = result {
+                eprintln!("FRAMEWEB: aeroFramePainted falhou: {err}");
+            }
+        },
+    );
 }
 
 thread_local! {
@@ -390,7 +411,9 @@ thread_local! {
     /// as insets padrão ANTES de iniciar o WebProcess da âncora.
     static BOOTSTRAP_WINDOW: RefCell<Option<gtk4::ApplicationWindow>> = const { RefCell::new(None) };
     static POOL: RefCell<Vec<PoolItem>> = const { RefCell::new(Vec::new()) };
-    static PENDING_FRAMES: RefCell<VecDeque<(u32, i32, i32)>> = const { RefCell::new(VecDeque::new()) };
+    static PENDING_FRAMES: RefCell<VecDeque<(u32, i32, i32, bool)>> = const { RefCell::new(VecDeque::new()) };
+    /// Configures que chegaram antes da entry do frame existir.
+    static PENDING_CONFIGURES: RefCell<Vec<(AeroFrameV1, u32, i32, i32)>> = const { RefCell::new(Vec::new()) };
     static NEXT_POOL_ID: Cell<usize> = const { Cell::new(0) };
     static POOL_FILL_SCHEDULED: Cell<bool> = const { Cell::new(false) };
 }
@@ -465,6 +488,27 @@ enum IconSource {
         b64: String,
     },
     Name(String),
+}
+
+/// Pergunta ao IPC se este window_id pediu client-side decorations.
+fn ipc_csd(window_id: u32) -> bool {
+    let Some(path) = std::env::var_os("AERO_WINDOW_IPC_SOCK") else {
+        return false;
+    };
+    let Ok(mut stream) = UnixStream::connect(path) else {
+        return false;
+    };
+    if writeln!(stream, "csd {window_id}").is_err() || stream.flush().is_err() {
+        return false;
+    }
+    let _ = stream.shutdown(Shutdown::Write);
+    let Some(Ok(line)) = BufReader::new(stream).lines().next() else {
+        return false;
+    };
+    let mut parts = line.splitn(3, ' ');
+    parts.next() == Some("CSD")
+        && parts.next().and_then(|v| v.parse::<u32>().ok()) == Some(window_id)
+        && parts.next() == Some("1")
 }
 
 /// Resolve um nome do tema GTK para uma data URI SVG/PNG. Nenhuma dependência
@@ -692,6 +736,16 @@ const TITLEBAR_HTML: &str = r#"<!doctype html>
     const send = (action) => window.webkit.messageHandlers.aero.postMessage({ action });
     // O host chama com o título vindo do IPC; devolvemos o valor LIDO DO DOM
     // para a sonda provar que o #title foi realmente atualizado.
+    // GTK4/gedit desenham a própria moldura: escondemos a barra HTML e
+    // devolvemos o valor lido do DOM como prova (sem barra dupla).
+    window.aeroHideFrame = () => {
+      const bar = document.getElementById('bar');
+      bar.style.display = 'none';
+      window.webkit.messageHandlers.aero.postMessage({
+        action: 'csd_applied', client_frame: true,
+        bar: getComputedStyle(bar).display
+      });
+    };
     window.aeroSetTitle = (title) => {
       const el = document.getElementById('title');
       el.textContent = title;
@@ -817,22 +871,29 @@ fn associate_frame(
     webview: WebView,
     canvas: (i32, i32),
     window_id: u32,
+    client_frame: bool,
 ) {
+    let hide_view = webview.clone();
+    let (top, title_left, title_right) = if client_frame {
+        (0, 0, 0)
+    } else {
+        (TITLEBAR_H, TITLE_TEXT_W, RIGHT_CONTROLS)
+    };
     RUNTIME.with(|cell| {
         let mut borrow = cell.borrow_mut();
         let rt = borrow.as_mut().expect("RUNTIME não inicializado");
         let qh = rt.queue.handle();
         let manager = rt.state.manager.clone().expect("manager ausente");
         let frame = manager.associate(&wl_surface, window_id, &qh, ());
-        frame.set_insets(BORDER, TITLEBAR_H, BORDER, BORDER);
-        frame.set_titlebar_slices(TITLE_TEXT_W, RIGHT_CONTROLS);
+        frame.set_insets(BORDER, top, BORDER, BORDER);
+        frame.set_titlebar_slices(title_left, title_right);
         let _ = rt.queue.flush();
         rt.state.entries.push(FrameEntry {
-            frame,
+            frame: frame.clone(),
             wl_surface,
             window,
             webview,
-            insets: (BORDER, TITLEBAR_H, BORDER, BORDER),
+            insets: (BORDER, top, BORDER, BORDER),
             total: (0, 0),
             canvas,
             presented: false,
@@ -840,9 +901,28 @@ fn associate_frame(
             last_title: None,
             last_icon: None,
         });
-        eprintln!("FRAMEWEB: associate(window_id={window_id}) + set_insets({BORDER},{TITLEBAR_H},{BORDER},{BORDER}) \
-                   + set_titlebar_slices({TITLE_TEXT_W},{RIGHT_CONTROLS}) t={}", bench_t());
+        eprintln!("FRAMEWEB: associate(window_id={window_id}) + set_insets({BORDER},{top},{BORDER},{BORDER}) \
+                   + set_titlebar_slices({title_left},{title_right}) client_frame={client_frame} t={}", bench_t());
+        let pending = PENDING_CONFIGURES.with(|cell| std::mem::take(&mut *cell.borrow_mut()));
+        for (pending_frame, serial, width, height) in pending {
+            if pending_frame == frame {
+                apply_configure(&mut rt.state, &pending_frame, serial, width, height);
+            }
+        }
     });
+    if client_frame {
+        hide_view.evaluate_javascript(
+            "window.aeroHideFrame && window.aeroHideFrame();",
+            None,
+            None,
+            None::<&webkit6::gio::Cancellable>,
+            |result| {
+                if let Err(err) = result {
+                    eprintln!("FRAMEWEB: aeroHideFrame falhou: {err}");
+                }
+            },
+        );
+    }
     // Fora do borrow do RUNTIME: o refresh consulta o estado de novo.
     glib::idle_add_local(|| {
         refresh_titles();
@@ -878,14 +958,15 @@ fn ensure_pool_fill() {
     });
 }
 
-fn request_frame(window_id: u32, canvas_w: i32, canvas_h: i32) {
+fn request_frame(window_id: u32, canvas_w: i32, canvas_h: i32, client_frame: bool) {
     if let Some((item, available)) = take_ready_frame() {
         eprintln!("FRAMEWEB: pool_take window_id={window_id} available={available}");
-        open_frame_window(window_id, canvas_w, canvas_h, item);
+        open_frame_window(window_id, canvas_w, canvas_h, item, client_frame);
     } else {
         eprintln!("FRAMEWEB: pool_vazio window_id={window_id}; request enfileirado");
         PENDING_FRAMES.with(|cell| {
-            cell.borrow_mut().push_back((window_id, canvas_w, canvas_h));
+            cell.borrow_mut()
+                .push_back((window_id, canvas_w, canvas_h, client_frame));
         });
     }
     ensure_pool_fill();
@@ -894,16 +975,16 @@ fn request_frame(window_id: u32, canvas_w: i32, canvas_h: i32) {
 fn drain_pending_frames() {
     loop {
         let request = PENDING_FRAMES.with(|cell| cell.borrow_mut().pop_front());
-        let Some((window_id, canvas_w, canvas_h)) = request else {
+        let Some((window_id, canvas_w, canvas_h, client_frame)) = request else {
             break;
         };
         if let Some((item, available)) = take_ready_frame() {
             eprintln!("FRAMEWEB: pool_take window_id={window_id} available={available}");
-            open_frame_window(window_id, canvas_w, canvas_h, item);
+            open_frame_window(window_id, canvas_w, canvas_h, item, client_frame);
         } else {
             PENDING_FRAMES.with(|cell| {
                 cell.borrow_mut()
-                    .push_front((window_id, canvas_w, canvas_h));
+                    .push_front((window_id, canvas_w, canvas_h, client_frame));
             });
             break;
         }
@@ -970,6 +1051,16 @@ fn prewarm_frame() {
                 if let Some(window_id) = callback_window_id.get() {
                     window_ipc(&format!("maximize {window_id}"));
                 }
+            }
+            Some("csd_applied") => {
+                let bar = parsed.get("bar").and_then(|v| v.as_str()).unwrap_or("");
+                let Some(window_id) = callback_window_id.get() else {
+                    return;
+                };
+                eprintln!(
+                    "FRAMEWEB: csd_applied window_id={window_id} client_frame=true bar={}",
+                    if bar == "none" { "hidden" } else { bar }
+                );
             }
             Some("title_applied") => {
                 let title = parsed.get("title").and_then(|v| v.as_str()).unwrap_or("");
@@ -1054,7 +1145,13 @@ fn prewarm_frame() {
 
 /// Consome uma view já carregada. O associate ocorre no realize e o present
 /// espera o frame_requested do output para fixar o canvas inicial.
-fn open_frame_window(window_id: u32, canvas_w: i32, canvas_h: i32, item: PoolItem) {
+fn open_frame_window(
+    window_id: u32,
+    canvas_w: i32,
+    canvas_h: i32,
+    item: PoolItem,
+    client_frame: bool,
+) {
     let PoolItem {
         window,
         webview,
@@ -1084,6 +1181,7 @@ fn open_frame_window(window_id: u32, canvas_w: i32, canvas_h: i32, item: PoolIte
                 webview.clone(),
                 (canvas_w, canvas_h),
                 window_id,
+                client_frame,
             );
         }
     });

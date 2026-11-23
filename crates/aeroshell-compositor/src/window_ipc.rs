@@ -6,6 +6,7 @@
 //!   close <id>      -> OK
 //!   maximize <id>   -> OK (alterna maximizado)
 //!   icon <id>       -> ICON <id> <w> <h> <scale> <formato> <base64-dos-pixels> | NONE
+//!   csd <id>        -> CSD <id> 1|0  (1 = cliente pediu client-side decorations)
 //! Cada request é despachado no event loop (canal calloop) e respondido por um
 //! oneshot mpsc, para que `list` veja o estado atual do space sem snapshot obsoleto.
 
@@ -30,6 +31,7 @@ use smithay::{
     },
 };
 
+use crate::protocols::xdg_shell::client_draws_frame;
 use crate::state::AeroState;
 
 /// Título atual do toplevel, lido dos atributos da superfície no event loop.
@@ -303,6 +305,25 @@ impl AeroState {
                         None => "NONE".to_owned(),
                     },
                 }
+            }
+            "csd" => {
+                let Some(id) = id else {
+                    return "ERR janela inexistente".to_owned();
+                };
+                let Some(window) = self.window_for_id(id as u32).cloned() else {
+                    return "ERR janela inexistente".to_owned();
+                };
+                let Some(toplevel) = window.toplevel() else {
+                    return "ERR sem toplevel".to_owned();
+                };
+                format!(
+                    "CSD {id} {}",
+                    if client_draws_frame(toplevel.wl_surface()) {
+                        1
+                    } else {
+                        0
+                    }
+                )
             }
             _ => "ERR comando desconhecido".to_owned(),
         }

@@ -1,5 +1,7 @@
 //! xdg_wm_base: toplevels, popups e initial configure.
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use smithay::{
     delegate_xdg_shell,
     desktop::{
@@ -20,8 +22,50 @@ use smithay::{
 };
 
 use crate::state::AeroState;
-use smithay::reexports::wayland_protocols::xdg::decoration::zv1::server::zxdg_toplevel_decoration_v1::Mode;
+use smithay::reexports::wayland_protocols::xdg::{
+    decoration::zv1::server::zxdg_toplevel_decoration_v1::Mode,
+    shell::server::xdg_toplevel::ResizeEdge as XdgResizeEdge,
+};
 use smithay::wayland::shell::xdg::decoration::XdgDecorationHandler;
+
+use crate::aero_frame_protocol::aero_frame_v1::ResizeEdge as FrameResizeEdge;
+use crate::grab::start_geometry_grab;
+use crate::protocols::aero_frame::serial_valid;
+
+/// Mapa superfície → window_id lógico (inverso de `window_surfaces`).
+fn window_id_for(state: &AeroState, surface: &WlSurface) -> Option<u32> {
+    state
+        .window_surfaces
+        .iter()
+        .find(|(_, candidate)| *candidate == surface)
+        .map(|(id, _)| *id)
+}
+
+/// O cliente pediu para desenhar a própria moldura (GTK4/gedit). O shell ainda
+/// responde ServerSide, mas usa este sinal para NÃO desenhar a barra HTML —
+/// mesmo invariante do Domicile (`decorations.rs:40-70,93-98`).
+#[derive(Default)]
+struct ClientDrawsFrame(AtomicBool);
+
+fn set_client_frame(surface: &WlSurface, value: bool) {
+    with_states(surface, |states| {
+        states
+            .data_map
+            .insert_if_missing_threadsafe(|| ClientDrawsFrame(AtomicBool::new(false)));
+        if let Some(flag) = states.data_map.get::<ClientDrawsFrame>() {
+            flag.0.store(value, Ordering::Relaxed);
+        }
+    });
+}
+
+pub fn client_draws_frame(surface: &WlSurface) -> bool {
+    with_states(surface, |states| {
+        states
+            .data_map
+            .get::<ClientDrawsFrame>()
+            .is_some_and(|flag| flag.0.load(Ordering::Relaxed))
+    })
+}
 
 impl XdgShellHandler for AeroState {
     fn xdg_shell_state(&mut self) -> &mut XdgShellState {
@@ -127,17 +171,76 @@ impl XdgShellHandler for AeroState {
         surface.send_repositioned(token);
     }
 
-    // S1: grabs de move/resize entram em F3. Mantemos as janelas imóveis.
-    fn move_request(&mut self, _surface: ToplevelSurface, _seat: wl_seat::WlSeat, _serial: Serial) {
+    // F1-csd-gtk: o GTK chama xdg_toplevel.move/resize a partir do próprio
+    // headerbar. Reusamos os grabs do frame, com o mesmo serial validado.
+    fn move_request(&mut self, surface: ToplevelSurface, _seat: wl_seat::WlSeat, serial: Serial) {
+        let Some(window_id) = window_id_for(self, surface.wl_surface()) else {
+            return;
+        };
+        let serial = u32::from(serial);
+        if !serial_valid(self.last_button_serial, serial) {
+            #[cfg(feature = "bench")]
+            eprintln!(
+                "CSD_MOVE t={} window_id={window_id} decisao=deny reason=serial",
+                crate::frame_diagnostics::now_ns()
+            );
+            return;
+        }
+        if start_geometry_grab(self, window_id, serial, None) {
+            #[cfg(feature = "bench")]
+            eprintln!(
+                "CSD_MOVE t={} window_id={window_id} decisao=allow acao=move",
+                crate::frame_diagnostics::now_ns()
+            );
+        }
     }
 
     fn resize_request(
         &mut self,
-        _surface: ToplevelSurface,
+        surface: ToplevelSurface,
         _seat: wl_seat::WlSeat,
-        _serial: Serial,
-        _edges: smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel::ResizeEdge,
+        serial: Serial,
+        edges: XdgResizeEdge,
     ) {
+        let Some(window_id) = window_id_for(self, surface.wl_surface()) else {
+            return;
+        };
+        let serial = u32::from(serial);
+        if !serial_valid(self.last_button_serial, serial) {
+            #[cfg(feature = "bench")]
+            eprintln!(
+                "CSD_RESIZE t={} window_id={window_id} decisao=deny reason=serial",
+                crate::frame_diagnostics::now_ns()
+            );
+            return;
+        }
+        let edges = match edges {
+            XdgResizeEdge::Top => FrameResizeEdge::Top,
+            XdgResizeEdge::Bottom => FrameResizeEdge::Bottom,
+            XdgResizeEdge::Left => FrameResizeEdge::Left,
+            XdgResizeEdge::Right => FrameResizeEdge::Right,
+            XdgResizeEdge::TopLeft => FrameResizeEdge::TopLeft,
+            XdgResizeEdge::BottomLeft => FrameResizeEdge::BottomLeft,
+            XdgResizeEdge::TopRight => FrameResizeEdge::TopRight,
+            XdgResizeEdge::BottomRight => FrameResizeEdge::BottomRight,
+            other => {
+                #[cfg(feature = "bench")]
+                eprintln!(
+                    "CSD_RESIZE t={} window_id={window_id} decisao=deny reason=edge edge={other:?}",
+                    crate::frame_diagnostics::now_ns()
+                );
+                #[cfg(not(feature = "bench"))]
+                let _ = other;
+                return;
+            }
+        };
+        if start_geometry_grab(self, window_id, serial, Some(edges)) {
+            #[cfg(feature = "bench")]
+            eprintln!(
+                "CSD_RESIZE t={} window_id={window_id} decisao=allow acao=resize",
+                crate::frame_diagnostics::now_ns()
+            );
+        }
     }
 
     fn grab(&mut self, surface: PopupSurface, _seat: wl_seat::WlSeat, serial: Serial) {
@@ -176,17 +279,31 @@ impl XdgShellHandler for AeroState {
 
 delegate_xdg_shell!(AeroState);
 
-// Decoração server-side: o frame HTML é a ÚNICA barra de título. Clientes com
-// CSD (foot) recebem mode=ServerSide e largam a própria barra, alinhando o
-// render (render_loc = geo.loc - geometry().loc) com a região arrastável.
+// Respondemos ServerSide a todos, mas guardamos quando o cliente pediu CSD.
+// O foot larga a própria barra; GTK4/gedit NÃO — para eles o shell não deve
+// desenhar a barra HTML (guia do Domicile: decorations.rs / WRITING-A-SHELL.md).
 impl XdgDecorationHandler for AeroState {
     fn new_decoration(&mut self, toplevel: ToplevelSurface) {
+        set_client_frame(toplevel.wl_surface(), false);
         self.server_side_decoration(toplevel);
     }
-    fn request_mode(&mut self, toplevel: ToplevelSurface, _mode: Mode) {
+    fn request_mode(&mut self, toplevel: ToplevelSurface, mode: Mode) {
+        let client_frame = mode == Mode::ClientSide;
+        set_client_frame(toplevel.wl_surface(), client_frame);
+        #[cfg(feature = "bench")]
+        if client_frame {
+            eprintln!(
+                "CSD_DETECT t={} window_id={} client_frame=true",
+                crate::frame_diagnostics::now_ns(),
+                window_id_for(self, toplevel.wl_surface())
+                    .map(|id| id.to_string())
+                    .unwrap_or_else(|| "?".to_owned())
+            );
+        }
         self.server_side_decoration(toplevel);
     }
     fn unset_mode(&mut self, toplevel: ToplevelSurface) {
+        set_client_frame(toplevel.wl_surface(), false);
         self.server_side_decoration(toplevel);
     }
 }
