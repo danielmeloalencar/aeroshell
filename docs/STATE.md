@@ -39,7 +39,7 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
       Três amostras `pix=0` no meio da captura (dump full sobrescrito por frame) foram IMPRESSAS e preservadas,
       não descartadas. Descoberta do instrumento: o Smithay com feedback padrão não emite os eventos legados
       v3; o cliente lê as tranches via `get_default_feedback` (v5), que é o caminho moderno e a prova pedida.
-      Gates: `check.sh` EXIT=0 (`gate-final3.log`), clippy `--features bench -D warnings` EXIT=0 (`clippy-bench.log`),
+      Gates: `check.sh` EXIT=0 (`gate-final.log`), clippy `--features bench -D warnings` EXIT=0 (`clippy-bench.log`),
       `cargo check --workspace --no-default-features` EXIT=0 (`nodefault.log`). Vizinhos: `headless_render_damage`,
       `frame_resize_glue`, `frame_buttons`, `frame_fixed_canvas_hygiene` → OK; `frame_window_id` falhou 1×
       ("sem configure de conteúdo") e passou na repetição sem mudança de código; `fractional_scale.py` falhou
@@ -1255,8 +1255,10 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
 - **F1-dmabuf (2026-11-23): código, harness de cliente real, tranches/import e gates verdes (§3).** Falta o gate
   crítico do VSCode: o snap força Ozone/X11 (§6) e o Electron não-snap de controle quebra por schema GLib (§6).
   Não é regressão do dmabuf; **PARAR e reportar** — próximo cartão (`F1-clipboard-two-clients.md`) só com "ok".
-  Instância nested de diagnóstico deixada aberta: compositor PID 11925, socket `wayland-aero-f1-dmabuf-visual`,
-  log `/tmp/opencode/f1-dmabuf/visual/compositor.log`, IPC `/tmp/opencode/f1-dmabuf/visual/ipc.sock` (`list` → `.`).
+  Instância nested de diagnóstico: compositor PID 11925, socket `wayland-aero-f1-dmabuf-visual`, IPC
+  `/tmp/opencode/f1-dmabuf/visual/ipc.sock` (`list` → `.`). **Ela foi encerrada pelo restart do ambiente, não pelo
+  agente**; não há mais instância aberta para o humano julgar. Log sobreviveu em
+  `/tmp/opencode/f1-dmabuf/visual/compositor.log`.
 - **F1-subsurfaces e F1-final-1b FECHADOS PELO JUIZ (2026-11-23) — ver §3.** Nenhuma instância encerrada pelo agente.
 - **F1f DRM: FECHADO pelo humano nesta sessão (decisão registrada) — não reabrir.**
 - **F1-csd-gtk-move-resize (2026-11-22): código, teste-first, 4× harness verde, regressões e gate prontos (§3). Falta
@@ -1365,10 +1367,13 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   Controle não-snap (binário interno do snap, sem wrapper) falha antes disso com
   `GLib-GIO-ERROR … 'org.gnome.settings-daemon.plugins.xsettings' does not contain a key named 'antialiasing'`.
   Nenhuma terceira via tentada por conta própria (determinação do humano). Cartão de correção separado, se autorizado.
-- **F1-dmabuf (2026-11-23): sondas/gates — 3 execuções de `check.sh` até verde, amostras preservadas.**
+- **F1-dmabuf (2026-11-23): sondas/gates — 3 execuções de `check.sh` até verde.** Os arquivos das duas
+  primeiras falhas e da 3ª execução foram apagados pelo restart do ambiente (a saída crua FOI vista ao vivo
+  nesta sessão); o log da execução verde final foi recriado como `gate-final.log`.
   `gate.log` falhou em `fmt --check` (código novo sem fmt); `gate-final.log` falhou em clippy `-D warnings`
   (`dmabuf` não usado sem `bench`, corrigido com `_dmabuf` sem `allow`); `gate-final2.log` falhou em clippy
-  (`chunks_exact(2)` no cliente → loop manual, sem `allow`). `gate-final3.log` EXIT=0. Nenhuma checagem desligada.
+  (`chunks_exact(2)` no cliente → loop manual, sem `allow`). `gate-final.log` EXIT=0 (reexecutado após o restart
+  do ambiente ter apagado os logs temporários; código idêntico, só docs mudaram). Nenhuma checagem desligada.
 - **F1-dmabuf (2026-11-23): A/B dos vizinhos.** `fractional_scale.py` falha em "escalas independentes (buffer/
   viewport vs preferred)" em 1.25/1.5 **no HEAD sem minhas mudanças** (`ab-head-fractional2.log`) — pré-existente.
   `frame_window_id.py` falhou 1× ("sem configure de conteúdo para window_id=1") e passou na repetição sem mudança
@@ -1875,8 +1880,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
 ## 7. Não medido / não validado (não trate como fato)
 - **F1-dmabuf (2026-11-23): JUIZ VISUAL DO VSCODE PENDENTE / NÃO ABRIU.** O global e o import estão provados no
   headless e no nested, mas o app crítico não abriu por causa do snap (§6). Instância nested deixada aberta
-  (PID 11925, socket `wayland-aero-f1-dmabuf-visual`, IPC devolve `list` → `.`) — humano deve olhar e decidir
-  se fecha; agente NÃO encerrou o processo. Sem o "ok" do humano este item NÃO está validado visualmente.
+  A instância aberta para o juiz (PID 11925) foi encerrada pelo restart do ambiente, não pelo agente;IPC
+  devolvia `list` → `.` antes disso. Sem o "ok" do humano este item NÃO está validado visualmente.
 - **F1-dmabuf (2026-11-23): DRM/udev NÃO medido.** O global é anunciado com os formatos do renderer GBM no udev,
   mas não há VT nesta VM; o import real em DRM e a aparência no tty3 (`~/u`) seguem sem medição nem juiz.
   Desempenho (FPS/latência) também não medido: VM VirtualBox sem 3D, só funcionamento vale (AGENTS §4.3).
@@ -2292,10 +2297,10 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
   `successful()` 1×), campos em `state.rs`, anúncio nos 3 backends; sem dep nova, sem XML/ADR/geometria.
   Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-compositor --example dmabuf_client && python3 tests/integration/f1_dmabuf.py`
   → `VEREDITO: OK`, `formats=41`, `DMABUF_IMPORT`, `pix=12288`, 0 erros; baseline sem o global dava FALHA.
-  Gate final `check.sh` EXIT=0 (`gate-final3.log`), clippy bench 0, no-default 0. Vizinhos e A/B em §6.
+  Gate final `check.sh` EXIT=0 (`gate-final.log`), clippy bench 0, no-default 0. Vizinhos e A/B em §6.
   VSCode: `/snap/bin/code` morre em Ozone/X11 mesmo com o global; controle não-snap quebra em schema GLib — §6.
-  Instância nested deixada aberta: PID 11925, socket `wayland-aero-f1-dmabuf-visual`, IPC `list` → `.`;
-  quem fecha é o humano. **Próximo passo: só com "ok", cartão `F1-clipboard-two-clients.md`.** Sem push.
+  Instância de diagnóstico (PID 11925) encerrada pelo restart do ambiente, não pelo agente; IPC devolvia
+  `list` → `.`. **Próximo passo: só com "ok", cartão `F1-clipboard-two-clients.md`.** Sem push.
 - **SESSÃO ANTERIOR (2026-11-23): F1-final-1c + F1-toplevel-icon-protocol — FECHADOS PELO JUIZ (*"Aprovado"*).**
   Dois fixes: (1) `0b31705` configure inicial do canvas na frame layer-surface; (2) `a3bd4fc` handler próprio de
   `xdg_toplevel_icon_v1` que copia pixels e não retém `wl_buffer` (bug do Smithay 0.7.0 `shm/mod.rs:496`).
