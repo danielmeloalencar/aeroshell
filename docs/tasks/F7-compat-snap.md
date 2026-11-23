@@ -8,6 +8,29 @@
 Descobrir, com dado cru, por que um app snap (Firefox) conecta ao GNOME mas não ao AeroShell, e decidir se a correção é
 nome/caminho do socket da sessão ou registro de slot Wayland no snapd — sem inventar API de snap.
 
+## Dado já entregue (2026-11-23) — NÃO prova a hipótese
+- `~/u --socket wayland-0` no tty3: `aeroshell-udev-20261123-202747.log` mostra `socket=wayland-0` e morre com
+  **`Error: AlreadyInUse`** antes de `Created new socket`. `/run/user/1000/wayland-0` pertence ao **GNOME Shell**
+  (PID 3531) da sessão do host — não estava livre.
+- O humano então rodou `./u` **sem parâmetros** (socket custom `wayland-aero-tty3`,
+  `aeroshell-udev-20261123-202837.log`) e, dentro de um `foot`, `WAYLAND_DISPLAY=wayland-0 firefox`. Isso gerou
+  `/home/daniel/Projetos/aeroshell/firefox.log`: WebRender/telemetria sobem **sem `Permission denied`**, mas o
+  Firefox estava conectado no **GNOME**, não no AeroShell.
+- Conclusão: o snap prova que acessa o socket padrão `wayland-0` da sessão GNOME; **o teste do AeroShell como sessão
+  ainda não foi feito**. Manter este cartão com o dado; **não reduzir** para "doc + socket padrão" e **não fazer
+  snapd/slot**.
+
+## Plano do experimento de sessão (SÓ com aprovação explícita; NÃO intercalar com F2)
+1. **Boot sem GNOME** (ou sair da sessão GNOME) de forma que `wayland-0` esteja livre; confirmar
+   `ls -l /run/user/1000/wayland-0` → ausente antes de subir o AeroShell.
+2. Subir AeroShell **como sessão** com socket padrão: `~/u --socket wayland-0` (verificar log: `Created new socket
+   name=Some("wayland-0")`).
+3. Rodar `WAYLAND_DISPLAY=wayland-0 firefox` **sem** forçar sockets custom; capturar stdout/stderr cru.
+4. Alternativa (se o boot sem GNOME não for possível): usar **`XDG_RUNTIME_DIR` privado** por sessão,
+   sem alterar `/etc` nem o ambiente do host de forma permanente — também exige aprovação e experimento separado.
+5. Só depois do dado: decidir reduzir este cartão para doc + socket padrão como sessão, ou manter a investigação.
+   `snap connect` / registrar slot no snapd permanece **fora**, com aprovação explícita separada.
+
 ## Contexto mínimo — causa levantada (HIPÓTESE, precisa de prova)
 - Gate final (2026-11-23, `/tmp/opencode/f1-final-gate/firefox.log`):
   `Failed to connect to Wayland display '/run/user/1000/snap.firefox/wayland-aero-f1-final': Permission denied`.
