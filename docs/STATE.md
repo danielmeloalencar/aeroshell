@@ -21,6 +21,25 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [~] **F1-final-1c (2026-11-23) — CAUSA RAÍZ ENCONTRADA; CORREÇÃO NÃO CONCLUÍDA (3 tentativas falharam).**
+      Cartão `docs/tasks/F1-final-1c.md`. Hipóteses 1–3 **descartadas por dado cru**: Kate/Kwrite pedem decoração
+      `Server` (`CSD_DECO ... mode=Value(Server)`, sem `CSD_DETECT`), o frame associa com `client_frame=false`;
+      canvas `1932x991` cobre o conteúdo `1920x955`; `frame_requested` é enviado e recebido.
+      **Causa real:** o primeiro `frame_requested` chega com **`conteudo=0x0`** (app mapeia antes de commitar buffer),
+      o que gera UMA única `configure`. O `aeroFramePainted` dessa configure não dispara o `requestAnimationFrame`
+      do WebView; o frame só pinta quando um **segundo commit do cliente** provoca uma segunda configure. `foot`
+      e um cliente sintético com buffer 1280×800 pintam (2 configures, `frame_painted=2`); o sintético com
+      `AERO_LARGE_DELAY_MS=3000` só pinta após o commit tardio; com `AERO_LARGE_NO_COMMIT=1`, **nunca** pinta
+      (baseline `VEREDITO: FALHA`). Prova em `/tmp/opencode/f1-1c/nested-{foot,large,late,kate}.log`.
+      Teste-first versionado: `examples/large_client.rs` + `tests/integration/f1_frame_paint_no_commit.py`, que exige
+      `frame_painted` **e** `FRAME_BUFFER_COMMIT buffer=Some` (o sinal sozinho deu falso positivo com postMessage direto).
+      **3 tentativas falharam e foram revertidas** (`git checkout -- frame_webview.rs`): (1) reenviar
+      `aeroFramePainted` em 200/700 ms e 1,5/3 s; (2) `postMessage` direto ao handler Rust (marcou `frame_painted`
+      sem buffer real — falso positivo); (3) `window.queue_draw()` + `aeroFramePainted`. Nenhuma produziu buffer WebView.
+      **PARADO pela regra das duas tentativas (§4.1)** — não houve 4ª variação por conta própria. Causa provável
+      ainda não confirmada: o frame layer surface não entra no mapa de `send_frame` do backend antes do 1º commit
+      (`winit.rs:380-387`), então o WebView não recebe `wl_surface.frame` e não pinta. **Próximo passo exige decisão:**
+      investigar esse caminho (compositor enviar frame callback/configure extra ao frame) ou autorizar outra via.
 - [x] **F1-final-1b — FECHADO PELO JUIZ VISUAL (2026-11-23): *"Funcionou tudo."*** Carta de juiz: itens de Arquivo/
       Editar/menu de contexto respondem; **tooltip ausente no qterminal NÃO é defeito** — o humano confirmou que o
       próprio qterminal não tem tooltip (testado no GNOME) e que no **gedit o tooltip aparece normal**. Nenhuma
@@ -1744,6 +1763,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- **F1-final-1c — SEM JUIZ VISUAL (2026-11-23): correção NÃO concluída.** Causa do `frame_requested 0x0` provada,
+  mas nenhuma das 3 tentativas fez o WebView commitar um buffer; cartão NÃO fechado. Não medido: se o udev se
+  comporta exatamente como o nested nesse caminho (o sintético sem commit foi rodado só no winit); GPU real.
 - **F1-final-1b — JUIZ VISUAL OBTIDO (2026-11-23): *"Funcionou tudo."*** Pré-filtro sintético (grab instalado,
   48 botões no popup) não media a ativação de item de menu no qterminal real; a sentença final foi a do humano na
   instância `wayland-aero-f1-1b-final`. **Não medido:** GPU real, outros toolkits e tooltips do qterminal (inexistente
@@ -2117,7 +2139,14 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **SESSÃO ENCERRADA (2026-11-23): F1-subsurfaces + F1-final-1b FECHADOS PELO JUIZ (*"Funcionou tudo"*).**
+- **SESSÃO ATUAL (2026-11-23): F1-final-1c — causa do frame que não pinta encontrada (`frame_requested 0x0` →
+  uma configure → `aeroFramePainted` sem rAF), MAS 3 tentativas de correção falharam e foram revertidas. PARADO
+  (§4.1).** Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-compositor --example large_client && cargo build -p aeroshell-shell --example frame_webview && python3 tests/integration/f1_frame_paint_no_commit.py`
+  → baseline `VEREDITO: FALHA`, `frame_painted=0 buffer_real=False`. Controles: `nested-foot.log` e
+  `nested-large.log` (2 configures, pinta); `nested-late.log` (commit aos 3 s, pinta depois).
+  **Próximo passo (DECISÃO DO HUMANO):** autorizar investigar o caminho de `send_frame`/damage do frame layer
+  surface (`winit.rs:380-387`) como causa do WebView não pintar, ou escolher outra via. Não abrir cartão 2.
+- **SESSÃO ANTERIOR ENCERRADA (2026-11-23): F1-subsurfaces + F1-final-1b FECHADOS PELO JUIZ (*"Funcionou tudo"*).**
   Causa do menu Qt: `grab_popup()` só cria o `PopupGrab`; faltava `set_grab` no ponteiro/teclado. Corrigido em
   `protocols/xdg_shell.rs::grab`. Gate `f1-1b-gate2.log` EXIT=0, clippy bench 0, `--no-default-features` 0.
   Instância de julgamento `wayland-aero-f1-1b-final` deixada aberta — quem fecha é o humano.
