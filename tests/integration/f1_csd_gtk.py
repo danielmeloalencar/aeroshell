@@ -26,8 +26,9 @@ LOG = OUT / f"comp-{os.getpid()}.log"
 IPC = OUT / f"ipc-{os.getpid()}.sock"
 INPUT = OUT / f"input-{os.getpid()}.sock"
 GO = OUT / f"go-{os.getpid()}"
+GEOM_GO = OUT / f"geom-go-{os.getpid()}"
 
-for orphan in (f"/run/user/1000/{SOCK}", str(IPC), str(INPUT), str(GO)):
+for orphan in (f"/run/user/1000/{SOCK}", str(IPC), str(INPUT), str(GO), str(GEOM_GO)):
     if os.path.exists(orphan):
         os.unlink(orphan)
 
@@ -40,6 +41,7 @@ env.update(
 )
 if GEOMETRY_ONLY:
     env["AERO_CSD_GEOMETRY_ONLY"] = "1"
+    env["AERO_CSD_GEOM_GO"] = str(GEOM_GO)
 
 comp = subprocess.Popen(
     [str(ROOT / "target/debug/aeroshell-compositor"), "--backend", "winit",
@@ -102,6 +104,10 @@ def wait_for(marker, timeout=25.0):
 try:
     ready = wait_for("CSD_CLIENT pronto_para_input")
     wait_for("FRAMEWEB: associate(window_id=0)")
+    if GEOMETRY_ONLY:
+        # Expor a geometria DEPOIS do associate força o caminho do timer
+        # rápido de CSD (o caso real do GTK4 no tty3).
+        GEOM_GO.touch()
     before = geometry()
     print(f"pronto={ready} geometria_inicial={before}")
 
@@ -137,6 +143,8 @@ try:
         time.sleep(0.8)
     resized = geometry()
     print(f"geometria_pos_resize={resized}")
+    if GEOMETRY_ONLY:
+        wait_for("CSD_CLIENT geometry_set", 15.0)
 
     text = log()
     delta_loc = (
@@ -146,6 +154,15 @@ try:
     delta_size = (
         (resized[2] - before[2]) + (resized[3] - before[3])
         if before and resized else 0
+    )
+    # Medimos do sinal de protocolo detectado pelo compositor até o DOM
+    # escondido pelo shell. O tempo desde geometry_set inclui o cold-start
+    # do WebView (fora desta melhoria) e por isso não é o critério.
+    start = re.search(r"CSD_DETECT t=(\d+) window_id=0", text)
+    applied = re.search(r"FRAMEWEB: csd_applied t=(\d+) window_id=0", text)
+    hide_ms = (
+        (int(applied.group(1)) - int(start.group(1))) / 1_000_000
+        if start and applied else -1
     )
     checks = {
         "cliente pediu sinal CSD": (
@@ -157,18 +174,19 @@ try:
         "CSD detectado (bench)": bool(re.search(r"CSD_DETECT t=\d+ window_id=0 client_frame=true", text)),
         "serial invalido recusado": bool(re.search(r"CSD_MOVE t=\d+ window_id=0 decisao=deny", text)),
         "barra HTML escondida (DOM)": bool(re.search(
-            r"FRAMEWEB: csd_applied window_id=0 client_frame=true bar=hidden border=hidden", text)),
+            r"FRAMEWEB: csd_applied t=\d+ window_id=0 client_frame=true bar=hidden border=hidden", text)),
         "sem bordas do frame": (
             bool(re.search(r"FRAMEWEB: associate\(window_id=0\) \+ set_insets\(0,0,0,0\)", text))
             or bool(re.search(r"FRAMEWEB: csd_late window_id=0 insets=\(0,0,0,0\)", text))
         ),
         "move pelo cliente": delta_loc >= 150,
         "resize pelo cliente": delta_size >= 80,
+        "escondeu em <= 200ms": GEOMETRY_ONLY is False or 0 <= hide_ms <= 200,
         "sem erro de protocolo": not re.search(r"error \d+:|protocol error", text, re.I),
     }
     for name, ok in checks.items():
         print(f"{'OK ' if ok else 'FALHA '} {name}")
-    print(f"delta_loc={delta_loc} delta_size={delta_size}")
+    print(f"delta_loc={delta_loc} delta_size={delta_size} hide_ms={hide_ms:.1f}")
     print(f"log_cru={OUT}")
     print("VEREDITO: " + ("OK" if all(checks.values()) else "FALHA"))
     sys.exit(0 if all(checks.values()) else 1)

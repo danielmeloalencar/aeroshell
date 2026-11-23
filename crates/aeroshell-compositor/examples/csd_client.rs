@@ -208,7 +208,11 @@ impl App {
         let gutter = 20;
         xdg.set_window_geometry(gutter, gutter, w - 2 * gutter, h - 2 * gutter);
         surface.commit();
-        eprintln!("CSD_CLIENT geometry_set gutter={gutter} size={w}x{h}");
+        let t = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        eprintln!("CSD_CLIENT geometry_set t={t} gutter={gutter} size={w}x{h}");
     }
 
     fn drive_requests(&mut self) {
@@ -304,15 +308,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // A geometria com sombra aparece TARDE no GTK4, depois de vários
         // polls do shell: o bug do `continue` punha a checagem de CSD abaixo
         // do bloco do ícone e nunca a alcançava nesse caso.
-        if geometry_only && !app.geometry_sent && started.elapsed() >= Duration::from_secs(2) {
-            app.send_csd_geometry();
-            app.geometry_sent = true;
+        if geometry_only && !app.geometry_sent {
+            let marker = std::env::var_os("AERO_CSD_GEOM_GO");
+            let ready = match marker {
+                Some(path) => std::path::Path::new(&path).exists(),
+                None => started.elapsed() >= Duration::from_secs(8),
+            };
+            if ready {
+                app.send_csd_geometry();
+                app.geometry_sent = true;
+            }
         }
         if let Some(size) = app.pending_size.take() {
             if size != app.buffer_size {
                 app.attach_buffer(&qh, size)?;
                 eprintln!("CSD_CLIENT recommit {}x{}", size.0, size.1);
-                if geometry_only {
+                if geometry_only && app.geometry_sent {
                     app.send_csd_geometry();
                 }
             }
@@ -333,7 +344,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if size != app.buffer_size {
                 app.attach_buffer(&qh, size)?;
                 eprintln!("CSD_CLIENT recommit {}x{}", size.0, size.1);
-                if geometry_only {
+                if geometry_only && app.geometry_sent {
                     app.send_csd_geometry();
                 }
             }

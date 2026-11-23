@@ -18,6 +18,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::net::Shutdown;
 use std::os::unix::net::UnixStream;
 use std::rc::Rc;
+use std::time::{Duration, Instant};
 use wayland_client::{protocol::wl_registry, Dispatch, Proxy, QueueHandle};
 use webkit6::prelude::*;
 use webkit6::{UserContentManager, WebView};
@@ -82,6 +83,8 @@ struct FrameEntry {
     /// Já escondemos a barra HTML deste frame por CSD (pedido explícito ou
     /// detectado depois pela window_geometry, como no gedit real).
     csd_active: bool,
+    /// Até quando vale a pena consultar `csd <id>` a cada 100 ms nesta janela.
+    csd_probe_until: Instant,
 }
 
 struct PoolItem {
@@ -705,7 +708,30 @@ fn refresh_titles() {
             );
             eprintln!("{log}");
         }
+    }
+}
 
+/// Checagem rápida de CSD: o GTK4 só expõe a window_geometry depois do
+/// primeiro commit, então um poll de 1 s deixava a moldura aparecer por
+/// ~0,5 s. Aqui a sonda roda a cada 100 ms nos primeiros 5 s da janela.
+fn refresh_csd() {
+    if std::env::var_os("AERO_WINDOW_IPC_SOCK").is_none() {
+        return;
+    }
+    let targets: Vec<u32> = RUNTIME.with(|cell| {
+        cell.borrow()
+            .as_ref()
+            .map(|rt| {
+                rt.state
+                    .entries
+                    .iter()
+                    .filter(|entry| !entry.csd_active && Instant::now() < entry.csd_probe_until)
+                    .map(|entry| entry.window_id)
+                    .collect()
+            })
+            .unwrap_or_default()
+    });
+    for window_id in targets {
         // O gedit não pede ClientSide: a sombra aparece na window_geometry
         // só depois do primeiro commit. Por isso CSD também é consultado no
         // polling (como título e ícone), não apenas no frame_requested.
@@ -741,9 +767,9 @@ fn refresh_titles() {
                     },
                 );
                 eprintln!(
-                    "FRAMEWEB: csd_late window_id={window_id} insets=(0,0,0,0) reason=geometry t={}",
-                    bench_t()
-                );
+                "FRAMEWEB: csd_late window_id={window_id} insets=(0,0,0,0) reason=geometry t={}",
+                bench_t()
+            );
             }
         }
     }
@@ -956,6 +982,7 @@ fn associate_frame(
             last_title: None,
             last_icon: None,
             csd_active: client_frame,
+            csd_probe_until: Instant::now() + Duration::from_secs(5),
         });
         eprintln!("FRAMEWEB: associate(window_id={window_id}) + set_insets({left},{top},{right},{bottom}) \
                    + set_titlebar_slices({title_left},{title_right}) client_frame={client_frame} t={}", bench_t());
@@ -1115,7 +1142,8 @@ fn prewarm_frame() {
                     return;
                 };
                 eprintln!(
-                    "FRAMEWEB: csd_applied window_id={window_id} client_frame=true bar={} border={}",
+                    "FRAMEWEB: csd_applied t={} window_id={window_id} client_frame=true bar={} border={}",
+                    bench_t(),
                     if bar == "none" { "hidden" } else { bar },
                     if border == "none" { "hidden" } else { border }
                 );
@@ -1325,8 +1353,14 @@ fn main() {
         });
         // O IPC de janelas é request/response; o título muda é descoberto por
         // polling curto. Evento de mudança de título é melhoria F2 (streaming).
-        glib::timeout_add_local(std::time::Duration::from_secs(1), || {
+        glib::timeout_add_local(Duration::from_secs(1), || {
             refresh_titles();
+            glib::ControlFlow::Continue
+        });
+        // CSD é descoberto por protocolo (window_geometry/KDE/XDG), e o GTK4
+        // só o expõe após o primeiro commit. Sonda rápida nos primeiros 5 s.
+        glib::timeout_add_local(Duration::from_millis(100), || {
+            refresh_csd();
             glib::ControlFlow::Continue
         });
     });
