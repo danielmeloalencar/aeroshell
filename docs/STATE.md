@@ -21,7 +21,10 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
-- [~] **F1-final-1b — diagnóstico de menus Qt: CAUSA ENCONTRADA E CORRIGIDA; juiz visual PENDENTE (§7).**
+- [x] **F1-final-1b — FECHADO PELO JUIZ VISUAL (2026-11-23): *"Funcionou tudo."*** Carta de juiz: itens de Arquivo/
+      Editar/menu de contexto respondem; **tooltip ausente no qterminal NÃO é defeito** — o humano confirmou que o
+      próprio qterminal não tem tooltip (testado no GNOME) e que no **gedit o tooltip aparece normal**. Nenhuma
+      instância encerrada pelo agente. Commit `193f9b1`.
       Cartão `docs/tasks/F1-final-1b.md`. Log debug da instância julgada (`/tmp/opencode/f1-1b/visual-debug.log`)
       mostrou: `POPUP_POSREQ` do Qt (âncora TopLeft/gravity BottomRight/rect 1×1), `POPUP_UNCONSTRAIN before==after`
       (**geometria NÃO é modificada** — hipótese descartada), `hit-test cliente` acertando o popup no `motion`, e
@@ -37,7 +40,11 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
       Gate `check.sh` EXIT=0 (`gate2.log`), clippy bench 0, `--no-default-features` 0. Regressões: `f1_subsurfaces`,
       `popup_client` (F1-popups-render), `f1_popup_click` headless+winit → OK. **Nova instância aberta para o juiz:**
       log `/tmp/opencode/f1-1b/visual-final.log`, socket `wayland-aero-f1-1b-final`. Sem push.
-- [~] **F1-subsurfaces — JUIZ VISUAL NEGOU (2026-11-23); cartão NÃO fechado.** Humano, na instância nested com
+- [x] **F1-subsurfaces — FECHADO PELO JUIZ VISUAL (2026-11-23), após a correção do cartão F1-final-1b.**
+      Histórico do veredito negativo preservado abaixo; o critério visual foi satisfeito quando o `PopupGrab` passou a
+      ser instalado (`193f9b1`). O pré-filtro de subsurfaces (3× OK, pixels + hit-test) permanece como prova
+      complementar — a sentença final foi a do humano na instância `wayland-aero-f1-1b-final`.
+      Veredito original negativo, registrado como dado: humano, na instância nested com
       `qterminal` (Qt): *"Tooltips não aparecem, clique em qualquer item do menu como do arquivo, editar, help, nada
       acontece. Botão direito do mouse abre menu de contexto, mas nenhum item do menu de contexto funciona também."*
       Depois precisou: *"titlebar não cobriu os menus do qt, pois eu pude clicar em Arquivo, Editar, etc e todos
@@ -1153,8 +1160,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
-- **F1-subsurfaces (cartão 1 da sequência F1-final, 2026-11-23): código/teste-first/3× harness/gates verdes (§3).
-  Falta juiz visual com app Qt real (qterminal) aberto — NÃO abrir o cartão 2 sem o "ok".**
+- **F1-subsurfaces e F1-final-1b FECHADOS PELO JUIZ (2026-11-23) — ver §3.** Nenhuma instância encerrada pelo agente.
+  Próximo cartão da ordem aprovada: `F1-clipboard-two-clients.md` (só com Nova sessão/ok explícito; uma tarefa por sessão).
 - **F1f DRM: FECHADO pelo humano nesta sessão (decisão registrada) — não reabrir.**
 - **F1-csd-gtk-move-resize (2026-11-22): código, teste-first, 4× harness verde, regressões e gate prontos (§3). Falta
   juiz visual com `gedit` real (uma barra só; mover/resize pelo headerbar). Não abrir próximo cartão sem ok.**
@@ -1218,7 +1225,7 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
    `F1-xdg-toplevel-states`, `F1-dmabuf`, `F1-presentation-time` (rascunhos aguardando ok). cursor-shape,
    primary-selection e xdg_activation = dívida F1 sanada; F1f FECHADO. Decoração: manter ServerSide+CSD e expor estado
    via IPC para a política Bun na F2, sem mudar arquitetura. STATE.md >150 linhas: cartão de docs próprio depois.
-   **Próximo passo imediato: juiz visual do cartão 1; só depois abrir o cartão 2.**
+   **Próximo passo: cartão 2 (`F1-clipboard-two-clients.md`) — juiz visual do cartão 1 obtido em 2026-11-23.**
 1. **NENHUMA AUTORIZADA — PARAR.** F1-csd-sem-flash, F1-csd-gtk-move-resize, F1-toplevel-icon, título real e F1i+
    FECHADOS PELO JUIZ (§3/§7). O próximo cartão só com decisão explícita; não avançar de fase nem abrir spike D-Bus.
    02s FECHADA pelo juiz (§3), 02r FECHADA pelo juiz (§3),
@@ -1737,11 +1744,11 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- **F1-final-1b — JUIZ VISUAL PENDENTE (2026-11-23).** Causa provada por log e corrigida; o pré-filtro sintético
-  cobre instalação do grab e entrega de clique, **não a ativação de item de menu no qterminal real**. O humano precisa
-  operar a nova instância (`wayland-aero-f1-1b-final`) e confirmar itens de Arquivo/Editar/Ajuda e tooltips. Até o "ok",
-  o cartão 1 (subsurfaces) continua NÃO fechado. Não medido: GPU real e instrumentos de menu de outros toolkits.
-- **F1-subsurfaces — JUIZ VISUAL NEGOU (2026-11-23).** Ver texto literal e medições em §3 (primeiro bullet). O agente
+- **F1-final-1b — JUIZ VISUAL OBTIDO (2026-11-23): *"Funcionou tudo."*** Pré-filtro sintético (grab instalado,
+  48 botões no popup) não media a ativação de item de menu no qterminal real; a sentença final foi a do humano na
+  instância `wayland-aero-f1-1b-final`. **Não medido:** GPU real, outros toolkits e tooltips do qterminal (inexistente
+  no app, confirmado pelo humano no GNOME; gedit mostra tooltip normal).
+- **F1-subsurfaces — JUIZ VISUAL NEGOU (2026-11-23, superado por F1-final-1b).** Ver texto literal e medições em §3 (primeiro bullet). O agente
   deixou a instância aberta; o humano a julgou e relatou tooltips ausentes e itens de menu Qt inativos. O cartão NÃO
   fecha. **Não medido:** GPU real (VM sem 3D), Gtk3 no nested, e a causa raiz do clique em item de menu Qt (o cliente
   sintético com xdg_popup+grab passou em headless e winit — lacuna de medição do caso real).
@@ -2110,7 +2117,14 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **SESSÃO ATUAL (2026-11-23): F1-final-1b — causa do menu Qt encontrada e corrigida; JUIZ VISUAL PENDENTE (§7).**
+- **SESSÃO ENCERRADA (2026-11-23): F1-subsurfaces + F1-final-1b FECHADOS PELO JUIZ (*"Funcionou tudo"*).**
+  Causa do menu Qt: `grab_popup()` só cria o `PopupGrab`; faltava `set_grab` no ponteiro/teclado. Corrigido em
+  `protocols/xdg_shell.rs::grab`. Gate `f1-1b-gate2.log` EXIT=0, clippy bench 0, `--no-default-features` 0.
+  Instância de julgamento `wayland-aero-f1-1b-final` deixada aberta — quem fecha é o humano.
+- **Próximo passo (NÃO executado — uma tarefa por sessão): abrir/executar o cartão 2
+  `docs/tasks/F1-clipboard-two-clients.md` (cliente A escreve, B lê; headless + nested), com teste-first e gate.**
+  Só depois dele os cartões 3–5. Não avançar de F2.
+- **Histórico imediato (F1-final-1b, já fechado):**
   Causa: `grab_popup()` só cria o `PopupGrab`; faltava `set_grab` no ponteiro/teclado (`grabbed=false` no clique).
   Correção em `protocols/xdg_shell.rs::grab` instala `PopupPointerGrab`/`PopupKeyboardGrab` com `Focus::Keep`.
   Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-compositor --example popup_click_client && python3 tests/integration/f1_popup_click.py`
