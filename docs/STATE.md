@@ -21,12 +21,12 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
-- [x] **F1-final-1c + F1-toplevel-icon-protocol — FECHADOS PELO JUIZ VISUAL NO NESTED (2026-11-23: *"Aprovado"*).**
+- [x] **F1-final-1c + F1-toplevel-icon-protocol — FECHADOS PELO JUIZ VISUAL NO NESTED E NO TTY3 (2026-11-23).**
       Humano operou a instância `wayland-aero-f1-final-visual` (Kate PID 45321 + Kwrite PID 45447, ambas vivas e
-      com título/conteúdo reais) e aprovou. Instância deixada aberta de propósito — quem fecha é o humano.
-      Critério 5 (tty3/udev) segue **não executado** (sem VT nesta VM, §7); o cartão é fechado no que foi julgado,
-      com o tty3 registrado como pendência de validação, não como falha. Código/gate/testes verdes nos commits
-      `8294f26`, `a3bd4fc`, `7622f1e`, `b95c364`. Não abrir cartão 2 sem autorização nova.
+      com título/conteúdo reais) e aprovou: *"Aprovado"*. Depois **repetiu no tty3 com `./u` e relatou que
+      "funcionou perfeitamente"** — critério 5 do cartão satisfeito também em sessão real/udev. Instância nested
+      deixada aberta de propósito — quem fecha é o humano. Código/gate/testes verdes nos commits `8294f26`,
+      `a3bd4fc`, `7622f1e`, `b95c364`, `c58fa55`. Não abrir cartão 2 sem autorização nova.
 - [~] **F1-final-1c (histórico do diagnóstico, superado pelo item acima) — CAUSA DO "SEM ATTACH" ENCONTRADA E CORRIGIDA (2026-11-23).**
       Causa raiz (sintético no-commit): `new_layer_surface` (`protocols/layer_shell.rs:58-75`) só enviava
       `zwlr_layer_surface_v1.configure` se `client_content_size(window_id)` existia; sem conteúdo do cliente,
@@ -1816,7 +1816,7 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- **F1-final-1c / F1-toplevel-icon-protocol (2026-11-23): JUIZ VISUAL NESTED APROVADO (*"Aprovado"*); TTY3 NÃO EXECUTADO.**
+- **F1-final-1c / F1-toplevel-icon-protocol (2026-11-23): JUIZ VISUAL APROVADO NO NESTED (*"Aprovado"*) E NO TTY3 (*"funcionou perfeitamente"* com `./u`).**
   Causa do "sem conteúdo" provada e corrigida: bug do Smithay 0.7.0 em `ShmBufferUserData::remove_destruction_hook`
   (`shm/mod.rs:496`, `hook.id != hook_id` — correção upstream `39ee351a` só no master) fazia o hook de destruição
   do `wl_buffer` do ícone não ser removido; o Qt (kwrite) destruía o ícone e o buffer após `set_icon` e o servidor
@@ -1829,8 +1829,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   juiz anterior preservado); gate `check.sh` EXIT=0, clippy bench 0. Instância de julgamento: compositor PID 45305,
   socket `wayland-aero-f1-final-visual`, log `/tmp/opencode/f1-final-visual/compositor.log`, Kate PID 45321 e Kwrite
   PID 45447 vivos, ambos pintados com título real. **Humano aprovou no nested (2026-11-23: *"Aprovado"*)**, com
-  decoração HTML, título real e conteúdo do editor nas duas janelas. Não executado: tty3/udev (sem VT aqui),
-  que era o critério 5 literal do cartão — fica registrado como validação pendente em GPU real, não como falha.
+  decoração HTML, título real e conteúdo do editor nas duas janelas. **tty3 executado pelo humano com `./u`:
+  "funcionou perfeitamente"** — critério 5 literal do cartão satisfeito. Não medido: desempenho/PSS em GPU real
+  (VM sem 3D), sem conclusão de performance.
 - **F1-final-1c — JUIZ VISUAL PENDENTE E BLOQUEADO (2026-11-23):** o fix do configure inicial está provado por log
   cru no nested (sintético, Kate e Kwrite com `attach`+`buffer=Some`+`frame_painted`), mas **o humano ainda não
   olhou a tela**. Bloqueio descoberto no Passo 3: em `/tmp/opencode/f1-1c-visual3/compositor.log` AMBOS os clientes
@@ -2230,9 +2231,9 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
   Reproduzir: `python3 tests/integration/f1_client_visible.py` → `VEREDITO: OK` (`frame_painted=2 protocol_errors=0
   título real IPC com janela`); `python3 tests/integration/f1_icon_buffer_destroy.py` → `VEREDITO: OK`.
   Instância aberta: PID 45305, socket `wayland-aero-f1-final-visual`, Kate 45321 + Kwrite 45447 vivos.
-  **Handoff:** humano aprovou no nested; instância segue aberta (quem fecha é o humano). Pendente não executado:
-  repetir no tty3 via `~/u` com Kate (sem VT nesta VM). **PARAR — não abrir cartão 2 (`F1-clipboard-two-clients.md`)
-  sem autorização nova.** Nenhum push.
+  **Handoff:** humano aprovou no nested e confirmou no tty3 via `./u` ("funcionou perfeitamente"). Instância nested
+  segue aberta (quem fecha é o humano). **PARAR — não abrir cartão 2 (`F1-clipboard-two-clients.md`) sem
+  autorização nova.** Nenhum push.
 - **SESSÃO ATUAL (2026-11-23): F1-final-1c — fix do configure inicial FEITO; JUIZ VISUAL PENDENTE.**
   Causa: sem `client_content_size`, `new_layer_surface` não enviava `zwlr_layer_surface_v1.configure` → GTK nunca
   anexava `wl_buffer`. Correção: `configure_frame_layer_canvas` (`aero_frame.rs`) envia configure do canvas no
