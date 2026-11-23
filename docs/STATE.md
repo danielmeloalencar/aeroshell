@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-22 · **Fase atual: F1** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · **F1i+ FECHADA PELO JUIZ VISUAL (digitação normal; só aviso de toplevel-icon, fora de escopo)** · **título real na titlebar FECHADO PELO JUIZ VISUAL ("ok")** · **F1-toplevel-icon FECHADO PELO JUIZ VISUAL ("vi o icone perfeitamente")** · **F1-csd-gtk-move-resize FECHADO PELO JUIZ VISUAL ("ok": gedit, gnome-disks e Calculadora OK)** · **F1-csd-sem-flash: código/teste/gate verdes, juiz visual PENDENTE (§3/§7)** · cursor invisível no udev segue em cartão separado · 02q REABERTA E FECHADA PELO JUIZ em 2026-11-22 (sem adiamento, spike 12×36 eliminado; harness de 300 ms segue como limitação de VM registrada) · **02r FECHADA PELO JUIZ (nested + tty3) e 02s FECHADA PELO JUIZ (duas instâncias no mesmo D-Bus, "ok aprovado")**
+Última atualização: 2026-11-22 · **Fase atual: F1** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · **F1i+ FECHADA PELO JUIZ VISUAL (digitação normal; só aviso de toplevel-icon, fora de escopo)** · **título real na titlebar FECHADO PELO JUIZ VISUAL ("ok")** · **F1-toplevel-icon FECHADO PELO JUIZ VISUAL ("vi o icone perfeitamente")** · **F1-csd-gtk-move-resize FECHADO PELO JUIZ VISUAL ("ok": gedit, gnome-disks e Calculadora OK)** · **F1-csd-sem-flash FECHADO PELO JUIZ VISUAL ("aprovado")** · cursor invisível no udev segue em cartão separado · 02q REABERTA E FECHADA PELO JUIZ em 2026-11-22 (sem adiamento, spike 12×36 eliminado; harness de 300 ms segue como limitação de VM registrada) · **02r FECHADA PELO JUIZ (nested + tty3) e 02s FECHADA PELO JUIZ (duas instâncias no mesmo D-Bus, "ok aprovado")**
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -21,7 +21,7 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
-- [~] **F1-csd-sem-flash (2026-11-22) — código/teste/gate verdes; juiz visual PENDENTE (§7).**
+- [x] **F1-csd-sem-flash — FECHADO PELO JUIZ VISUAL (2026-11-22).**
       Cartão `docs/tasks/F1-csd-sem-flash.md` (melhoria pedida ao fechar CSD/GTK). O atraso medido no tty3 pelo humano
       era ~0,5 s. A lógica de CSD estava dentro do `refresh_titles()` de 1 s. Extraída para `refresh_csd()` num timer de
       **100 ms**, ativo só nos primeiros **5 s** de cada janela (`csd_probe_until` em `FrameEntry`); quando o cliente
@@ -31,7 +31,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
       → `VEREDITO: FALHA` (`baseline-final.log`; amostra anterior 829 ms). Com 100 ms → 3× `VEREDITO: OK`, hide_ms
       **71,3 / 7,0 / 104,1** (`final-run{1,2,3}.log`). Modo explícito `final-explicit.log` OK; vizinhos `frame_title`,
       `f1_toplevel_icon`, `frame_buttons`, `f1_kde_decoration` OK. Gate `gate-final.log` EXIT=0, clippy bench 0,
-      `--no-default-features` 0. **Aguardando juiz visual no tty3; cartão NÃO fechado.**
+      `--no-default-features` 0. **JUIZ VISUAL: humano respondeu *"aprovado"* — moldura não aparece mais nem por um
+      instante na Calculadora. CARTÃO FECHADO. Nenhuma instância encerrada pelo agente.**
 - [~] **F1-csd-gtk-move-resize (2026-11-22) — código/teste/gate verdes; juiz visual PENDENTE (§7).**
       Cartão `docs/tasks/F1-csd-gtk-move-resize.md` (escolha do humano, cartão único).
       **Guia (não receita):** `domicile-engine/packages/domicile-compositor/src/decorations.rs:40-70,93-98` grava
@@ -1148,9 +1149,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. **NENHUMA AUTORIZADA — PARAR.** F1-csd-gtk-move-resize FECHADO PELO JUIZ (§3/§7), assim como F1-toplevel-icon,
-   título real e F1i+. O humano pediu uma melhoria opcional (reduzir o ~0,5 s até esconder a moldura no GTK4):
-   escrever cartão próprio e obter "ok" antes de executar. Não avançar de fase.
+0. **NENHUMA AUTORIZADA — PARAR.** F1-csd-sem-flash, F1-csd-gtk-move-resize, F1-toplevel-icon, título real e F1i+
+   FECHADOS PELO JUIZ (§3/§7). O próximo cartão só com decisão explícita; não avançar de fase nem abrir spike D-Bus.
    02s FECHADA pelo juiz (§3), 02r FECHADA pelo juiz (§3),
    F1d3 FECHADA pelo juiz (§3).
    02r FECHADA pelo juiz (§3); F1d3 FECHADA pelo juiz (§3).
@@ -1667,10 +1667,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- **F1-csd-sem-flash — JUIZ VISUAL PENDENTE (2026-11-22):** pré-filtro mediu 7–104 ms entre detecção e DOM escondido,
-  mas não prova o que o humano vê. Falta confirmar no tty3 que a moldura da Calculadora não "pisca" perceptivelmente.
-  Sem o "ok", o cartão NÃO fecha. **Não medido:** GPU real (VM sem 3D) e janelas com WebView frio (o harness mede o
-  caminho tardio com pool já quente).
+- **F1-csd-sem-flash — JUIZ VISUAL OBTIDO (2026-11-22): humano respondeu "aprovado".** Pré-filtro mediu 7–104 ms entre
+  detecção e DOM escondido; a sentença final foi do humano na Calculadora. **Não medido:** GPU real (VM sem 3D) e
+  janelas com WebView frio (o harness mede o caminho tardio com pool já quente).
 - **F1-csd-gtk — JUIZ VISUAL OBTIDO (2026-11-22): humano respondeu "ok".** gedit, gnome-disks e Calculadora sem a
   moldura do AeroShell; move/resize funcionando. **Não medido:** latência até esconder a moldura no GTK4 (~0,5 s
   observados pelo próprio humano) — ele pediu uma melhoria opcional, em cartão próprio, não executada aqui.
@@ -2033,14 +2032,14 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **Sessão atual: F1-csd-sem-flash (2026-11-22) — código/teste/gate verdes (§3); JUIZ VISUAL PENDENTE (§7).**
+- **Sessão atual: F1-csd-sem-flash FECHADO PELO JUIZ VISUAL (2026-11-22, "aprovado").**
   Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-compositor --example csd_client && cargo build -p aeroshell-shell --example frame_webview && python3 tests/integration/f1_csd_gtk.py --geometry-only`
   → `VEREDITO: OK`, `hide_ms` ≤ 200 (`/tmp/opencode/f1-flash/final-run{1,2,3}.log`); baseline FALHA.
 - **Instância aberta para o juiz:** compositor PID 345258, shell 345263, `gnome-calculator` 345267, socket
   `wayland-aero-flash-1795401410`, log `/tmp/opencode/f1-flash/visual.log` (com `csd_applied ... bar=hidden border=hidden`).
   Quem fecha é o humano. Há também uma sessão udev anterior em `ps` (PID 336693) — não foi tocada.
-- **Próximo passo:** humano observa a Calculadora (nested aberta e/ou `~/u` no tty3) e confirma que nossa moldura não
-  aparece nem por um instante. Só depois fechar o cartão. Não avançar de fase nem abrir spike D-Bus sem autorização.
+- **Próximo passo: NENHUM AUTORIZADO — PARAR (AGENTS.md §3.1).** Cartão fechado com "aprovado". Não avançar de fase,
+  não reabrir CSD/GTK e não abrir spike D-Bus (Nautilus/Tracker) sem autorização explícita.
 - **Sessão atual: F1-csd-gtk-move-resize FECHADO PELO JUIZ VISUAL (2026-11-22, "ok").**
   Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-compositor --example csd_client && cargo build -p aeroshell-shell --example frame_webview && python3 tests/integration/f1_csd_gtk.py`
   → `VEREDITO: OK` (`/tmp/opencode/f1-csd/final{7,8,9,10}.log`); baseline FALHA em `baseline2.log`.

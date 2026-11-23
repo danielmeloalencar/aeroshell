@@ -1,4 +1,8 @@
-# Tarefa F1-csd-sem-flash — esconder a moldura CSD sem atraso visível (EM EXECUÇÃO — aguarda juiz visual)
+# Tarefa F1-csd-sem-flash — esconder a moldura CSD sem atraso visível
+
+> **FECHADO PELO JUIZ VISUAL em 2026-11-22.** Humano respondeu **"aprovado"** após observar a Calculadora na nested
+> deixada aberta (e/ou tty3): a moldura do AeroShell não aparece mais nem por um instante. Nenhuma instância foi
+> encerrada pelo agente.
 
 > Provas: baseline com poll de 1 s → `VEREDITO: FALHA` em `≤200ms` (`/tmp/opencode/f1-flash/baseline-final.log`, sem
 > `csd_applied` dentro da janela; amostra anterior com detecção → aplicação em 829 ms). Com o timer de 100 ms: 3×
