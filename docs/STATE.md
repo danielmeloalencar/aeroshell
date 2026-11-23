@@ -21,7 +21,31 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
-- [~] **F1-final-1c (2026-11-23) — CAUSA RAÍZ ENCONTRADA; CORREÇÃO NÃO CONCLUÍDA (3 tentativas falharam).**
+- [~] **F1-final-1c — CAUSA DO "SEM ATTACH" ENCONTRADA E CORRIGIDA (2026-11-23); JUIZ VISUAL PENDENTE (§7).**
+      Causa raiz (sintético no-commit): `new_layer_surface` (`protocols/layer_shell.rs:58-75`) só enviava
+      `zwlr_layer_surface_v1.configure` se `client_content_size(window_id)` existia; sem conteúdo do cliente,
+      nenhum configure/ack, nenhum `wl_surface.attach`, nenhum buffer. Provas cruas (WAYLAND_DEBUG=1 no shell):
+      baseline `layer_configures=0 attaches=0 buffer_real=False` (`/tmp/aero-f1-layer-config-dby5dkpb`);
+      diagnóstico 1 (GtkBox no lugar do WebView) também sem attach → não era WebKit
+      (`/tmp/aero-nocommit-gbox-nc_px86p`); diagnóstico 2 sem `zwlr_layer_surface#100.configure`/`ack`;
+      diagnóstico 3 `WEBKIT_DISABLE_DMABUF_RENDERER=1` deu `frame_painted=1` mas `buffer_real=False` → dmabuf
+      não era a causa do attach. Correção mínima (commit `0b31705`): `configure_frame_layer_canvas` em
+      `aero_frame.rs` envia configure do CANVAS (output+insets) no `new_layer_surface` mesmo sem conteúdo;
+      visibilidade preservada por `frame_has_mapped_client` + alvo 9-slice (ADR 0007 lido: a restrição é sobre
+      visibilidade/target, não sobre momento do configure; consequência "buffer inicial dimensionado antes do
+      present" confirma). Teste-first `tests/integration/f1_frame_configure_initial.py` (commit `04485d2`):
+      baseline FALHA, depois `layer_configures=1 attaches=1 frame_painted=1 buffer_real=True` e guarda
+      `frame_dsts=[(12,36),...] full_canvas_render=False` em bench e sem bench
+      (`/tmp/aero-f1-layer-config-r2rea_qr` e `-kqjbldpx`). **Kate e Kwrite no nested com o fix**: ambos
+      `layer configure=1 ack=1 attach=1 buffer=Some frame_painted=1`
+      (`/tmp/opencode/f1-1c-kate-diag/kate-wldbg.log`, `/tmp/opencode/f1-1c-kwrite-diag/kwrite-wldbg.log`).
+      Vizinhos: `frame_fixed_canvas_hygiene`, `frame_buttons`, `frame_resize_glue` OK; `frame_initial_buffer`
+      falhou 1× e passou na repetição (amostra preservada); `frame_cold_start_stages.py` ainda com o latch quente
+      conhecido (limitação VM §7); `frame_repeated_activate.py` falha por timeout do 2º `frame_webview` com avisos
+      de portal **também no commit anterior ao fix** (A/B em worktree `69b32cc`), ou seja não é regressão.
+      Gate `check.sh` EXIT=0 e clippy bench 0 após a correção da sonda de desconexão (`344da06`).
+      Instrumentação separada em `69b32cc` e `da8df36`. Sem push. **Não testei no tty3 (sem VT aqui).**
+- [~] **F1-final-1c (histórico de diagnóstico anterior) — CAUSA RAÍZ ENCONTRADA; CORREÇÃO NÃO CONCLUÍDA (3 tentativas falharam).**
       Cartão `docs/tasks/F1-final-1c.md`. Hipóteses 1–3 **descartadas por dado cru**: Kate/Kwrite pedem decoração
       `Server` (`CSD_DECO ... mode=Value(Server)`, sem `CSD_DETECT`), o frame associa com `client_frame=false`;
       canvas `1932x991` cobre o conteúdo `1920x955`; `frame_requested` é enviado e recebido.
@@ -1287,6 +1311,17 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **F1-final-1c (2026-11-23): `xdg_toplevel_icon_v1` derruba uma conexão do kwrite.** Sonda `CLIENT_DISCONNECT`
+  (commit `da8df36`) no log `/tmp/opencode/f1-1c-kwrite-diag/kwrite-disconnect.log`:
+  `reason=ProtocolError { code: 3, object_interface: "xdg_toplevel_icon_v1", message: "The provided buffer has been destroyed before the toplevel icon" }`
+  logo após `ICON_SET ... w=16 h=16`, **antes** do associate do frame; o frame ainda existe e pinta depois. Ou seja o
+  "The Wayland connection broke" do Qt é sim um protocol error (hipótese de EOF refutada), pré-existente ao fix
+  e fora deste cartão — não foi corrigido. Outros `CLIENT_DISCONNECT ... ConnectionClosed` são conexões auxiliares.
+  `check_frame_timeouts` (`state.rs:579-598`) só registra logs, não descarta cliente — verificado por leitura.
+- **F1-final-1c (2026-11-23): `frame_repeated_activate.py` falha nesta VM por timeout do 2º `frame_webview`**
+  (avisos `xdg-desktop-portal`/`org.freedesktop.secrets`, "A connection to the bus can't be made"). A/B em worktree
+  no commit anterior ao fix (`69b32cc`) reproduziu a mesma falha → não é regressão do configure inicial. Amostras
+  preservadas; não é flake para esconder, é limitação ambiental registrada.
 - **F1-csd-gtk (2026-11-22): amostras falhas preservadas.** `frame_follows_resize` falha no mesmo ponto do commit
   pré-CSD (`/tmp/opencode/f1-csd/...`); `frame_window_id` e `frame_title` falharam 1× cada sob carga e passaram no
   retry sem mudança de código (`reg-` vs `regretry-`). Não descartadas. O Configure órfão corrigido no shell era
@@ -1772,9 +1807,18 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- **F1-final-1c — SEM JUIZ VISUAL (2026-11-23): correção NÃO concluída.** Causa do `frame_requested 0x0` provada,
-  mas nenhuma das 3 tentativas fez o WebView commitar um buffer; cartão NÃO fechado. Não medido: se o udev se
-  comporta exatamente como o nested nesse caminho (o sintético sem commit foi rodado só no winit); GPU real.
+- **F1-final-1c — JUIZ VISUAL PENDENTE E BLOQUEADO (2026-11-23):** o fix do configure inicial está provado por log
+  cru no nested (sintético, Kate e Kwrite com `attach`+`buffer=Some`+`frame_painted`), mas **o humano ainda não
+  olhou a tela**. Bloqueio descoberto no Passo 3: em `/tmp/opencode/f1-1c-visual3/compositor.log` AMBOS os clientes
+  principais (id 1) recebem `CLIENT_DISCONNECT ... ProtocolError { code: 3, object_interface:
+  "xdg_toplevel_icon_v1", message: "The provided buffer has been destroyed before the toplevel icon" }` logo após
+  `ICON_SET ... w=16 h=16`, **antes** do `associate`/`frame_painted` do respectivo frame. Ou seja a decoração pinta
+  num frame cujo cliente Qt já foi desconectado; os processos kate/kwrite saem segundos depois (`kwrite.poll()=255`).
+  É comportamento do Smithay 0.7.0 fixado (`xdg_toplevel_icon.rs:360-369`), não do nosso handler
+  (`seat.rs:293-331` só lê o cached state); pré-existente ao fix e fora do cartão. **Decisão necessária** antes de
+  fechar o critério visual: abrir cartão de protocolo/ícone (com aprovação, AGENTS.md §5) ou aceitar prova de log
+  como substituta neste cartão. Não executado: tty3/udev (sem VT) e juiz visual no udev. Não medido: GPU real.
+  `frame_cold_start_stages.py` segue com o latch quente >300 ms conhecido (limitação VM).
 - **F1-final-1b — JUIZ VISUAL OBTIDO (2026-11-23): *"Funcionou tudo."*** Pré-filtro sintético (grab instalado,
   48 botões no popup) não media a ativação de item de menu no qterminal real; a sentença final foi a do humano na
   instância `wayland-aero-f1-1b-final`. **Não medido:** GPU real, outros toolkits e tooltips do qterminal (inexistente
@@ -2148,14 +2192,19 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **SESSÃO ATUAL (2026-11-23): F1-final-1c — caminho completo reprovado; NENHUMA correção CSD aplicada.**
-  Kate/Kwrite pedem `Server`; envio/recepção de `frame_requested`, criação/associate/map da WebView ocorrem, mas o
-  caminho para em `FRAME_BUFFER_COMMIT buffer=None` após uma configure. `foot` tem segunda configure e `buffer=Some`.
-  Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-compositor --example large_client && cargo build -p aeroshell-shell --example frame_webview && python3 tests/integration/f1_frame_paint_no_commit.py`
-  → `VEREDITO: FALHA`, `configures=1`, `frame_painted=0`, `buffer_real=False`. Logs novos:
-  `/tmp/opencode/f1-1c-trace/nested-{kate,kwrite,foot}.log`; sintético `/tmp/aero-frame-nocommit-rvbk9mi9/`.
-  **Próximo passo (NÃO executado):** investigar `send_frame`/damage do frame layer surface (`winit.rs:380-387`);
-  não reabrir CSD como fix e não abrir cartão 2.
+- **SESSÃO ATUAL (2026-11-23): F1-final-1c — fix do configure inicial FEITO; JUIZ VISUAL PENDENTE.**
+  Causa: sem `client_content_size`, `new_layer_surface` não enviava `zwlr_layer_surface_v1.configure` → GTK nunca
+  anexava `wl_buffer`. Correção: `configure_frame_layer_canvas` (`aero_frame.rs`) envia configure do canvas no
+  `new_layer_surface` (`layer_shell.rs`). Commits: `69b32cc` instrumentação, `0b31705` fix, `04485d2` teste,
+  `da8df36`+`344da06` sonda de desconexão. Reproduzir (comportamento ANTES do fix; depois vira OK):
+  `cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-compositor --example large_client && cargo build -p aeroshell-shell --example frame_webview && python3 tests/integration/f1_frame_configure_initial.py`
+  → `VEREDITO: OK`, `layer_configures=1 attaches=1 frame_painted=1 buffer_real=True`. Logs: Kate
+  `/tmp/opencode/f1-1c-kate-diag/kate-wldbg.log`, kwrite `/tmp/opencode/f1-1c-kwrite-diag/kwrite-disconnect.log`.
+  **Bloqueio do juiz (§7):** Kate/Kwrite são desconectados por `ProtocolError` em `xdg_toplevel_icon_v1` antes do
+  frame pintar; decoração aparece no log mas os apps saem. Instância aberta: compositor PID 37921, socket
+  `wayland-aero-f1-1c-visual3`, log `/tmp/opencode/f1-1c-visual3/compositor.log` (com `CLIENT_DISCONNECT`).
+  **Próximo passo — decisão do humano:** autorizar cartão do protocolo de ícone (ou aceitar prova de log) antes de
+  exigir o ok visual; só depois repetir no tty3 (`~/u`) com Kate. Não abrir cartão 2 sem o ok.
 - **SESSÃO ANTERIOR ENCERRADA (2026-11-23): F1-subsurfaces + F1-final-1b FECHADOS PELO JUIZ (*"Funcionou tudo"*).**
   Causa do menu Qt: `grab_popup()` só cria o `PopupGrab`; faltava `set_grab` no ponteiro/teclado. Corrigido em
   `protocols/xdg_shell.rs::grab`. Gate `f1-1b-gate2.log` EXIT=0, clippy bench 0, `--no-default-features` 0.
