@@ -45,8 +45,10 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
       (`reg-frame_title.log` vs `-2`).
       **JUIZ VISUAL: humano operou a instância `wayland-aero-iconvisual2-1795391487` e respondeu *"vi o icone
       perfeitamente"* — critério deste cartão aprovado. No mesmo teste ele relatou outros sintomas (janela/diálogo
-      cortados, handles fora do lugar, arrastar não funcionava) que NÃO são deste cartão; registrados em §6/§7 com
-      medições próprias. Nenhuma instância encerrada pelo agente. Nenhuma fase/cartão novo aberto.**
+      cortados, handles fora do lugar, arrastar não funcionava), registrados em §6/§7. Depois, **retestou a MESMA
+      instância sem interferência e confirmou: *"no teste que está aberto está tudo funcionando perfeitamente, icone,
+      mover, resize, maximizar e fechar"***. Sintomas anteriores não reproduzidos; cartão novo de geometria/input
+      NÃO foi aberto. Nenhuma instância encerrada pelo agente. Nenhuma fase/cartão novo aberto.**
 - [x] **Título real na titlebar FECHADO PELO JUIZ VISUAL (2026-11-22).**
       Cartão `docs/tasks/F1-titlebar-real-title.md`. O compositor JÁ expunha o título no IPC
       (`window_ipc.rs:30-41,80-102`); a lacuna era só no shell. `frame_webview.rs` ganhou `ipc_title()`
@@ -1101,7 +1103,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   ícone; teste controlado de hover sem botão em headless não moveu a janela (`(60,80)` antes e depois). Hipótese:
   offset entre canvas/target do 9-slice e/ou geometria da janela host do winit; não investigado (fora do cartão).
   Humanos podem ter interferido nos harnesses ao arrastar a janela aberta — registrado, não usado para descartar o
-  relato. **Abrir cartão próprio só com decisão explícita.**
+  relato. **Porém, no reteste limpo da MESMA instância o humano confirmou que ícone, mover, resize, maximizar e fechar
+  funcionam perfeitamente; os sintomas NÃO se reproduziram. Nenhum cartão novo aberto; se voltarem, abrir com decisão
+  explícita e medição de pixel↔handle.**
 - **S1 voltou a falhar no gate de fechamento do título real (2026-11-22):**
   `/tmp/opencode/f1-title/gate-close.log` → `FALHA: cliente não mapeou toplevel dentro do compositor` e
   `zenity: Gtk-WARNING: Failed to open display`,EXIT=1 (8/9 Bun, 32/32 Rust). O mesmo gate já tinha passado nesta
@@ -1564,9 +1568,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
 ## 7. Não medido / não validado (não trate como fato)
 - **F1-toplevel-icon — JUIZ VISUAL OBTIDO (2026-11-22): humano respondeu *"vi o icone perfeitamente"*.** O pré-filtro
   mediu `icon_applied` com data URI e `titlebar_icon ... source=nome name=foot`; a sentença final foi do humano.
-  **Não validado / não medido (§6):** corte da parte inferior de janelas/diálogos, alinhamento entre pixels
-  renderizados e handles de input, e a alegação de movimento sem clique — o teste controlado de hover não reproduziu,
-  mas o relato do humano prevalece até um cartão de geometria/input medi-lo. Tema/DPI alto e GPU real também não medidos.
+  **Sintomas de §6 NÃO reproduzidos no reteste limpo:** humano confirmou ícone, mover, resize, maximizar e fechar
+  funcionando perfeitamente na instância aberta. O relato anterior permanece registrado, mas sem cartão novo.
+  **Não medido:** tema/DPI alto e GPU real (VM sem 3D).
 - **Título real na titlebar — JUIZ VISUAL OBTIDO (2026-11-22): humano respondeu "ok"** ao ver o título real na barra
   do `foot` na nested. O harness mediu o valor lido de volta do DOM via `postMessage` (`title_applied`); a sentença
   final foi do humano. **Não medido:** latência do polling em GPU real (VM sem 3D); títulos com UTF-8/emoji na tela.
@@ -1921,9 +1925,9 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
   Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-compositor --example toplevel_icon_client && cargo build -p aeroshell-shell --example frame_webview && python3 tests/integration/f1_toplevel_icon.py`
   → `VEREDITO: OK` 3× (`/tmp/opencode/f1-icon/final{15,16,17}.log`); baseline FALHA em `baseline2.log`.
   Gate `gate-final2.log` EXIT=0, clippy bench 0, `--no-default-features` 0.
-- **Próximo passo: NENHUM AUTORIZADO — PARAR (AGENTS.md §3.1).** Cartão fechado pelo juiz. Não avançar de fase;
-  se o humano quiser, abrir cartão NOVO para os sintomas de geometria/input de §6 (com medição de pixel↔handle),
-  temas/DPI alto ou qualquer outra coisa. Não reabrir este sem pedido.
+- **Próximo passo: NENHUM AUTORIZADO — PARAR (AGENTS.md §3.1).** Cartão fechado pelo juiz; reteste limpo confirmou
+  ícone/mover/resize/maximizar/fechar OK. Não avançar de fase, não abrir cartão de geometria/input (sintomas não
+  reproduzidos) e não reabrir este sem pedido.
 - **Sessão atual: título real na titlebar FECHADO PELO JUIZ VISUAL (2026-11-22) — ver §3.**
   Instância nested deixada aberta: compositor PID 248731, shell 248736, `foot -T 'Titulo Real AeroShell'` PID 248740,
   socket `wayland-aero-title-1795388310`, IPC `/tmp/opencode/f1-title/visual-ipc-1795388310.sock`, log

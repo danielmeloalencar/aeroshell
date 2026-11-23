@@ -4,7 +4,9 @@
 > *"vi o icone perfeitamente"*. Ele também relatou `foot`/`zenity` cortados, handles em lugar diferente e que
 > "arrastar não funcionava, nem nada" — sintomas de geometria/input **fora de escopo**, medidos à parte em
 > `STATE.md §6/§7` (o mesmo `frame_follows_resize` falha no commit pré-ícone; hover sem clique não moveu a janela no
-> teste controlado). Nenhuma instância foi encerrada pelo agente.
+> teste controlado). **Reteste limpo da mesma instância: humano confirmou que ícone, mover, resize, maximizar e
+> fechar funcionam perfeitamente — sintomas não reproduzidos, cartão novo NÃO aberto.** Nenhuma instância foi
+> encerrada pelo agente.
 > **Descoberta durante a execução:** o global é `xdg_toplevel_icon_manager_v1` (não `xdg_toplevel_icon_v1`), e o
 > `foot` envia **nome** (`set_name` → `name=foot`), não buffers. O compositor expõe pixels ou nome; o shell resolve
 > o nome pelo `gtk4::IconTheme` (guia: `domicile-engine/docs/SHELL-CONFIG.md:388-393`, sem copiar código).
