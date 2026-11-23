@@ -164,6 +164,7 @@ python3 tests/integration/popup_client.py         # F1-popups-render: xdg_popup 
 python3 tests/integration/f1i_protocols.py        # F1i+: globals text_input/input_method/xdg_activation + ativação real (exige build --features bench)
 python3 tests/integration/f1_toplevel_icon.py    # ícone do toplevel até o DOM da titlebar (nested, exige build --features bench)
 python3 tests/integration/f1_csd_gtk.py          # CSD: sem barra HTML + move/resize por xdg_toplevel (nested, exige bench)
+python3 tests/integration/f1_kde_decoration.py   # global org_kde_kwin_server_decoration (GTK3/gedit)
 python3 tests/integration/frame_cold_start.py     # 02q: placeholder/pool/related-view + cronômetro map→1º render
 python3 tests/integration/headless_render_damage.py # F1b/c: age>0, damage parcial e pixels do 9-slice
 python3 tests/integration/multi_output_damage.py  # F1c: 2 outputs, damage incremental e conteúdo nos 2 tiles

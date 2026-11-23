@@ -64,8 +64,17 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
       nenhum `CSD_DETECT`/`csd_late` apareceu no log do tty3 (`~/aeroshell-udev-20261122-224048.log`), então a 2ª
       detecção (geometria no polling) também não disparou no gedit real. **REGRA DAS DUAS TENTATIVAS: PAREI.**
       Tentativas: (1) `request_mode(ClientSide)` — o gedit não pede; (2) `window.geometry().loc != 0` no polling —
-      o log real não mostrou detecção. Próximo passo exige decisão do humano (medir `app_id`/bind do decoration manager
-      ou adotar heurística por `app_id`). Cartão NÃO fechado.
+      o log real não mostrou detecção.
+      **PROTOCOLO FALTANTE ENCONTRADO (decisão do humano: medir em vez de chutar):** `gedit` linka `libgtk-3.so.0`
+      (`ldd /usr/bin/gedit`) e `strings /usr/lib/x86_64-linux-gnu/libgdk-3.so.0` contém
+      `org_kde_kwin_server_decoration_manager` / `org_kde_kwin_server_decoration`. GTK3 pede CSD por **esse**
+      protocolo, que o AeroShell não anunciava (o Domicile implementa `KdeDecorationHandler` em
+      `decorations.rs:55-70`). Adicionado `KdeDecorationState` (default `Server`) + handler que grava `clientFrame`
+      no pedido `Client` e responde `Server`, com sonda `CSD_DETECT ... reason=kde`; `delegate_kde_decoration!`.
+      Teste-first: `/tmp/opencode/f1-kde/` — baseline (cliente de registry) `CHECK ... AUSENTE` →
+      `f1_kde_decoration.py` `VEREDITO: OK`; harnesses `--geometry-only` e explícito seguem OK; gate
+      `gate-final.log` EXIT=0, clippy bench 0, `--no-default-features` 0. **Aguardando juiz visual no tty3; cartão
+      NÃO fechado.**
 - [x] **F1-toplevel-icon — ícone real na titlebar FECHADO PELO JUIZ VISUAL (2026-11-22).**
       Cartão `docs/tasks/F1-toplevel-icon.md` (humano escolheu um cartão único com as duas etapas).
       **Guia (não receita):** `domicile-engine` — base64 próprio (`packages/domicile-host/src/base64.rs:1`),
@@ -1618,9 +1627,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- **F1-csd-gtk — PARADO PELA REGRA DAS DUAS TENTATIVAS (2026-11-22):** move/resize confirmados pelo humano no gedit;
-  falta remover nossa barra dos apps GNOME. Duas detecções tentadas e falhadas no cliente real (ver §3). Não vou
-  tentar uma terceira sem decisão. Sem o "ok" visual, o cartão NÃO fecha.
+- **F1-csd-gtk — AGUARDA JUIZ VISUAL (2026-11-22):** move/resize confirmados pelo humano no gedit; falta remover
+  nossa barra. Após a decisão do humano de medir, o protocolo KDE de decoração foi encontrado e implementado (§3).
+  Falta repetir `~/u` no tty3 e confirmar uma barra só. Sem o "ok", o cartão NÃO fecha.
   **Não medido:** temas/DPI alto e GPU real (VM sem 3D). **Bloqueio do pré-filtro visual:** o `gedit` não abre no
   nested (`(gedit): Gtk-ERROR: GTK 2/3 symbols detected. Using GTK 2/3 and GTK 4 in the same process is not
   supported`, log `/tmp/opencode/f1-csd/visual.log`); o julgamento tem de ser no tty3 com o binário novo. Já havia
@@ -1986,10 +1995,9 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
   Gate `gate-final4.log` EXIT=0, clippy bench 0, `--no-default-features` 0. Modo gedit (geometria tardia):
   `geom-final{5,6,7}.log`; baseline FALHA em `geom-baseline1.log`. Verificação rápida no tty3, após `~/u`:
   `grep -E "CSD_DETECT|csd_late|csd_applied" ~/aeroshell-udev-<mais-recente>.log`.
-- **Próximo passo: PARAR e pedir decisão (AGENTS.md §0.4, regra das duas tentativas).** Move/resize OK no gedit; a
-  barra HTML ainda aparece e as duas detecções tentadas não dispararam no cliente real. Opções a apresentar: medir
-  `app_id`/bind do decoration manager com sonda no IPC, ou heurística por `app_id` (`org.gnome.*`). Não avançar de fase
-  nem abrir spike do Nautilus/Tracker sem autorização. Instância nested sem gedit deixada aberta: socket
+- **Próximo passo:** humano reinicia `~/u` no tty3 e confirma que o gedit mostra só a barra do GTK; verificar no log
+  `grep -E "CSD_DETECT.*reason=kde" ~/aeroshell-udev-<mais-recente>.log`. Só depois fechar o cartão. Não avançar de
+  fase nem abrir spike do Nautilus/Tracker sem autorização. Instância nested sem gedit deixada aberta: socket
   `wayland-aero-csd-1795395710`, compositor PID 292134, log `/tmp/opencode/f1-csd/visual.log`.
 - **Sessão atual: F1-toplevel-icon (2026-11-22) — código/teste/gate verdes (§3); JUIZ VISUAL PENDENTE (§7).**
   Instância normal (sem bench) deixada aberta: compositor PID 266058, shell 266062, `foot` 266066, socket

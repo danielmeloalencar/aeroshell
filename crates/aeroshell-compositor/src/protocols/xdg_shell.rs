@@ -3,20 +3,28 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use smithay::{
-    delegate_xdg_shell,
+    delegate_kde_decoration, delegate_xdg_shell,
     desktop::{
         find_popup_root_surface, get_popup_toplevel_coords, PopupKind, PopupManager, Space, Window,
     },
-    reexports::wayland_server::{
-        protocol::{wl_seat, wl_surface::WlSurface},
-        Resource,
+    reexports::{
+        wayland_protocols_misc::server_decoration::server::org_kde_kwin_server_decoration::{
+            Mode as KdeMode, OrgKdeKwinServerDecoration,
+        },
+        wayland_server::{
+            protocol::{wl_seat, wl_surface::WlSurface},
+            Resource, WEnum,
+        },
     },
     utils::{Logical, Serial, Size},
     wayland::{
         compositor::with_states,
-        shell::xdg::{
-            PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState,
-            XdgToplevelSurfaceData,
+        shell::{
+            kde::decoration::{KdeDecorationHandler, KdeDecorationState},
+            xdg::{
+                PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState,
+                XdgToplevelSurfaceData,
+            },
         },
     },
 };
@@ -318,6 +326,45 @@ impl AeroState {
 }
 
 smithay::delegate_xdg_decoration!(AeroState);
+
+// GTK3/gedit pede decoração por org_kde_kwin_server_decoration, não pelo
+// zxdg_toplevel_decoration. Mesmo padrão do Domicile (decorations.rs:55-70):
+// respondemos ServerSide mas guardamos o pedido ClientSide para esconder
+// nossa barra HTML.
+impl KdeDecorationHandler for AeroState {
+    fn kde_decoration_state(&self) -> &KdeDecorationState {
+        &self.kde_decoration_state
+    }
+
+    fn new_decoration(&mut self, surface: &WlSurface, _decoration: &OrgKdeKwinServerDecoration) {
+        set_client_frame(surface, false);
+    }
+
+    fn request_mode(
+        &mut self,
+        surface: &WlSurface,
+        decoration: &OrgKdeKwinServerDecoration,
+        mode: WEnum<KdeMode>,
+    ) {
+        if let WEnum::Value(KdeMode::Client) = mode {
+            set_client_frame(surface, true);
+            #[cfg(feature = "bench")]
+            eprintln!(
+                "CSD_DETECT t={} window_id={} client_frame=true reason=kde",
+                crate::frame_diagnostics::now_ns(),
+                window_id_for(self, surface)
+                    .map(|id| id.to_string())
+                    .unwrap_or_else(|| "?".to_owned())
+            );
+        }
+        decoration.mode(KdeMode::Server);
+    }
+
+    fn release(&mut self, _decoration: &OrgKdeKwinServerDecoration, surface: &WlSurface) {
+        set_client_frame(surface, false);
+    }
+}
+delegate_kde_decoration!(AeroState);
 
 /// Envia o configure inicial no primeiro commit do cliente.
 pub fn handle_commit(popups: &mut PopupManager, space: &Space<Window>, surface: &WlSurface) {

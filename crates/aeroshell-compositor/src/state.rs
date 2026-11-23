@@ -27,6 +27,7 @@ use smithay::{
             xdg::{decoration::XdgDecorationState, XdgShellState},
         },
         shm::ShmState,
+        shell::kde::decoration::KdeDecorationState,
         socket::ListeningSocketSource,
         text_input::TextInputManagerState,
         viewporter::ViewporterState,
@@ -34,6 +35,7 @@ use smithay::{
         xdg_toplevel_icon::XdgToplevelIconManager,
     },
 };
+use smithay::reexports::wayland_protocols_misc::server_decoration::server::org_kde_kwin_server_decoration_manager::Mode as DefaultMode;
 
 use crate::{cli::Options, render::cursor::CursorImage, CalloopData};
 
@@ -197,6 +199,8 @@ pub struct AeroState {
     pub compositor_state: CompositorState,
     pub xdg_shell_state: XdgShellState,
     pub xdg_decoration_state: XdgDecorationState,
+    /// F1-csd-gtk: global `org_kde_kwin_server_decoration_manager`, usado por GTK3/gedit.
+    pub kde_decoration_state: KdeDecorationState,
     pub layer_shell_state: WlrLayerShellState,
     pub shm_state: ShmState,
     pub output_manager_state: OutputManagerState,
@@ -317,6 +321,9 @@ impl AeroState {
         let compositor_state = CompositorState::new::<Self>(&dh);
         let xdg_shell_state = XdgShellState::new::<Self>(&dh);
         let xdg_decoration_state = XdgDecorationState::new::<Self>(&dh);
+        // Mesma política do Domicile: respondemos ServerSide, mas registramos
+        // quando o cliente (GTK3) pede ClientSide para omitir nossa barra HTML.
+        let kde_decoration_state = KdeDecorationState::new::<Self>(&dh, DefaultMode::Server);
         let layer_shell_state = WlrLayerShellState::new::<Self>(&dh);
         let _aero_frame_global = dh.create_global::<
             Self,
@@ -420,6 +427,7 @@ impl AeroState {
             compositor_state,
             xdg_shell_state,
             xdg_decoration_state,
+            kde_decoration_state,
             layer_shell_state,
             shm_state,
             output_manager_state,
