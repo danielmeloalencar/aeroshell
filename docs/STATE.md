@@ -4,14 +4,14 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-23 · **Fase atual: F1** · **F1-presentation-time FECHADO (juiz visual N/A); GATE FINAL de apps pendente** · **F1-xdg-toplevel-states FECHADO PELO JUIZ VISUAL ("aprovado")** · **F1-subsurfaces FECHADO PELO JUIZ VISUAL (2026-11-23: "Funcionou tudo")** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · **F1i+ FECHADA PELO JUIZ VISUAL (digitação normal; só aviso de toplevel-icon, fora de escopo)** · **título real na titlebar FECHADO PELO JUIZ VISUAL ("ok")** · **F1-toplevel-icon FECHADO PELO JUIZ VISUAL ("vi o icone perfeitamente")** · **F1-csd-gtk-move-resize FECHADO PELO JUIZ VISUAL ("ok": gedit, gnome-disks e Calculadora OK)** · **F1-csd-sem-flash FECHADO PELO JUIZ VISUAL ("aprovado")** · cursor invisível no udev segue em cartão separado · 02q REABERTA E FECHADA PELO JUIZ em 2026-11-22 (sem adiamento, spike 12×36 eliminado; harness de 300 ms segue como limitação de VM registrada) · **02r FECHADA PELO JUIZ (nested + tty3) e 02s FECHADA PELO JUIZ (duas instâncias no mesmo D-Bus, "ok aprovado")**
+Última atualização: 2026-11-23 · **F1 FECHADA — base de compositor completa para F2 (protocolos provados; snap é cartão NOSSO de sessão/compat `F7-compat-snap`, Nautilus/Mutter e Ozone seguem como estavam)** · **F1-presentation-time FECHADO (juiz visual N/A)** · **F1-xdg-toplevel-states FECHADO PELO JUIZ VISUAL ("aprovado")** · **F1-subsurfaces FECHADO PELO JUIZ VISUAL (2026-11-23: "Funcionou tudo")** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · **F1i+ FECHADA PELO JUIZ VISUAL (digitação normal; só aviso de toplevel-icon, fora de escopo)** · **título real na titlebar FECHADO PELO JUIZ VISUAL ("ok")** · **F1-toplevel-icon FECHADO PELO JUIZ VISUAL ("vi o icone perfeitamente")** · **F1-csd-gtk-move-resize FECHADO PELO JUIZ VISUAL ("ok": gedit, gnome-disks e Calculadora OK)** · **F1-csd-sem-flash FECHADO PELO JUIZ VISUAL ("aprovado")** · cursor invisível no udev segue em cartão separado · 02q REABERTA E FECHADA PELO JUIZ em 2026-11-22 (sem adiamento, spike 12×36 eliminado; harness de 300 ms segue como limitação de VM registrada) · **02r FECHADA PELO JUIZ (nested + tty3) e 02s FECHADA PELO JUIZ (duas instâncias no mesmo D-Bus, "ok aprovado")**
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
 lock, login) é TSX renderizado por WebKitGTK; runtime de política em Bun. Dev em nested (winit).
  
 ## 2. Objetivo atual (F1 autorizada)
-**Fase atual: F1** (núcleo do compositor). F0/fatia vertical FECHADA pelo humano em 2026-11-21: `foot` com
+**Fase atual: F1 FECHADA (F2 ainda não aberta)** — núcleo do compositor completo; ver §3/§9. F0/fatia vertical FECHADA pelo humano em 2026-11-21: `foot` com
 decoração HTML funcional e painel React/TSX; fechamento formal em `docs/f0-relatorio-go-no-go.md` (quadro
 S1–S5, ratificação registrada dos ADRs, S4→F2/F9 e S5→F5/F6 deferidos com justificativa).
 F1 em andamento por cartões pequenos: F1a, F1b e F1c FECHADAS (juiz visual OK nas três; F1c em 2026-11-21);
@@ -44,6 +44,17 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
       `frame_window_id` falharam 2×, mas **A/B no HEAD sem minhas mudanças falha idêntico** → pré-existentes (§6).
       Sem flicker/perf novo medido em nested (VM sem 3D); juiz visual não se aplica a feedback offscreen.
       **Próximo: GATE FINAL de apps reais da F1 (§5), ainda com ok do humano antes de F1 FECHADA.**
+- [x] **F1 FECHADA (2026-11-23) — base de compositor completa para F2; protocolos provados, ressalvas registradas.**
+      Humano determinou o fechamento com a instrução *"F1 fecha com protocolos provados"* após o GATE FINAL de apps
+      reais. Gate no nested: foot, qterminal, gedit e Kate mapeados no IPC com **0 erros de protocolo**
+      (`/tmp/opencode/f1-final-gate/compositor.log`); instância deixada aberta para o humano (quem fecha é ele).
+      **Ressalvas NÃO são falhas de protocolo:** (1) apps snap (Firefox) não conectam ao socket custom do nested —
+      reclassificado pelo humano como **lacuna NOSSA de integração/sessão**, com cartão
+      `docs/tasks/F7-compat-snap.md` criado (snapd só provisiona no namespace do snap o socket da SESSÃO com nome/
+      caminho padrão; no GNOME funciona, no nosso nested não); (2) Nautilus 50 depende de
+      `org.gnome.Mutter.ServiceChannel` (gap real de compatibilidade GNOME Shell, investigado em 3 tentativas, §6);
+      (3) Ozone do VSCode (`--ozone-platform=x11` injetado) segue como DX separada (§6). Nenhuma dessas reabre os
+      cartões F1. **F2 ainda não aberta** — depende de decisão explícita do humano.
 - [x] **F1-xdg-toplevel-states (2026-11-23) — FECHADO PELO JUIZ VISUAL: humano respondeu *"aprovado"*.**
       Juiz operou a instância nested deixada aberta (compositor PID 24370, socket `wayland-aero-xdgstates-visual`,
       gedit PID 24379) e aprovou fullscreen sem barra dupla, maximize pela área útil e diálogo modal; agente não
@@ -1335,16 +1346,12 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
+- **F1 FECHADA (§3).** GATE FINAL no nested: foot/qterminal/gedit/Kate com 0 erros de protocolo; humano determinou
+  o fechamento com os protocolos provados. Instância deixada aberta para o humano (PID 44480, apps
+  44496/44523/44599/44833) — quem fecha é ele. Snap virou **cartão NOSSO** `F7-compat-snap.md` (§5), não ressalva DX;
+  Nautilus/Mutter e Ozone seguem como estavam (§6). **Não abrir F2 sem decisão explícita.**
 - **F1-presentation-time FECHADO (§3): global/feedback/gates verdes; juiz visual não se aplica.**
-  **GATE FINAL de apps reais executado no nested (2026-11-23): PARCIAL — 4/6 mapearam.** IPC list mostrou foot,
-  qterminal, gedit e Kate (0 erros de protocolo); **Firefox (snap) não conecta ao socket** (confinamento: procura
-  `/run/user/1000/snap.firefox/wayland-aero-f1-final`, `Permission denied` — DX, igual VSCode) e **Nautilus 50
-  NÃO abre: GAP REAL de compatibilidade com GNOME Shell, investigado em 3 tentativas** (§6). VSCode não foi tentado
-  (snap já requalificado como DX). **F1 NÃO foi fechada**: aguardando decisão do humano sobre o Nautilus e o "ok"
-  visual dos 4 apps antes do commit `docs(state): F1 FECHADA`. Não abrir F2. Instância deixada aberta:
-  compositor PID 44480, socket `wayland-aero-f1-final`, apps 44496/44523/44599/44833.
 - **F1-xdg-toplevel-states FECHADO (§3): humano aprovou o juiz visual ("aprovado") no nested com gedit.**
-  **PARAR — não abrir presentation-time sem "ok" do humano.** Nenhum processo foi encerrado pelo agente.
 - **F1-clipboard-two-clients FECHADO (§3): A→B em headless + winit, 3× OK, gates verdes.**
   Sem mudança de produto; o fluxo já funcionava por default e a lacuna era de evidência/instrumento (§6).
   **PARAR — não abrir `F1-xdg-toplevel-states.md` sem "ok" explícito.** Nenhuma instância deixada aberta.
@@ -1414,10 +1421,10 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
    presentation-time. Um cartão por sessão; PARAR antes do próximo cartão e antes da F2.** F1-dmabuf FECHADO com
    ressalvas (VSCode requalificado como compatibilidade de ambiente/DX, não bloqueante); F1-clipboard-two-clients
    FECHADO (A→B em headless+winit, 3× OK, sem mudança de produto); F1-xdg-toplevel-states FECHADO PELO JUIZ
-   ("aprovado"); F1-presentation-time executado nesta sessão (§3): 3× OK headless+winit, gates verdes, sonda fora
-   do binário normal, juiz visual NÃO se aplica. **Todos os cartões da sequência concluídos.**
-   **Próximo passo: GATE FINAL de apps reais da F1 (foot, gedit, qterminal, kate, Firefox, nautilus; VSCode só se
-   o ambiente permitir); com gate verde + "ok" do humano, commitar `docs(state): F1 FECHADA`. SÓ então F2.**
+   ("aprovado"); F1-presentation-time FECHADO (3× OK headless+winit, gates verdes, sonda fora do binário normal,
+   juiz visual N/A). **GATE FINAL executado e F1 FECHADA (§3).**
+   **Próximo cartão do humano: `docs/tasks/F7-compat-snap.md` (rascunho criado, aguarda "ok") — integração/sessão
+   snap, NÃO protocolo e não ambiente descartável. F2 permanece sem abertura autorizada até decisão explícita.**
    **cursor-shape e primary-selection JÁ FECHADOS — removidos da fila pelo humano**; F1f FECHADO; xdg_activation
    sanada na F1i+. Decoração: manter ServerSide+CSD e expor estado via IPC para a política Bun na F2, sem mudar
    arquitetura. STATE.md >150 linhas: cartão de docs próprio depois.
@@ -1465,10 +1472,15 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   depende da integração GNOME Shell (Mutter ServiceChannel), não apenas de Wayland. Fora do escopo F1 (exige
   novo serviço D-Bus/compat, cartão próprio). **F1 não pode ser fechada sem decisão do humano sobre este item.**
   Os 3 runners de diagnóstico (PIDs 45820/46101/46356) foram encerrados pelo agente; os apps do juiz não foram.
-- **GATE FINAL (2026-11-23): Firefox-snap e VSCode-snap são exceções DX, não F1.** Firefox falha antes do Wayland:
-  `Failed to connect to Wayland display '/run/user/1000/snap.firefox/wayland-aero-f1-final': Permission denied`
-  (confinamento snap); VSCode injeta `--ozone-platform=x11` e morre sem `$DISPLAY`. Firefox não-snap/schema gsettings
-  é item de ambiente, não do núcleo F1. Registrar como ressalvas DX no commit de fechamento, se autorizado.
+- **GATE FINAL (2026-11-23): snap RECLASSIFICADO pelo humano — lacuna NOSSA de integração/sessão, NÃO ambiente
+  descartável e NÃO protocolo.** Firefox falha antes do Wayland:
+  `Failed to connect to Wayland display '/run/user/1000/snap.firefox/wayland-aero-f1-final': Permission denied`.
+  Causa levantada: o snapd só provisiona no namespace do snap o socket da **SESSÃO** (nome/caminho padrão). No GNOME
+  a sessão é Wayland e isso funciona; o nested do AeroShell não é sessão e usa socket custom, então o snapd não
+  cria o arquivo → `Permission denied`. Cartão `docs/tasks/F7-compat-snap.md` criado (testar Firefox no tty3 como
+  sessão, `snap connections firefox | grep wayland`, socket padrão `wayland-0` ou slot Wayland no snapd com
+  aprovação, decidir com dado). O `--ozone-platform=x11` injetado no `/snap/bin/code` é **Ozone/DX separado** e
+  segue como estava; não confundir com provisioning de socket. Nenhuma dessas coisas reabre protocolos F1.
 - **F1-presentation-time (2026-11-23): 2 correções de instrumento + A/B dos vizinhos.** O cliente precisou de um
   SEGUNDO roundtrip para receber o `clock_id` enviado no bind (o primeiro só entrega os globals); a sonda
   `PRESENT_FEEDBACK t=` fogia para o binário normal sempre que `cargo build --workspace --examples` rodava depois
@@ -2022,12 +2034,12 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- **GATE FINAL F1 (2026-11-23): PARCIAL; juiz visual do humano PENDENTE.** Nested aberto (compositor PID 44480,
-  socket `wayland-aero-f1-final`, log `/tmp/opencode/f1-final-gate/compositor.log`) com foot (44496), gedit (44523),
-  qterminal (44599) e Kate (44833) mapeados no IPC e 0 erros de protocolo. Firefox-snap/VSCode-snap = exceções DX;
-  **Nautilus 50 = gap real de compatibilidade GNOME Shell (§6), em aberto**. Human deve olhar decoração/menus/
-  clipboard cruzado nos 4 apps abertos e decidir sobre o Nautilus. **Sem isso não há commit `F1 FECHADA`.**
-  O compositor udev preexistente PID 29976 (tty3 do humano) NÃO foi tocado pelo agente.
+- **GATE FINAL F1 (2026-11-23): humano determinou o fechamento com os protocolos provados.** Nested aberto (PID
+  44480, socket `wayland-aero-f1-final`, log `/tmp/opencode/f1-final-gate/compositor.log`) com foot (44496), gedit
+  (44523), qterminal (44599) e Kate (44833) mapeados no IPC e 0 erros de protocolo. Snap é cartão NOSSO
+  `F7-compat-snap` (§6/§5); Nautilus 50 = gap GNOME Shell (§6); Ozone do VSCode = DX separada. O agente não encerrou
+  a instância (quem fecha é o humano). Compositor udev preexistente PID 29976 (tty3) NÃO foi tocado.
+  Ainda não medido: DRM/tty3 e GPU real (VM sem 3D).
 - **F1-presentation-time (2026-11-23): juiz visual NÃO se aplica (decisão do humano) — feedback é offscreen.**
   DRM/udev compilado com `presented()` no vblank de `frame_submitted()`, mas **não executado** (sem VT nesta VM).
   Desempenho/flicker em GPU real não medido; só funcionamento no nested/headless (VM sem 3D).
@@ -2450,13 +2462,14 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **SESSÃO ATUAL (2026-11-23): F1-presentation-time FECHADA (785764b); GATE FINAL parcial, F1 NÃO fechada.**
-  Cartões F1-final concluídos. Gate final no nested: `python3 -` lendo IPC de `/tmp/opencode/f1-final-gate/ipc.sock`
-  → 4 janelas (foot, qterminal, gedit, Kate), 0 `ProtocolError`; Firefox/VSCode-snap = DX; **Nautilus 50 = gap real
-  de compatibilidade GNOME Shell (Mutter ServiceChannel), investigado em 3 tentativas — §6**. Reproduzir: §7,
-  instância PID 44480 deixada aberta; diagnósticos do Nautilus encerrados, apps do juiz intocados.
-  **Próximo: humano dá o "ok" visual nos 4 apps e decide como tratar o Nautilus (ressalva/cartão próprio); só então
-  commit `docs(state): F1 FECHADA` e F2. Não encerrar processos (quem fecha é o humano).** Sem push.
+- **SESSÃO ATUAL (2026-11-23): F1 FECHADA — commit `docs(state): F1 FECHADA` + cartão `F7-compat-snap` criado.**
+  Humano determinou o fechamento com *"F1 fecha com protocolos provados"* e reclassificou o snap: **não é ambiente
+  descartável**; é lacuna nossa de integração/sessão (snapd provisiona só o socket padrão da SESSÃO no namespace do
+  snap; GNOME funciona, nosso nested custom não). Cartão `docs/tasks/F7-compat-snap.md` (4 passos: tty3 como sessão,
+  `snap connections firefox | grep wayland`, socket `wayland-0` ou slot no snapd, decidir com dado). Ozone do VSCode
+  continua DX separada; Nautilus/Mutter segue como estava (§6). Gate final: 4 apps no IPC, 0 `ProtocolError`;
+  instância PID 44480 deixada aberta, diagnosticados encerrados.
+  **Próximo: só com "ok" executar F7-compat-snap; F2 permanece fechada até decisão explícita.** Sem push.
 - **SESSÃO ANTERIOR (2026-11-23): F1-presentation-time — código/teste/gates verdes; juiz visual N/A.**
   `protocols/presentation.rs` (global v2 + CLOCK_MONOTONIC + seq por output), ligado nos 3 backends; headless usa
   tick do timer sem alegar Vsync, winit responde após submit/swap, udev no vblank de `frame_submitted`.
