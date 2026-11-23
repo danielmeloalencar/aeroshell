@@ -1570,7 +1570,11 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   mediu `icon_applied` com data URI e `titlebar_icon ... source=nome name=foot`; a sentença final foi do humano.
   **Sintomas de §6 NÃO reproduzidos no reteste limpo:** humano confirmou ícone, mover, resize, maximizar e fechar
   funcionando perfeitamente na instância aberta. O relato anterior permanece registrado, mas sem cartão novo.
-  **Não medido:** tema/DPI alto e GPU real (VM sem 3D).
+  **Não medido:** tema/DPI alto e GPU real (VM sem 3D). **Cobertura:** o mecanismo é genérico (global para qualquer
+  cliente; `icon <id>` por window_id; `refresh_titles()` itera todas as entries), mas a validação com app real cobriu
+  **somente o `foot`** (caminho de nome); o caminho de pixels foi provado com cliente sintético 16×16, não com outro
+  app real (ex.: `gedit`). Limitações atuais: só formatos shm de 32 bpp, um buffer escalado para 16 px, sem DPI
+  alto/ícones animados.
 - **Título real na titlebar — JUIZ VISUAL OBTIDO (2026-11-22): humano respondeu "ok"** ao ver o título real na barra
   do `foot` na nested. O harness mediu o valor lido de volta do DOM via `postMessage` (`title_applied`); a sentença
   final foi do humano. **Não medido:** latência do polling em GPU real (VM sem 3D); títulos com UTF-8/emoji na tela.
