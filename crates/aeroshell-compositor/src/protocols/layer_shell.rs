@@ -61,15 +61,23 @@ impl WlrLayerShellHandler for AeroState {
             .find(|(s, _, _, _)| s == layer.wl_surface())
             .map(|(_, _, window_id, _)| *window_id);
         if let Some(window_id) = frame_window {
-            // Geometria 100% do compositor: conteúdo REAL da janela cliente. Se o
-            // cliente ainda não mapeou (inicial adiado), adia o configure para o
-            // commit do cliente — evita um frame no tamanho cheio do output.
+            // Geometria 100% do compositor. O configure do CANVAS é enviado
+            // imediatamente (F1-final-1c): sem ele o GTK nunca anexa wl_buffer.
+            // O conteúdo REAL do cliente, quando existir, reconfigura via commit.
+            // A visibilidade continua protegida por frame_has_mapped_client e
+            // pelo alvo 9-slice `conteúdo + insets` (ADR 0007).
             self.frame_layer_surfaces.push(layer);
             if let Some(content) = self.client_content_size(window_id) {
                 self.send_frame_configure(window_id, content, "layer");
                 tracing::info!(
                     window_id,
                     "frame layer_surface: duplo configure, FORA do LayerMap"
+                );
+            } else {
+                self.configure_frame_layer_canvas(window_id);
+                tracing::info!(
+                    window_id,
+                    "frame layer_surface: configure inicial do canvas (sem conteúdo do cliente)"
                 );
             }
             return;

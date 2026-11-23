@@ -151,6 +151,56 @@ impl AeroState {
         }
     }
 
+    /// Envia o configure inicial do CANVAS na frame layer-surface mesmo quando
+    /// o cliente ainda não tem `client_content_size` (F1-final-1c). Sem ele o
+    /// GTK nunca faz `ack_configure`/`wl_surface.attach` e o frame nunca pinta.
+    /// Não altera visibilidade: o frame entra na cena apenas quando
+    /// `frame_has_mapped_client` é true, e o alvo 9-slice continua sendo
+    /// `conteúdo + insets` (ADR 0007) — nunca o canvas cheio na origem.
+    pub fn configure_frame_layer_canvas(&self, window_id: u32) {
+        let Some((frame_surface, _, _, _)) = self
+            .associated_frames
+            .iter()
+            .find(|(_, _, id, _)| *id == window_id)
+        else {
+            return;
+        };
+        let canvas_size = self
+            .frame_canvases
+            .get(frame_surface)
+            .map(|canvas| canvas.configured_size())
+            .unwrap_or_else(|| {
+                let geo = self
+                    .frame_geometries
+                    .get(frame_surface)
+                    .copied()
+                    .unwrap_or_default();
+                self.outputs
+                    .first()
+                    .and_then(|output| output.current_mode())
+                    .map(|mode| (mode.size.w + geo.extra_w(), mode.size.h + geo.extra_h()))
+                    .unwrap_or_default()
+            });
+        if let Some(layer) = self
+            .frame_layer_surfaces
+            .iter()
+            .find(|l| l.wl_surface() == frame_surface)
+        {
+            layer
+                .layer_surface()
+                .with_pending_state(|state| state.size = Some(canvas_size.into()));
+            let _ = layer.layer_surface().send_configure();
+            #[cfg(feature = "bench")]
+            {
+                let t = crate::frame_diagnostics::now_ns();
+                eprintln!(
+                    "FRAME_LAYER_INITIAL_CONFIGURE t={t} window_id={window_id} canvas={}x{}",
+                    canvas_size.0, canvas_size.1
+                );
+            }
+        }
+    }
+
     /// O associate pode enviar o primeiro configure antes de `set_insets`.
     /// Reconcilia APENAS um canvas que ainda tem o tamanho inicial antigo;
     /// crescimentos posteriores nunca são sobrescritos.
