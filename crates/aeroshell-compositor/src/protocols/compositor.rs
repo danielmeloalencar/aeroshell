@@ -18,7 +18,11 @@ use smithay::{
 };
 
 #[cfg(feature = "bench")]
-use smithay::wayland::compositor::{with_states, BufferAssignment, SurfaceAttributes};
+use smithay::reexports::wayland_server::Resource;
+#[cfg(feature = "bench")]
+use smithay::wayland::compositor::{
+    with_states, BufferAssignment, SubsurfaceCachedState, SurfaceAttributes,
+};
 
 use crate::{protocols::xdg_shell, state::AeroState};
 
@@ -35,6 +39,41 @@ impl CompositorHandler for AeroState {
     }
 
     fn commit(&mut self, surface: &WlSurface) {
+        // F1-subsurfaces: observar o commit de cada membro da árvore de superfícies.
+        // Só sob `bench`: nenhum comportamento muda, é leitura dos estados cached.
+        #[cfg(feature = "bench")]
+        if let Some(parent) = get_parent(surface) {
+            let sync = is_sync_subsurface(surface);
+            let (loc, buffer) = with_states(surface, |states| {
+                let loc = states
+                    .cached_state
+                    .get::<SubsurfaceCachedState>()
+                    .current()
+                    .location;
+                let buffer = match &states
+                    .cached_state
+                    .get::<SurfaceAttributes>()
+                    .current()
+                    .buffer
+                {
+                    Some(BufferAssignment::NewBuffer(buffer)) => buffer_dimensions(buffer)
+                        .map(|size| format!("{}x{}", size.w, size.h))
+                        .unwrap_or_else(|| "?".to_owned()),
+                    Some(BufferAssignment::Removed) => "removed".to_owned(),
+                    None => "none".to_owned(),
+                };
+                (loc, buffer)
+            });
+            eprintln!(
+                "SUBSURFACE_COMMIT t={} child={:?} parent={:?} sync={} loc=({},{}) buffer={buffer}",
+                crate::frame_diagnostics::now_ns(),
+                surface.id(),
+                parent.id(),
+                sync,
+                loc.x,
+                loc.y,
+            );
+        }
         // F1d3: cada commit do cliente (foot) e quantos frame-callbacks estavam
         // pendentes NELE. Leitura sem drenar: a sonda não altera o protocolo.
         #[cfg(feature = "bench")]

@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-22 · **Fase atual: F1** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · **F1i+ FECHADA PELO JUIZ VISUAL (digitação normal; só aviso de toplevel-icon, fora de escopo)** · **título real na titlebar FECHADO PELO JUIZ VISUAL ("ok")** · **F1-toplevel-icon FECHADO PELO JUIZ VISUAL ("vi o icone perfeitamente")** · **F1-csd-gtk-move-resize FECHADO PELO JUIZ VISUAL ("ok": gedit, gnome-disks e Calculadora OK)** · **F1-csd-sem-flash FECHADO PELO JUIZ VISUAL ("aprovado")** · cursor invisível no udev segue em cartão separado · 02q REABERTA E FECHADA PELO JUIZ em 2026-11-22 (sem adiamento, spike 12×36 eliminado; harness de 300 ms segue como limitação de VM registrada) · **02r FECHADA PELO JUIZ (nested + tty3) e 02s FECHADA PELO JUIZ (duas instâncias no mesmo D-Bus, "ok aprovado")**
+Última atualização: 2026-11-23 · **Fase atual: F1** · **F1-subsurfaces (cartão 1 da sequência F1-final): código/teste/gate verdes, JUIZ VISUAL PENDENTE** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · **F1i+ FECHADA PELO JUIZ VISUAL (digitação normal; só aviso de toplevel-icon, fora de escopo)** · **título real na titlebar FECHADO PELO JUIZ VISUAL ("ok")** · **F1-toplevel-icon FECHADO PELO JUIZ VISUAL ("vi o icone perfeitamente")** · **F1-csd-gtk-move-resize FECHADO PELO JUIZ VISUAL ("ok": gedit, gnome-disks e Calculadora OK)** · **F1-csd-sem-flash FECHADO PELO JUIZ VISUAL ("aprovado")** · cursor invisível no udev segue em cartão separado · 02q REABERTA E FECHADA PELO JUIZ em 2026-11-22 (sem adiamento, spike 12×36 eliminado; harness de 300 ms segue como limitação de VM registrada) · **02r FECHADA PELO JUIZ (nested + tty3) e 02s FECHADA PELO JUIZ (duas instâncias no mesmo D-Bus, "ok aprovado")**
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -21,6 +21,33 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [~] **F1-subsurfaces (2026-11-23) — código/teste/gate verdes; JUIZ VISUAL PENDENTE (§7).**
+      Cartão `docs/tasks/F1-subsurfaces.md` (APROVADO), escrito junto com os rascunhos `F1-clipboard-two-clients.md`,
+      `F1-xdg-toplevel-states.md`, `F1-dmabuf.md` e `F1-presentation-time.md` (ordem 1→5 aprovada pelo humano).
+      **Honestidade:** não havia bug de produto — a gap analysis já marcava subsurfaces como ✅ com ressalva ("sem teste
+      dedicado de cliente"). O cartão entregou **evidência + instrumentação**, não correção de geometria/render.
+      Código: sonda `SUBSURFACE_COMMIT t=… child=… parent=… sync=<bool> loc=(x,y) buffer=…` em
+      `protocols/compositor.rs`, **só sob `bench`** (`strings` do binário normal → **0** ocorrências).
+      Cliente real `examples/subsurface_client.rs`: toplevel + `wl_subcompositor.get_subsurface` synced (20,20) e
+      desynced (220,20), cada um com buffer shm 140×90, pai azul 400×300; conta `enter`/`button` por superfície.
+      Harness `tests/integration/f1_subsurfaces.py` (headless + `AERO_TEST_INPUT_SOCK` + `AERO_PIXEL_DUMP_DIR`/
+      `AERO_PIXEL_FULL`), escrito ANTES: baseline `VEREDITO: FALHA` (sem sonda, sem pixels dos filhos, só o pai azul).
+      **Causa das amostras zeradas no baseline era do INSTRUMENTO**: o dump full é sobrescrito a cada frame e o cliente
+      já tinha saído; corrigido amostrando 30× durante o loop e mantendo a janela viva 9 s — todas as amostras
+      (inclusive as transitórias com 0 pixels) são impressas, nenhuma descartada.
+      **Prova:** 3× `VEREDITO: OK` (`pix_sync=12600 pix_desync=12600 pix_pai=94800`), hit-test por `surface_under
+      (...ALL)` entregando `button` aos DOIS filhos (22 cada) e 0 no pai, sonda com `sync=true` e `sync=false`,
+      0 erros de protocolo. `CLIENT_ELEMENT_PROBE … after=3 delta=3` no log cru prova que a cena renderiza as 3
+      superfícies (pai + 2 filhos). Gate `check.sh` EXIT=0 (`gate-final2.log`), clippy bench `-D warnings` 0,
+      `--no-default-features` 0. Vizinhos `headless_render_damage`, `frame_buttons`, `frame_window_id` (com pipefail),
+      `frame_resize_glue`, `frame_fixed_canvas_hygiene` → OK.
+      Amostras falhas preservadas: `clippy-bench.log` (doc-comment do cliente), `gate.log` (fmt do cliente),
+      `gate-final.log` (`Resource` importado sem `bench`) — corrigidas sem `allow`/`unwrap`.
+      **Decisões do humano registradas nesta sessão:** F1f DRM FECHADO (juiz aprovou 1.5/2); cursor-shape,
+      primary-selection e xdg_activation = dívida F1 sanada (sem código novo); decoração mantém ServerSide + CSD
+      detection, só expor mais estado (app_id/título/modo) via IPC para política Bun na F2; clipboard com clientes
+      sintéticos A→B aprovado (`wl-copy` = limitação de instrumento); STATE.md >150 linhas = dívida de docs, cartão
+      próprio depois. Nenhum app de julgamento foi encerrado pelo agente.
 - [x] **F1-csd-sem-flash — FECHADO PELO JUIZ VISUAL (2026-11-22).**
       Cartão `docs/tasks/F1-csd-sem-flash.md` (melhoria pedida ao fechar CSD/GTK). O atraso medido no tty3 pelo humano
       era ~0,5 s. A lógica de CSD estava dentro do `refresh_titles()` de 1 s. Extraída para `refresh_csd()` num timer de
@@ -1092,6 +1119,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
+- **F1-subsurfaces (cartão 1 da sequência F1-final, 2026-11-23): código/teste-first/3× harness/gates verdes (§3).
+  Falta juiz visual com app Qt real (qterminal) aberto — NÃO abrir o cartão 2 sem o "ok".**
+- **F1f DRM: FECHADO pelo humano nesta sessão (decisão registrada) — não reabrir.**
 - **F1-csd-gtk-move-resize (2026-11-22): código, teste-first, 4× harness verde, regressões e gate prontos (§3). Falta
   juiz visual com `gedit` real (uma barra só; mover/resize pelo headerbar). Não abrir próximo cartão sem ok.**
 - **F1-toplevel-icon FECHADO PELO JUIZ (2026-11-22) — ver §3.** Humano viu o ícone perfeitamente. Os demais sintomas
@@ -1149,7 +1179,13 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-0. **NENHUMA AUTORIZADA — PARAR.** F1-csd-sem-flash, F1-csd-gtk-move-resize, F1-toplevel-icon, título real e F1i+
+0. **SEQUÊNCIA F1-FINAL AUTORIZADA (2026-11-22/23): ordem 1→5 aprovada, um cartão por sessão, PARAR para ok visual
+   antes da F2.** Cartões escritos: `F1-subsurfaces` (EM EXECUÇÃO, §4), `F1-clipboard-two-clients`,
+   `F1-xdg-toplevel-states`, `F1-dmabuf`, `F1-presentation-time` (rascunhos aguardando ok). cursor-shape,
+   primary-selection e xdg_activation = dívida F1 sanada; F1f FECHADO. Decoração: manter ServerSide+CSD e expor estado
+   via IPC para a política Bun na F2, sem mudar arquitetura. STATE.md >150 linhas: cartão de docs próprio depois.
+   **Próximo passo imediato: juiz visual do cartão 1; só depois abrir o cartão 2.**
+1. **NENHUMA AUTORIZADA — PARAR.** F1-csd-sem-flash, F1-csd-gtk-move-resize, F1-toplevel-icon, título real e F1i+
    FECHADOS PELO JUIZ (§3/§7). O próximo cartão só com decisão explícita; não avançar de fase nem abrir spike D-Bus.
    02s FECHADA pelo juiz (§3), 02r FECHADA pelo juiz (§3),
    F1d3 FECHADA pelo juiz (§3).
@@ -1667,6 +1703,11 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- **F1-subsurfaces — JUIZ VISUAL PENDENTE (2026-11-23).** Pré-filtro: cliente sintético com filho synced/desynced,
+  pixels e hit-test provados 3× no headless; qterminal (Qt) mapeou toplevel no nested (`smoke2.log`, ~20 s por causa
+  dos portais), mas **nenhum humano olhou menu/tooltip/subsurface na tela**. O agente deixará a instância aberta e
+  pedirá o "ok"; sem ele o cartão NÃO fecha (AGENTS.md §0.9). **Não medido:** GPU real (VM sem 3D), apps GTK3 no
+  nested (conflito GTK 2/3/4 já registrado) e dismissal por clique fora.
 - **F1-csd-sem-flash — JUIZ VISUAL OBTIDO (2026-11-22): humano respondeu "aprovado".** Pré-filtro mediu 7–104 ms entre
   detecção e DOM escondido; a sentença final foi do humano na Calculadora. **Não medido:** GPU real (VM sem 3D) e
   janelas com WebView frio (o harness mede o caminho tardio com pool já quente).
@@ -2032,7 +2073,13 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **Sessão atual: F1-csd-sem-flash FECHADO PELO JUIZ VISUAL (2026-11-22, "aprovado").**
+- **SESSÃO ATUAL (2026-11-23): F1-subsurfaces — código/teste-first/3× harness/gates verdes (§3); falta o "ok" visual.**
+  Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-compositor --example subsurface_client && cargo build -p aeroshell-shell --example frame_webview && python3 tests/integration/f1_subsurfaces.py`
+  → 3× `VEREDITO: OK`, `pix_sync=12600 pix_desync=12600 pix_pai=94800`; baseline FALHA. Gate `gate-final2.log` EXIT=0,
+  clippy bench 0, `--no-default-features` 0; strings sem bench = 0.
+  **Próximo passo imediato:** o humano abrir/olhar a instância nested com qterminal (menu/tooltip acima da janela e
+  clique no filho), dar o "ok" e fechar; SÓ ENTÃO abrir o cartão 2 (`F1-clipboard-two-clients.md`). Não avançar de F2.
+- **Sessão anterior: F1-csd-sem-flash FECHADO PELO JUIZ VISUAL (2026-11-22, "aprovado").**
   Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-compositor --example csd_client && cargo build -p aeroshell-shell --example frame_webview && python3 tests/integration/f1_csd_gtk.py --geometry-only`
   → `VEREDITO: OK`, `hide_ms` ≤ 200 (`/tmp/opencode/f1-flash/final-run{1,2,3}.log`); baseline FALHA.
 - **Instância aberta para o juiz:** compositor PID 345258, shell 345263, `gnome-calculator` 345267, socket
