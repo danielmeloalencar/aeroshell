@@ -1338,10 +1338,10 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
 - **F1-presentation-time FECHADO (§3): global/feedback/gates verdes; juiz visual não se aplica.**
   **GATE FINAL de apps reais executado no nested (2026-11-23): PARCIAL — 4/6 mapearam.** IPC list mostrou foot,
   qterminal, gedit e Kate (0 erros de protocolo); **Firefox (snap) não conecta ao socket** (confinamento: procura
-  `/run/user/1000/snap.firefox/wayland-aero-f1-final`, `Permission denied`) e **Nautilus abre e sai** após
-  `Connecting to org.freedesktop.Tracker3.Miner.Files` sem criar janela (ambiente/D-Bus). VSCode não foi tentado
-  (snap já requalificado como ambiente/DX). **F1 NÃO foi fechada**: aguardando decisão do humano sobre essas
-  duas falhas de ambiente antes do commit `docs(state): F1 FECHADA`. Não abrir F2. Instância deixada aberta:
+  `/run/user/1000/snap.firefox/wayland-aero-f1-final`, `Permission denied` — DX, igual VSCode) e **Nautilus 50
+  NÃO abre: GAP REAL de compatibilidade com GNOME Shell, investigado em 3 tentativas** (§6). VSCode não foi tentado
+  (snap já requalificado como DX). **F1 NÃO foi fechada**: aguardando decisão do humano sobre o Nautilus e o "ok"
+  visual dos 4 apps antes do commit `docs(state): F1 FECHADA`. Não abrir F2. Instância deixada aberta:
   compositor PID 44480, socket `wayland-aero-f1-final`, apps 44496/44523/44599/44833.
 - **F1-xdg-toplevel-states FECHADO (§3): humano aprovou o juiz visual ("aprovado") no nested com gedit.**
   **PARAR — não abrir presentation-time sem "ok" do humano.** Nenhum processo foi encerrado pelo agente.
@@ -1454,6 +1454,21 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **GATE FINAL (2026-11-23): Nautilus 50 é GAP REAL de compatibilidade, NÃO é exceção DX.** Três execuções no nested:
+  (1) bus do host: entra, loga `Connecting to org.freedesktop.Tracker3.Miner.Files` e sai sem janela;
+  (2) `dbus-run-session -- nautilus`, 120 s: sem janela, `Cannot get portal org.freedesktop.host.portal.Registry
+  version: tempo limite` e `xdg-desktop-portal ... Failed to activate ... timed out`;
+  (3) `GDK_DEBUG=no-portals` (token correto; `noportals` não existe) + bus privado: sem janela, erro decisivo
+  `nautilus-application-Message: Failed to initialize display server connection: Não foi possível chamar método;
+  o proxy é para um nome conhecido org.gnome.Mutter.ServiceChannel sem um dono`. No bus do host o nome EXISTE
+  (`gdbus NameHasOwner org.gnome.Mutter.ServiceChannel → true`), mas o Nautilus ainda não mapeia janela → ele
+  depende da integração GNOME Shell (Mutter ServiceChannel), não apenas de Wayland. Fora do escopo F1 (exige
+  novo serviço D-Bus/compat, cartão próprio). **F1 não pode ser fechada sem decisão do humano sobre este item.**
+  Os 3 runners de diagnóstico (PIDs 45820/46101/46356) foram encerrados pelo agente; os apps do juiz não foram.
+- **GATE FINAL (2026-11-23): Firefox-snap e VSCode-snap são exceções DX, não F1.** Firefox falha antes do Wayland:
+  `Failed to connect to Wayland display '/run/user/1000/snap.firefox/wayland-aero-f1-final': Permission denied`
+  (confinamento snap); VSCode injeta `--ozone-platform=x11` e morre sem `$DISPLAY`. Firefox não-snap/schema gsettings
+  é item de ambiente, não do núcleo F1. Registrar como ressalvas DX no commit de fechamento, se autorizado.
 - **F1-presentation-time (2026-11-23): 2 correções de instrumento + A/B dos vizinhos.** O cliente precisou de um
   SEGUNDO roundtrip para receber o `clock_id` enviado no bind (o primeiro só entrega os globals); a sonda
   `PRESENT_FEEDBACK t=` fogia para o binário normal sempre que `cargo build --workspace --examples` rodava depois
@@ -2009,9 +2024,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
 ## 7. Não medido / não validado (não trate como fato)
 - **GATE FINAL F1 (2026-11-23): PARCIAL; juiz visual do humano PENDENTE.** Nested aberto (compositor PID 44480,
   socket `wayland-aero-f1-final`, log `/tmp/opencode/f1-final-gate/compositor.log`) com foot (44496), gedit (44523),
-  qterminal (44599) e Kate (44833) mapeados no IPC e 0 erros de protocolo. Firefox e Nautilus NÃO mapearam por
-  ambiente/DX (§4); VSCode não testado (snap). Human deve olhar decoração/menus/clipboard cruzado nos 4 apps
-  abertos e decidir sobre as duas falhas de ambiente. **Sem isso não há commit `F1 FECHADA`.**
+  qterminal (44599) e Kate (44833) mapeados no IPC e 0 erros de protocolo. Firefox-snap/VSCode-snap = exceções DX;
+  **Nautilus 50 = gap real de compatibilidade GNOME Shell (§6), em aberto**. Human deve olhar decoração/menus/
+  clipboard cruzado nos 4 apps abertos e decidir sobre o Nautilus. **Sem isso não há commit `F1 FECHADA`.**
   O compositor udev preexistente PID 29976 (tty3 do humano) NÃO foi tocado pelo agente.
 - **F1-presentation-time (2026-11-23): juiz visual NÃO se aplica (decisão do humano) — feedback é offscreen.**
   DRM/udev compilado com `presented()` no vblank de `frame_submitted()`, mas **não executado** (sem VT nesta VM).
@@ -2437,10 +2452,11 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
 - **SESSÃO ATUAL (2026-11-23): F1-presentation-time FECHADA (785764b); GATE FINAL parcial, F1 NÃO fechada.**
   Cartões F1-final concluídos. Gate final no nested: `python3 -` lendo IPC de `/tmp/opencode/f1-final-gate/ipc.sock`
-  → 4 janelas (foot, qterminal, gedit, Kate), 0 `ProtocolError`; Firefox snap e Nautilus/Tracker falham por ambiente
-  (§4/§6), VSCode não testado. Reproduzir o gate: ver §7 (instância PID 44480 deixada aberta).
-  **Próximo: humano julga os 4 apps abertos e decide sobre Firefox/Nautilus; só então commit
-  `docs(state): F1 FECHADA` e F2. Não encerrar processos (quem fecha é o humano).** Sem push.
+  → 4 janelas (foot, qterminal, gedit, Kate), 0 `ProtocolError`; Firefox/VSCode-snap = DX; **Nautilus 50 = gap real
+  de compatibilidade GNOME Shell (Mutter ServiceChannel), investigado em 3 tentativas — §6**. Reproduzir: §7,
+  instância PID 44480 deixada aberta; diagnósticos do Nautilus encerrados, apps do juiz intocados.
+  **Próximo: humano dá o "ok" visual nos 4 apps e decide como tratar o Nautilus (ressalva/cartão próprio); só então
+  commit `docs(state): F1 FECHADA` e F2. Não encerrar processos (quem fecha é o humano).** Sem push.
 - **SESSÃO ANTERIOR (2026-11-23): F1-presentation-time — código/teste/gates verdes; juiz visual N/A.**
   `protocols/presentation.rs` (global v2 + CLOCK_MONOTONIC + seq por output), ligado nos 3 backends; headless usa
   tick do timer sem alegar Vsync, winit responde após submit/swap, udev no vblank de `frame_submitted`.
