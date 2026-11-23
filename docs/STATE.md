@@ -21,7 +21,11 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
-- [~] **F2-event-stream (2026-11-23) — stream PUSH tipado no lugar do poll; código/teste/gates verdes, JUIZ VISUAL PENDENTE (§7).**
+- [x] **F2-event-stream (2026-11-23) — FECHADO PELO JUIZ VISUAL: humano confirmou que `printf '\033]0;TITULO_AO_VIVO\007'` muda a titlebar ao vivo, com ícone/foco acompanhando.**
+      Código/teste/gates verdes; commit `02158a9`. Juiz operou a instância nested (PID 81595, socket
+      `wayland-aero-f2-visual2`) e aprovou o stream sem poll. O agente não encerrou a aplicação.
+      Gate de sessão do snap entregou dado inconclusivo (§6); `F7-compat-snap` permanece como cartão nosso.
+      Subsistema de eventos:
       Cartão `docs/tasks/F2-event-stream-typed-sdk.md` aprovado. Nenhum protocolo/ADR novo; dependência **interna**
       `aeroshell-ipc` ligada ao compositor (a crate de IPC é a fonte dos tipos; nenhuma crate externa nova).
       Tipos: `AeroEvent` em `aeroshell-ipc/src/types.rs` com `TS` → `bun run generate:types` gera
@@ -1366,9 +1370,10 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
-- **F2-event-stream (§3): código/teste/gates verdes, 3× harness OK; JUIZ VISUAL PENDENTE (§7).**
-  Falta também o **gate de sessão F2**: humano rodar Firefox-snap no tty3 (passo 1 de `F7-compat-snap.md`) e, com o
-  dado, decidir reduzir aquele cartão ou mantê-lo. **Não fazer snapd/slot.** Não abrir próximo cartão F2 sem "ok".
+- **F2-event-stream FECHADO (§3): humano aprovou o juiz visual (título ao vivo por evento).**
+  Gate de sessão F2 entregue, mas **inconclusivo** (§6): `~/u --socket wayland-0` falhou com `Error: AlreadyInUse`
+  antes de o compositor subir; a tentativa seguinte usou `wayland-aero-tty3` (nome custom). `F7-compat-snap`
+  permanece como cartão nosso, **sem snapd/slot**. Próximo cartão F2 (política de decoração p/ Bun) só com "ok".
 - **F1 FECHADA (§3).** GATE FINAL no nested: foot/qterminal/gedit/Kate com 0 erros de protocolo; humano determinou
   o fechamento com os protocolos provados. Instância deixada aberta para o humano (PID 44480, apps
   44496/44523/44599/44833) — quem fecha é ele. Snap virou **cartão NOSSO** `F7-compat-snap.md` (§5), não ressalva DX;
@@ -1487,6 +1492,14 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
 - **Avisos benignos / item menor (decisão do humano, 2026-11-23):** `atk-bridge` é aviso benigno do GTK (não é
   defeito do AeroShell); `xdg_system_bell_v1` ausente é item menor a registrar no F7, **não bloqueia** F1/F2.
+- **GATE DE SESSÃO DO SNAP (2026-11-23) — dado entregue, INCONCLUSIVO.** `~/u --socket wayland-0` chegou a logar
+  `iniciando AeroShell … socket=wayland-0` (`aeroshell-udev-20261123-202747.log`) mas morreu com
+  **`Error: AlreadyInUse`** antes de `Created new socket` — o nome `wayland-0` já estava ocupado no `XDG_RUNTIME_DIR`.
+  A execução seguinte (`aeroshell-udev-20261123-202837.log`) voltou ao nome custom `wayland-aero-tty3`. O
+  `firefox.log` entregue mostra WebRender/telemetria iniciando, **sem `Permission denied`**, mas não prova que a
+  janela foi mapeada no AeroShell (pode ter ido para o socket do host). **Não reduzir `F7-compat-snap`**: manter o
+  cartão com o dado e nem fazer snapd/slot sem aprovação. Causa do `AlreadyInUse` (quem segura `wayland-0`) fica como
+  pergunta para o humano/ambiente, não é protocolo Wayland.
 - **GATE DE SESSÃO DO SNAP — teste anterior foi INVÁLIDO para a hipótese:** usou nome custom
   (`wayland-aero-tty3`), ou seja, caso NÃO provisionado. O teste correto pedido pelo humano é **como sessão, socket
   padrão**: no tty3 rodar `~/u --socket wayland-0` (args são repassados ao compositor; a última opção prevalece) e
@@ -2074,10 +2087,10 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- **F2-event-stream (2026-11-23): JUIZ VISUAL PENDENTE + gate de sessão tty3 pendente.** O humano deve abrir a
-  instância nested deixada para ele, ver título/ícone da titlebar atualizarem ao vivo (sem poll) e confirmar; e rodar
-  Firefox-snap **como sessão** no tty3 (passo 1 de `F7-compat-snap.md`), trazendo o dado cru. Agente não troca VT e
-  não encerra a instância. Não medido: desempenho em GPU real (VM sem 3D) e DRM/tty3 deste cartão.
+- **F2-event-stream (2026-11-23): JUIZ VISUAL APROVADO; gate de sessão do snap entregue, mas inconclusivo (§6).**
+  Humano confirmou `printf '\033]0;TITULO_AO_VIVO\007'` mudando a titlebar ao vivo, com ícone/foco. Não medido:
+  desempenho em GPU real (VM sem 3D) e DRM/tty3 deste cartão. A instância nested do juiz (PID 81595) não foi
+  encerrada pelo agente; o humano fecha quando quiser.
 - **GATE FINAL F1 (2026-11-23): humano determinou o fechamento com os protocolos provados.** Nested aberto (PID
   44480, socket `wayland-aero-f1-final`, log `/tmp/opencode/f1-final-gate/compositor.log`) com foot (44496), gedit
   (44523), qterminal (44599) e Kate (44833) mapeados no IPC e 0 erros de protocolo. Snap é cartão NOSSO
@@ -2506,13 +2519,13 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **SESSÃO ATUAL (2026-11-23): F2-event-stream implementado, 3× OK, gates verdes; JUIZ VISUAL PENDENTE.**
+- **SESSÃO ENCERRADA (2026-11-23): F2-event-stream FECHADO PELO JUIZ VISUAL (título ao vivo por evento).**
   Reproduzir (bench POR ÚLTIMO):
   `cargo build --workspace --examples && cargo build -p aeroshell-compositor --features bench && python3 tests/integration/f2_event_stream.py`
   → `VEREDITO: OK`; baseline sem `<ipc>.events` dava FALHA. `bun run generate:types` e `bun test` 10/10.
-  `check.sh` EXIT=0, clippy bench 0, no-default 0; sonda `EVENT_PUSH` 0 no binário normal. Instância para o juiz
-  deixada aberta (PID e socket no relatório da sessão). **Próximo: humano aprova o visual e traz o dado do
-  Firefox-snap no tty3; só então próximo cartão F2. Não mexer em snapd/slot.** Sem push.
+  `check.sh` EXIT=0, clippy bench 0, no-default 0; sonda `EVENT_PUSH` 0 no binário normal. Gate do snap inconclusivo
+  (`wayland-0` → `AlreadyInUse`; tentativa seguinte com nome custom — §6), `F7-compat-snap` mantido, sem snapd/slot.
+  **Próximo cartão F2 (política de decoração p/ Bun): abrir só com "ok" do humano, um cartão por sessão.** Sem push.
 - **SESSÃO ANTERIOR (2026-11-23): F1 FECHADA — commit `docs(state): F1 FECHADA` + cartão `F7-compat-snap` criado.**
   Humano determinou o fechamento com *"F1 fecha com protocolos provados"* e reclassificou o snap: **não é ambiente
   descartável**; é lacuna nossa de integração/sessão (snapd provisiona só o socket padrão da SESSÃO no namespace do
