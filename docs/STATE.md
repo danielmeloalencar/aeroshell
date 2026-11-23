@@ -39,6 +39,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
       (`/tmp/aero-f1-layer-config-r2rea_qr` e `-kqjbldpx`). **Kate e Kwrite no nested com o fix**: ambos
       `layer configure=1 ack=1 attach=1 buffer=Some frame_painted=1`
       (`/tmp/opencode/f1-1c-kate-diag/kate-wldbg.log`, `/tmp/opencode/f1-1c-kwrite-diag/kwrite-wldbg.log`).
+      **FALSO POSITIVO DESSE CRITÉRIO (dado visual do humano, §7):** `frame_painted` sozinho não mede cliente vivo;
+      o novo `tests/integration/f1_client_visible.py` dá `frame_painted=1 protocol_errors=1 IPC='.' titulos_reais=0
+      VEREDITO: FALHA`. O fix do configure é necessário para o attach, mas **insuficiente** para o sintoma.
       Vizinhos: `frame_fixed_canvas_hygiene`, `frame_buttons`, `frame_resize_glue` OK; `frame_initial_buffer`
       falhou 1× e passou na repetição (amostra preservada); `frame_cold_start_stages.py` ainda com o latch quente
       conhecido (limitação VM §7); `frame_repeated_activate.py` falha por timeout do 2º `frame_webview` com avisos
@@ -1815,9 +1818,15 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `ICON_SET ... w=16 h=16`, **antes** do `associate`/`frame_painted` do respectivo frame. Ou seja a decoração pinta
   num frame cujo cliente Qt já foi desconectado; os processos kate/kwrite saem segundos depois (`kwrite.poll()=255`).
   É comportamento do Smithay 0.7.0 fixado (`xdg_toplevel_icon.rs:360-369`), não do nosso handler
-  (`seat.rs:293-331` só lê o cached state); pré-existente ao fix e fora do cartão. **Decisão necessária** antes de
-  fechar o critério visual: abrir cartão de protocolo/ícone (com aprovação, AGENTS.md §5) ou aceitar prova de log
-  como substituta neste cartão. Não executado: tty3/udev (sem VT) e juiz visual no udev. Não medido: GPU real.
+  (`seat.rs:293-331` só lê o cached state); pré-existente ao fix e fora do cartão.
+  **Dado visual do humano (2026-11-23):** *"vi apenas uma janela decorada com titulo Janela, sem conteudo, nao vejo
+  nem foot nem kate nem krwite na tela"*. Isso é dado, não opinião, e contradiz o `VEREDITO: OK` dos harnesses
+  anteriores: eles mediam `frame_painted`/`buffer=Some`, não cliente vivo. O "Janela" é o placeholder literal
+  `<span id="title">janela</span>` (`frame_webview.rs:864`) — nenhum título real chegou. **Lacuna de medição
+  fechada:** `tests/integration/f1_client_visible.py` mede `CLIENT_DISCONNECT ... ProtocolError`, IPC `list` e
+  `title_applied` real; resultado cru `frame_painted=1 protocol_errors=1 title_applied=0 IPC list='.\n' VEREDITO:
+  FALHA` (`/tmp/aero-f1-client-visible-z50wzfmq`). **Decisão necessária** antes de fechar o critério visual: abrir
+  cartão de protocolo/ícone (com aprovação, AGENTS.md §5). Aceitar prova de log **não** é opção — o humano viu falha. Não executado: tty3/udev (sem VT) e juiz visual no udev. Não medido: GPU real.
   `frame_cold_start_stages.py` segue com o latch quente >300 ms conhecido (limitação VM).
 - **F1-final-1b — JUIZ VISUAL OBTIDO (2026-11-23): *"Funcionou tudo."*** Pré-filtro sintético (grab instalado,
   48 botões no popup) não media a ativação de item de menu no qterminal real; a sentença final foi a do humano na
@@ -2203,8 +2212,8 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
   **Bloqueio do juiz (§7):** Kate/Kwrite são desconectados por `ProtocolError` em `xdg_toplevel_icon_v1` antes do
   frame pintar; decoração aparece no log mas os apps saem. Instância aberta: compositor PID 37921, socket
   `wayland-aero-f1-1c-visual3`, log `/tmp/opencode/f1-1c-visual3/compositor.log` (com `CLIENT_DISCONNECT`).
-  **Próximo passo — decisão do humano:** autorizar cartão do protocolo de ícone (ou aceitar prova de log) antes de
-  exigir o ok visual; só depois repetir no tty3 (`~/u`) com Kate. Não abrir cartão 2 sem o ok.
+  **Próximo passo — decisão do humano:** autorizar cartão do protocolo de ícone (AGENTS.md §5) — a prova de log
+  foi recusada pelo dado visual. Instância visual3 já encerrada (não estava mais em `ps`). Não abrir cartão 2.
 - **SESSÃO ANTERIOR ENCERRADA (2026-11-23): F1-subsurfaces + F1-final-1b FECHADOS PELO JUIZ (*"Funcionou tudo"*).**
   Causa do menu Qt: `grab_popup()` só cria o `PopupGrab`; faltava `set_grab` no ponteiro/teclado. Corrigido em
   `protocols/xdg_shell.rs::grab`. Gate `f1-1b-gate2.log` EXIT=0, clippy bench 0, `--no-default-features` 0.
