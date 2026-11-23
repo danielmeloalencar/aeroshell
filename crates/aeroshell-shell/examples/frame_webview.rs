@@ -19,7 +19,10 @@ use std::net::Shutdown;
 use std::os::unix::net::UnixStream;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
-use wayland_client::{protocol::wl_registry, Dispatch, Proxy, QueueHandle};
+use wayland_client::{
+    protocol::{wl_callback, wl_registry},
+    Dispatch, Proxy, QueueHandle,
+};
 use webkit6::prelude::*;
 use webkit6::{UserContentManager, WebView};
 
@@ -248,6 +251,27 @@ impl Dispatch<wl_pointer::WlPointer, ()> for SpikeState {
     }
 }
 
+impl Dispatch<wl_callback::WlCallback, u32> for SpikeState {
+    fn event(
+        state: &mut Self,
+        _proxy: &wl_callback::WlCallback,
+        event: wl_callback::Event,
+        window_id: &u32,
+        _conn: &wayland_client::Connection,
+        qh: &QueueHandle<Self>,
+    ) {
+        if let wl_callback::Event::Done { callback_data } = event {
+            eprintln!(
+                "FRAMEWEB: frame_cb_recv window_id={window_id} callback_data={callback_data} t={}",
+                bench_t()
+            );
+            if let Some(entry) = state.entries.iter().find(|e| e.window_id == *window_id) {
+                entry.wl_surface.frame(qh, *window_id);
+            }
+        }
+    }
+}
+
 impl Dispatch<AeroFrameManagerV1, ()> for SpikeState {
     fn event(
         state: &mut Self,
@@ -264,6 +288,17 @@ impl Dispatch<AeroFrameManagerV1, ()> for SpikeState {
             ..
         } = event;
         eprintln!("FRAMEWEB: frame_requested window_id={window_id} conteudo={width}x{height}");
+        {
+            let n = FRAME_REQUESTED_N.with(|c| {
+                let mut m = c.borrow_mut();
+                let n = m.entry(window_id).or_insert(0);
+                *n += 1;
+                *n
+            });
+            eprintln!(
+                "FRAMEWEB: frame_requested_seq window_id={window_id} n={n} conteudo={width}x{height}"
+            );
+        }
         // O associate acontece no realize, sem apresentar um buffer 200x200.
         // O frame_requested enviado pelo próprio associate traz o output e só
         // então fixa o canvas inicial e apresenta a janela (sem deadlock 02m).
@@ -280,10 +315,13 @@ impl Dispatch<AeroFrameManagerV1, ()> for SpikeState {
                     .set_default_size(entry.canvas.0, entry.canvas.1);
                 entry.presented = true;
                 eprintln!(
-                    "FRAMEWEB: canvas inicial window_id={window_id} {}x{}",
-                    entry.canvas.0, entry.canvas.1
+                    "FRAMEWEB: canvas inicial window_id={window_id} {}x{} t={}",
+                    entry.canvas.0,
+                    entry.canvas.1,
+                    bench_t()
                 );
                 entry.window.present();
+                eprintln!("FRAMEWEB: present window_id={window_id} t={}", bench_t());
             } else {
                 eprintln!("FRAMEWEB: window_id={window_id} já apresentado; ignorado");
             }
@@ -321,6 +359,24 @@ impl Dispatch<AeroFrameV1, ()> for SpikeState {
                 ..
             } => {
                 state.configures += 1;
+                {
+                    let window_id = state
+                        .entries
+                        .iter()
+                        .find(|e| &e.frame == frame)
+                        .map(|e| e.window_id);
+                    let key = window_id.unwrap_or(u32::MAX);
+                    let n = CONFIGURE_N.with(|c| {
+                        let mut m = c.borrow_mut();
+                        let n = m.entry(key).or_insert(0);
+                        *n += 1;
+                        *n
+                    });
+                    eprintln!(
+                        "FRAMEWEB: configure_seq window_id={:?} n={n} serial={serial} conteudo={width}x{height}",
+                        window_id
+                    );
+                }
                 if !state.entries.iter().any(|e| &e.frame == frame) {
                     // O configure pode chegar antes do associate terminar:
                     // guardamos e aplicamos assim que a entry existe.
@@ -422,6 +478,11 @@ thread_local! {
     static PENDING_CONFIGURES: RefCell<Vec<(AeroFrameV1, u32, i32, i32)>> = const { RefCell::new(Vec::new()) };
     static NEXT_POOL_ID: Cell<usize> = const { Cell::new(0) };
     static POOL_FILL_SCHEDULED: Cell<bool> = const { Cell::new(false) };
+}
+
+thread_local! {
+    static FRAME_REQUESTED_N: RefCell<std::collections::HashMap<u32, u32>> = RefCell::new(std::collections::HashMap::new());
+    static CONFIGURE_N: RefCell<std::collections::HashMap<u32, u32>> = RefCell::new(std::collections::HashMap::new());
 }
 
 struct Runtime {
@@ -986,6 +1047,11 @@ fn associate_frame(
         });
         eprintln!("FRAMEWEB: associate(window_id={window_id}) + set_insets({left},{top},{right},{bottom}) \
                    + set_titlebar_slices({title_left},{title_right}) client_frame={client_frame} t={}", bench_t());
+        if let Some(entry) = rt.state.entries.last() {
+            entry.wl_surface.frame(&qh, window_id);
+            let _ = rt.queue.flush();
+            eprintln!("FRAMEWEB: frame_cb_request window_id={window_id} t={}", bench_t());
+        }
         let pending = PENDING_CONFIGURES.with(|cell| std::mem::take(&mut *cell.borrow_mut()));
         for (pending_frame, serial, width, height) in pending {
             if pending_frame == frame {
@@ -1043,10 +1109,16 @@ fn ensure_pool_fill() {
 
 fn request_frame(window_id: u32, canvas_w: i32, canvas_h: i32, client_frame: bool) {
     if let Some((item, available)) = take_ready_frame() {
-        eprintln!("FRAMEWEB: pool_take window_id={window_id} available={available}");
+        eprintln!(
+            "FRAMEWEB: pool_take window_id={window_id} available={available} t={}",
+            bench_t()
+        );
         open_frame_window(window_id, canvas_w, canvas_h, item, client_frame);
     } else {
-        eprintln!("FRAMEWEB: pool_vazio window_id={window_id}; request enfileirado");
+        eprintln!(
+            "FRAMEWEB: pool_vazio window_id={window_id}; request enfileirado t={}",
+            bench_t()
+        );
         PENDING_FRAMES.with(|cell| {
             cell.borrow_mut()
                 .push_back((window_id, canvas_w, canvas_h, client_frame));
@@ -1062,7 +1134,10 @@ fn drain_pending_frames() {
             break;
         };
         if let Some((item, available)) = take_ready_frame() {
-            eprintln!("FRAMEWEB: pool_take window_id={window_id} available={available}");
+            eprintln!(
+                "FRAMEWEB: pool_take window_id={window_id} available={available} t={}",
+                bench_t()
+            );
             open_frame_window(window_id, canvas_w, canvas_h, item, client_frame);
         } else {
             PENDING_FRAMES.with(|cell| {
@@ -1211,7 +1286,13 @@ fn prewarm_frame() {
         .build();
     webview.set_background_color(&gtk4::gdk::RGBA::new(0.0, 0.0, 0.0, 0.0));
     window.set_child(Some(&webview));
+    let load_wid = window_id.clone();
     webview.connect_load_changed(move |_, event| {
+        let wid = load_wid.get();
+        eprintln!(
+            "FRAMEWEB: load_event pool_id={pool_id} window_id={wid:?} event={event:?} t={}",
+            bench_t()
+        );
         if event == webkit6::LoadEvent::Finished {
             eprintln!("FRAMEWEB: html_ready t={} pool_id={pool_id}", bench_t());
             pool_mark_ready(pool_id);
@@ -1226,6 +1307,7 @@ fn prewarm_frame() {
             ready: false,
         });
     });
+    eprintln!("FRAMEWEB: pool_push pool_id={pool_id} t={}", bench_t());
     webview.load_html(TITLEBAR_HTML, Some("aero://frame/"));
 }
 
@@ -1249,6 +1331,7 @@ fn open_frame_window(
         window.set_default_size(canvas_w, canvas_h);
     }
     window.connect_realize(move |w| {
+        eprintln!("FRAMEWEB: realize window_id={window_id} t={}", bench_t());
         let gdk_surface = w.surface().expect("janela sem GdkSurface");
         let ws = gdk_surface
             .downcast_ref::<WaylandSurface>()

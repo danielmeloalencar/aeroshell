@@ -384,6 +384,26 @@ pub fn init_winit(
                             }
                             for layer in &state.frame_layer_surfaces {
                                 if layer.alive() {
+                                    #[cfg(feature = "bench")]
+                                    {
+                                        let pending = smithay::wayland::compositor::with_states(
+                                            layer.wl_surface(),
+                                            |states| {
+                                                states
+                                                    .cached_state
+                                                    .get::<smithay::wayland::compositor::SurfaceAttributes>()
+                                                    .current()
+                                                    .frame_callbacks
+                                                    .len()
+                                            },
+                                        );
+                                        eprintln!(
+                                            "FRAME_CB_SEND t={} surface={:?} output={} pending={pending}",
+                                            crate::frame_diagnostics::now_ns(),
+                                            layer.wl_surface().id(),
+                                            output.name()
+                                        );
+                                    }
                                     layer.send_frame(output, now, Some(Duration::ZERO), |_, _| {
                                         Some(output.clone())
                                     });
@@ -734,6 +754,26 @@ pub fn init_winit(
                         }
                         for layer in &state.frame_layer_surfaces {
                             if layer.alive() {
+                                #[cfg(feature = "bench")]
+                                {
+                                    let pending = smithay::wayland::compositor::with_states(
+                                        layer.wl_surface(),
+                                        |states| {
+                                            states
+                                                .cached_state
+                                                .get::<smithay::wayland::compositor::SurfaceAttributes>()
+                                                .current()
+                                                .frame_callbacks
+                                                .len()
+                                        },
+                                    );
+                                    eprintln!(
+                                        "FRAME_CB_SEND t={} surface={:?} output={} pending={pending}",
+                                        crate::frame_diagnostics::now_ns(),
+                                        layer.wl_surface().id(),
+                                        output.name()
+                                    );
+                                }
                                 layer.send_frame(output, now, Some(Duration::ZERO), |_, _| {
                                     Some(output.clone())
                                 });
