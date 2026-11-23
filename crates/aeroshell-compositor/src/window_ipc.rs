@@ -12,12 +12,15 @@
 
 use std::{
     io::{self, BufRead, Write},
-    os::unix::net::UnixListener,
-    sync::mpsc,
+    os::unix::net::{UnixListener, UnixStream},
+    path::PathBuf,
+    sync::{mpsc, Mutex, OnceLock},
     time::Duration,
 };
 
+use aeroshell_ipc::types::{AeroEvent, Snapshot, WindowInfo};
 use calloop::channel;
+use serde_json::{json, Value};
 use smithay::{
     desktop::Window,
     reexports::{
@@ -35,7 +38,7 @@ use crate::state::AeroState;
 
 /// Título atual do toplevel, lido dos atributos da superfície no event loop.
 /// Fonte: smithay 0.7.0 `wayland/shell/xdg/mod.rs:364` (`XdgToplevelSurfaceRoleAttributes.title`).
-fn window_title(window: &Window) -> String {
+pub fn window_title(window: &Window) -> String {
     let Some(toplevel) = window.toplevel() else {
         return String::new();
     };
@@ -90,6 +93,137 @@ fn icon_name(surface: &WlSurface) -> Option<String> {
 
 pub type Command = (String, mpsc::Sender<String>);
 
+/// Conexões assinantes do stream PUSH (uma linha JSON por evento).
+static SUBSCRIBERS: OnceLock<Mutex<Vec<UnixStream>>> = OnceLock::new();
+
+fn subscribers() -> &'static Mutex<Vec<UnixStream>> {
+    SUBSCRIBERS.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+/// O stream deriva do IPC existente: `<ipc>.events`. Nenhuma env nova.
+pub fn event_socket_path(ipc_path: &str) -> PathBuf {
+    let mut path = PathBuf::from(ipc_path);
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("aero-ipc")
+        .to_owned();
+    path.set_file_name(format!("{name}.events"));
+    path
+}
+
+/// Aceita assinantes numa thread própria; o event loop só publica eventos.
+pub fn spawn_event_stream(ipc_path: &str, sender: channel::Sender<Command>) -> io::Result<()> {
+    let path = event_socket_path(ipc_path);
+    // Socket stale de uma execução anterior não é estado do compositor atual.
+    let _ = std::fs::remove_file(&path);
+    let listener = UnixListener::bind(&path)?;
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            match stream {
+                Ok(stream) => {
+                    if let Ok(mut list) = subscribers().lock() {
+                        list.push(stream);
+                    }
+                    // Replay do estado atual para quem acabou de conectar:
+                    // eventos anteriores ao subscribe não podem ser recuperados.
+                    let (tx, _rx) = mpsc::channel();
+                    let _ = sender.send(("__subscribe__".to_owned(), tx));
+                }
+                Err(err) => tracing::warn!(%err, "event stream accept falhou"),
+            }
+        }
+    });
+    Ok(())
+}
+
+/// Serialização manual no formato tagged-object que o ts-rs gera para `AeroEvent`.
+fn event_json(event: &AeroEvent) -> Value {
+    match event {
+        AeroEvent::Snapshot { snapshot } => {
+            // WindowInfo/Snapshot não derivam serde: montamos o valor no formato
+            // que o ts-rs gera, sem exigir dependência nova na crate de IPC.
+            let windows: Vec<Value> = snapshot
+                .windows
+                .iter()
+                .map(|w| {
+                    json!({
+                        "id": w.id, "title": w.title, "x": w.x, "y": w.y,
+                        "width": w.width, "height": w.height
+                    })
+                })
+                .collect();
+            json!({ "Snapshot": { "snapshot": {
+                "revision": snapshot.revision, "windows": windows
+            } } })
+        }
+        AeroEvent::Title { id, title } => json!({ "Title": { "id": id, "title": title } }),
+        AeroEvent::Icon {
+            id,
+            name,
+            has_pixels,
+        } => {
+            json!({ "Icon": { "id": id, "name": name, "has_pixels": has_pixels } })
+        }
+        AeroEvent::Focus { id } => json!({ "Focus": { "id": id } }),
+        AeroEvent::Geometry {
+            id,
+            x,
+            y,
+            width,
+            height,
+        } => json!({
+            "Geometry": { "id": id, "x": x, "y": y, "width": width, "height": height }
+        }),
+        AeroEvent::Csd { id, client_frame } => {
+            json!({ "Csd": { "id": id, "client_frame": client_frame } })
+        }
+        AeroEvent::FramePainted { id } => json!({ "FramePainted": { "id": id } }),
+    }
+}
+
+/// Publica um evento para TODOS os assinantes conectados (sem bloquear o loop).
+pub fn emit_event(event: AeroEvent) {
+    let line = match serde_json::to_string(&event_json(&event)) {
+        Ok(line) => line,
+        Err(err) => {
+            tracing::warn!(%err, "serialização de evento falhou");
+            return;
+        }
+    };
+    #[cfg(feature = "bench")]
+    {
+        let t = crate::frame_diagnostics::now_ns();
+        eprintln!(
+            "EVENT_PUSH t={t} kind={} bytes={}",
+            event_name(&event),
+            line.len()
+        );
+    }
+    if let Ok(mut list) = subscribers().lock() {
+        list.retain(|stream| {
+            let mut clone = match stream.try_clone() {
+                Ok(clone) => clone,
+                Err(_) => return false,
+            };
+            writeln!(clone, "{line}").is_ok() && clone.flush().is_ok()
+        });
+    }
+}
+
+#[cfg(feature = "bench")]
+fn event_name(event: &AeroEvent) -> &'static str {
+    match event {
+        AeroEvent::Snapshot { .. } => "snapshot",
+        AeroEvent::Title { .. } => "title",
+        AeroEvent::Icon { .. } => "icon",
+        AeroEvent::Focus { .. } => "focus",
+        AeroEvent::Geometry { .. } => "geometry",
+        AeroEvent::Csd { .. } => "csd",
+        AeroEvent::FramePainted { .. } => "frame_painted",
+    }
+}
+
 /// Lança a thread do socket IPC. `sender` entrega os comandos ao event loop.
 pub fn spawn(path: &str, sender: channel::Sender<Command>) -> io::Result<()> {
     let listener = UnixListener::bind(path)?;
@@ -119,12 +253,78 @@ pub fn spawn(path: &str, sender: channel::Sender<Command>) -> io::Result<()> {
 }
 
 impl AeroState {
+    /// Snapshot tipado dos dados básicos das janelas (mesma fonte do `list`).
+    pub fn snapshot(&self) -> Snapshot {
+        let mut ids: Vec<u32> = self.window_surfaces.keys().copied().collect();
+        ids.sort_unstable();
+        let mut windows = Vec::new();
+        for id in ids {
+            let Some(window) = self.window_for_id(id) else {
+                continue;
+            };
+            let Some(geo) = self.space.element_geometry(window) else {
+                continue;
+            };
+            windows.push(WindowInfo {
+                id,
+                title: window_title(window),
+                x: geo.loc.x,
+                y: geo.loc.y,
+                width: geo.size.w.max(0) as u32,
+                height: geo.size.h.max(0) as u32,
+            });
+        }
+        Snapshot {
+            revision: self.event_revision,
+            windows,
+        }
+    }
+
+    /// Publica o estado atual de UMA janela (no `associate` do frame, que
+    /// chega depois dos eventos de map/title — sem pedir `list` de novo).
+    pub fn emit_window_state(&self, id: u32) {
+        if let Some(window) = self.window_for_id(id) {
+            emit_event(AeroEvent::Title {
+                id,
+                title: window_title(window),
+            });
+        }
+        if let Some(surface) = self.window_surfaces.get(&id) {
+            let name = icon_name(surface);
+            let has_pixels = icon_pixels(surface).is_some();
+            if name.is_some() || has_pixels {
+                emit_event(AeroEvent::Icon {
+                    id,
+                    name,
+                    has_pixels,
+                });
+            }
+            emit_event(AeroEvent::Csd {
+                id,
+                client_frame: client_draws_frame(surface),
+            });
+        }
+    }
+
+    /// Publica o snapshot no stream, com revisão monotônica.
+    pub fn emit_snapshot(&mut self) {
+        self.event_revision = self.event_revision.saturating_add(1);
+        let snapshot = self.snapshot();
+        emit_event(AeroEvent::Snapshot { snapshot });
+    }
+
     /// Executa um comando de janela no event loop e devolve a resposta textual.
     pub fn window_command(&mut self, cmd: &str) -> String {
         let mut parts = cmd.split_whitespace();
         let op = parts.next().unwrap_or("");
         let id = parts.next().and_then(|v| v.parse::<usize>().ok());
         match op {
+            // Comando INTERNO do subscribe do stream: publica o estado atual
+            // para o assinante que acabou de conectar (não é protocolo público).
+            "__subscribe__" => {
+                self.emit_snapshot();
+                "OK".to_owned()
+            }
             "list" => {
                 let mut out = String::new();
                 // `space.elements()` é ordem z e muda a cada raise_element: usar o

@@ -17,7 +17,9 @@ use std::collections::VecDeque;
 use std::io::{BufRead, BufReader, Write};
 use std::net::Shutdown;
 use std::os::unix::net::UnixStream;
+use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
 use wayland_client::{
     protocol::{wl_callback, wl_registry},
@@ -576,16 +578,37 @@ fn ipc_title(window_id: u32) -> Option<String> {
         if line == "." {
             break;
         }
-        // "W id x y w h <titulo-json>" — splitn(7) mantém o JSON (com espaços) inteiro.
-        let mut parts = line.splitn(7, ' ');
+        // "W id x y w h <titulo-json> <app_id-json> csd=…": o JSON do título
+        // pode conter espaços e NÃO é o último campo da linha.
+        let mut parts = line.splitn(2, ' ');
         if parts.next() != Some("W") {
             continue;
         }
-        let Some(id) = parts.next().and_then(|v| v.parse::<u32>().ok()) else {
+        let rest = parts.next().unwrap_or("");
+        let mut fields = rest.splitn(5, ' ');
+        let Some(id) = fields.next().and_then(|v| v.parse::<u32>().ok()) else {
             continue;
         };
-        if id == window_id {
-            return parts.nth(4).and_then(|raw| serde_json::from_str(raw).ok());
+        if id != window_id {
+            continue;
+        }
+        // Depois de id x y w vem o título JSON e os campos extras; extrair
+        // apenas a primeira string JSON citada.
+        let bytes = rest.as_bytes();
+        let Some(start) = rest.find('"') else {
+            continue;
+        };
+        let mut end = start + 1;
+        let mut escaped = false;
+        while end < bytes.len() {
+            match bytes[end] {
+                b'\\' if !escaped => escaped = true,
+                b'"' if !escaped => {
+                    return serde_json::from_str(&rest[start..=end]).ok();
+                }
+                _ => escaped = false,
+            }
+            end += 1;
         }
     }
     None
@@ -679,7 +702,71 @@ fn ipc_icon(window_id: u32) -> Option<IconSource> {
     Some(IconSource::Pixels { w, h, format, b64 })
 }
 
-/// Aplica título e ícone vindos do IPC. Chamado no associate e a cada 1 s.
+/// `<ipc>.events`, o mesmo derivado pelo compositor.
+fn event_socket_path() -> Option<PathBuf> {
+    let ipc = std::env::var_os("AERO_WINDOW_IPC_SOCK")?;
+    let mut path = PathBuf::from(ipc);
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("aero-ipc")
+        .to_owned();
+    path.set_file_name(format!("{name}.events"));
+    Some(path)
+}
+
+/// Consome o stream PUSH: a thread acorda no socket; o main loop só drena o
+/// canal (1 ms), sem `timeout` de 100 ms/1 s para título/CSD/lista.
+fn install_event_stream() {
+    let Some(path) = event_socket_path() else {
+        eprintln!("FRAMEWEB: AERO_WINDOW_IPC_SOCK ausente; stream desligado");
+        return;
+    };
+    let (tx, rx) = mpsc::channel::<String>();
+    glib::timeout_add_local(Duration::from_millis(1), move || {
+        while let Ok(line) = rx.try_recv() {
+            let value: serde_json::Value =
+                serde_json::from_str(&line).unwrap_or(serde_json::Value::Null);
+            let Some((kind, body)) = value.as_object().and_then(|map| map.iter().next()) else {
+                continue;
+            };
+            let id = body
+                .get("id")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(u32::MAX as u64);
+            eprintln!("FRAMEWEB: aeroEvent kind={kind} window_id={id}");
+            match kind.as_str() {
+                // Os pedidos ao IPC abaixo são feitos SOMENTE em resposta ao
+                // evento (não há mais polling periódico).
+                "Title" | "Icon" | "Geometry" | "Snapshot" => refresh_titles(),
+                "Csd" => refresh_csd(),
+                _ => {}
+            }
+        }
+        glib::ControlFlow::Continue
+    });
+    std::thread::spawn(move || {
+        let stream = match std::os::unix::net::UnixStream::connect(&path) {
+            Ok(stream) => stream,
+            Err(err) => {
+                eprintln!("FRAMEWEB: falha ao conectar stream {path:?}: {err}");
+                return;
+            }
+        };
+        eprintln!("FRAMEWEB: stream de eventos conectado {path:?}");
+        for line in std::io::BufReader::new(stream)
+            .lines()
+            .map_while(Result::ok)
+        {
+            if line.is_empty() || tx.send(line).is_err() {
+                break;
+            }
+        }
+    });
+}
+
+/// Aplica título e ícone vindos do IPC. Chamado no associate e quando um evento
+/// de mudança chega (não mais por timer).
 fn refresh_titles() {
     if std::env::var_os("AERO_WINDOW_IPC_SOCK").is_none() {
         return;
@@ -1503,18 +1590,8 @@ fn main() {
             dispatch_nonblocking();
             glib::ControlFlow::Continue
         });
-        // O IPC de janelas é request/response; o título muda é descoberto por
-        // polling curto. Evento de mudança de título é melhoria F2 (streaming).
-        glib::timeout_add_local(Duration::from_secs(1), || {
-            refresh_titles();
-            glib::ControlFlow::Continue
-        });
-        // CSD é descoberto por protocolo (window_geometry/KDE/XDG), e o GTK4
-        // só o expõe após o primeiro commit. Sonda rápida nos primeiros 5 s.
-        glib::timeout_add_local(Duration::from_millis(100), || {
-            refresh_csd();
-            glib::ControlFlow::Continue
-        });
+        // F2: título/ícone/CSD agora chegam por eventos push; sem poll de 1 s/100 ms.
+        install_event_stream();
     });
     app.run();
 }

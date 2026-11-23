@@ -3,6 +3,8 @@
 
 use std::time::Instant;
 
+use aeroshell_ipc::types::AeroEvent;
+
 use crate::{
     aero_frame_protocol::{
         aero_frame_manager_v1::{
@@ -11,6 +13,7 @@ use crate::{
         aero_frame_v1::{AeroFrameV1, Request as FrameRequest},
     },
     state::{AeroState, ClientState},
+    window_ipc::emit_event,
 };
 use smithay::wayland::compositor::{add_destruction_hook, get_role};
 use smithay::wayland::shell::wlr_layer::LAYER_SURFACE_ROLE;
@@ -274,6 +277,7 @@ impl AeroState {
                     window_id,
                     "janela cliente destruída: closed enviado ao frame"
                 );
+                state.emit_snapshot();
             }
         });
         tracing::info!(window_id, "frame pendente ligado ao cliente mapeado");
@@ -431,6 +435,9 @@ impl Dispatch<AeroFrameManagerV1, ()> for AeroState {
                     window_id,
                     client_surface.clone(),
                 ));
+                // F2: o frame associou depois do map; reenviar o estado atual
+                // evita depender de polling para título/ícone/CSD.
+                state.emit_window_state(window_id);
                 // Quando a janela cliente morre, o frame recebe `closed` (ADR 0004).
                 if let Some(client) = client_surface {
                     add_destruction_hook::<crate::state::AeroState, _>(&client, |state, dead| {
@@ -716,6 +723,8 @@ impl Dispatch<AeroFrameV1, u32> for AeroState {
                     growth_completed,
                     "frame painted"
                 );
+                // F2: o paint real é o ponto de mudança para o shell/SDK.
+                emit_event(AeroEvent::FramePainted { id: *window_id });
             }
             FrameRequest::Destroy => {
                 if let Some(pos) = state

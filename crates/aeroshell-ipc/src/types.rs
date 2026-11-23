@@ -48,3 +48,41 @@ pub struct Patch {
     pub revision: Revision,
     pub change: WindowChange,
 }
+
+/// Evento PUSH do compositor para shell/SDK (substitui o polling do S4).
+/// A serialização na wire é o enum em forma de tagged object do ts-rs, ex.:
+/// `{"Title":{"id":0,"title":"foot"}}`.
+#[cfg_attr(feature = "export-bindings", derive(TS))]
+#[cfg_attr(feature = "export-bindings", ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AeroEvent {
+    Snapshot {
+        snapshot: Snapshot,
+    },
+    Title {
+        id: u32,
+        title: String,
+    },
+    Icon {
+        id: u32,
+        name: Option<String>,
+        has_pixels: bool,
+    },
+    Focus {
+        id: Option<u32>,
+    },
+    Geometry {
+        id: u32,
+        x: i32,
+        y: i32,
+        width: u32,
+        height: u32,
+    },
+    Csd {
+        id: u32,
+        client_frame: bool,
+    },
+    FramePainted {
+        id: u32,
+    },
+}

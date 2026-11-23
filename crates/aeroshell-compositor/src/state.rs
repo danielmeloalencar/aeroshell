@@ -40,7 +40,14 @@ use smithay::{
 use crate::protocols::toplevel_icon::IconManager;
 use smithay::reexports::wayland_protocols_misc::server_decoration::server::org_kde_kwin_server_decoration_manager::Mode as DefaultMode;
 
-use crate::{cli::Options, render::cursor::CursorImage, CalloopData};
+use aeroshell_ipc::types::AeroEvent;
+
+use crate::{
+    cli::Options,
+    render::cursor::CursorImage,
+    window_ipc::{emit_event, window_title},
+    CalloopData,
+};
 
 /// Geometria salva de uma janela antes do maximize (02r): origem no Space e
 /// tamanho do cliente.
@@ -216,6 +223,11 @@ pub struct AeroState {
     /// F1-presentation-time: global `wp_presentation` + sequência por output.
     pub presentation_state: Option<PresentationState>,
     pub presentation_seq: HashMap<String, u64>,
+    /// F2: revisão monotônica dos snapshots/eventos publicados no stream.
+    pub event_revision: u32,
+    /// F2: último estado observado para gerar eventos SÓ na mudança.
+    pub last_titles: HashMap<u32, String>,
+    pub last_geometries: HashMap<u32, Rectangle<i32, Logical>>,
     pub output_manager_state: OutputManagerState,
     pub seat_state: SeatState<AeroState>,
     pub data_device_state: DataDeviceState,
@@ -307,6 +319,38 @@ impl AeroState {
                 insets: self.default_frame_insets,
                 ..Default::default()
             })
+    }
+
+    /// F2: emite Title/Geometry SOMENTE quando o estado observado mudou.
+    pub fn observe_surface_change(&mut self, surface: &WlSurface) {
+        let Some(id) = self
+            .window_surfaces
+            .iter()
+            .find(|(_, candidate)| *candidate == surface)
+            .map(|(id, _)| *id)
+        else {
+            return;
+        };
+        let Some(window) = self.window_for_id(id).cloned() else {
+            return;
+        };
+        let title = window_title(&window);
+        if self.last_titles.get(&id) != Some(&title) {
+            self.last_titles.insert(id, title.clone());
+            emit_event(AeroEvent::Title { id, title });
+        }
+        if let Some(geo) = self.space.element_geometry(&window) {
+            if self.last_geometries.get(&id) != Some(&geo) {
+                self.last_geometries.insert(id, geo);
+                emit_event(AeroEvent::Geometry {
+                    id,
+                    x: geo.loc.x,
+                    y: geo.loc.y,
+                    width: geo.size.w.max(0) as u32,
+                    height: geo.size.h.max(0) as u32,
+                });
+            }
+        }
     }
 
     /// F1-xdg-toplevel-states: em fullscreen a janela ocupa o output inteiro e
@@ -476,6 +520,9 @@ impl AeroState {
             dmabuf_global: None,
             presentation_state,
             presentation_seq: HashMap::new(),
+            event_revision: 0,
+            last_titles: HashMap::new(),
+            last_geometries: HashMap::new(),
             output_manager_state,
             seat_state,
             data_device_state,

@@ -5,7 +5,7 @@
 import { useEffect } from "react";
 import { createRoot } from "react-dom/client";
 
-import { createAero } from "../../sdk/src/index";
+import { createAero, parseEvent } from "../../sdk/src/index";
 import { useWindows } from "../../react/src/useWindows";
 
 type Reply = (lines: string[]) => void;
@@ -13,6 +13,7 @@ type Reply = (lines: string[]) => void;
 declare global {
   interface Window {
     __aeroReply?: (seq: number, lines: string[]) => void;
+    __aeroEvent?: (json: string) => void;
     webkit: {
       messageHandlers: {
         aero: { postMessage(message: unknown): void };
@@ -41,6 +42,12 @@ const transport = (command: string): Promise<string[]> =>
 
 const aero = createAero(transport);
 
+// O host empurra eventos; o React re-renderiza pelo store, sem setInterval.
+window.__aeroEvent = (json: string) => {
+  const event = parseEvent(json);
+  if (event) aero.store.applyEvent(event);
+};
+
 /** Retângulos reais dos botões, lidos do DOM para o hit-test (S3). */
 function publishInputRegions(): void {
   const rects = Array.from(document.querySelectorAll<HTMLElement>(".aero-row"))
@@ -56,26 +63,14 @@ function Panel() {
   const windows = useWindows(aero.store);
 
   useEffect(() => {
-    let alive = true;
-    const poll = async () => {
-      try {
-        await aero.windows.list();
-      } finally {
-        if (alive) {
-          const current = aero.store.getSnapshot().windows;
-          console.info(
-            "painel React:",
-            current.map((w) => `${w.id} ${w.title}`).join(" | "),
-          );
-        }
-      }
-    };
-    void poll();
-    const timer = setInterval(() => void poll(), 1000);
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
+    // Snapshot inicial único; mudanças posteriores chegam por __aeroEvent.
+    void aero.windows.list().then(() => {
+      const current = aero.store.getSnapshot().windows;
+      console.info(
+        "painel React:",
+        current.map((w) => `${w.id} ${w.title}`).join(" | "),
+      );
+    });
   }, []);
 
   // Roda após o commit: os rects refletem o layout real dos botões.

@@ -27,6 +27,8 @@ default = [
 ]
 
 [dependencies]
+# F2: tipos de evento partilhados com o SDK (workspace interno, sem crate externa).
+aeroshell-ipc = { path = "../aeroshell-ipc" }
 smithay.workspace = true
 calloop.workspace = true
 rustix.workspace = true

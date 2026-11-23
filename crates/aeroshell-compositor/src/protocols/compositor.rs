@@ -341,6 +341,8 @@ impl CompositorHandler for AeroState {
                 }
             }
         }
+        // F2: publicar mudanças observáveis no ponto do commit (sem polling).
+        self.observe_surface_change(surface);
     }
 }
 

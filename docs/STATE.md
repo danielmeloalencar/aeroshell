@@ -21,6 +21,26 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [~] **F2-event-stream (2026-11-23) — stream PUSH tipado no lugar do poll; código/teste/gates verdes, JUIZ VISUAL PENDENTE (§7).**
+      Cartão `docs/tasks/F2-event-stream-typed-sdk.md` aprovado. Nenhum protocolo/ADR novo; dependência **interna**
+      `aeroshell-ipc` ligada ao compositor (a crate de IPC é a fonte dos tipos; nenhuma crate externa nova).
+      Tipos: `AeroEvent` em `aeroshell-ipc/src/types.rs` com `TS` → `bun run generate:types` gera
+      `packages/sdk/src/generated/AeroEvent.ts` (nunca editado à mão). Wire = tagged-object do ts-rs,
+      `{"Title":{"id":0,"title":"…"}}`.
+      Compositor: `window_ipc::spawn_event_stream()` deriva `<ipc>.events` da env existente, publica
+      `Snapshot/Title/Icon/Focus/Geometry/Csd/FramePainted` **no ponto de mudança** (commit, map/unmap, foco, ícone,
+      `associate` do frame, `frame_painted`) e faz replay do estado no subscribe. Sonda `EVENT_PUSH t=… kind=…`
+      **só sob bench** (0 ocorrências no binário normal, por `strings`).
+      Shell/SDK: `bridge.rs` e `frame_webview.rs` consomem a thread do socket e entregam ao WebView por
+      `__aeroEvent` (drenagem de 1 ms no main loop, sem `timeout` de 100 ms/1 s); `panel/src/index.tsx` reage por
+      evento via `store.applyEvent`, sem `setInterval(1000)`. Comandos `close/maximize/focus` seguem request/response.
+      **Teste-first:** `examples/event_subscriber_client.rs` + `tests/integration/f2_event_stream.py` escritos antes;
+      baseline `VEREDITO: FALHA` (sem `<ipc>.events`), depois **3× `VEREDITO: OK`**: 17 eventos com 5 tipos no
+      assinante e `FRAMEWEB: aeroEvent` no shell, 0 erros de protocolo. `bun test` 10/10 (novo teste de
+      `parseEvent/applyEvent` sem `list`). Gates: `check.sh` EXIT=0, clippy bench 0, no-default 0, types 0.
+      Vizinhos: `frame_title`, `f1_toplevel_icon`, `frame_buttons`, `frame_resize_glue`, `headless_render_damage`,
+      `sdk_cli` OK; `react_panel` passou 1× e flutuou 2× no mapeamento de clique; `frame_window_id` segue flake
+      pré-existente (§6). **PARAR no juiz visual e no gate de sessão tty3 do Firefox-snap.**
 - [x] **F1-presentation-time (2026-11-23) — código/teste/gates verdes; juiz visual NÃO se aplica (decisão do humano).**
       Cartão `docs/tasks/F1-presentation-time.md` aprovado e executado. APIs confirmadas no Smithay 0.7.0 fixado:
       `PresentationState::new::<D>(&dh, clk_id)` cria global v2 (`wayland/presentation/mod.rs:97-107,105`);
@@ -1346,6 +1366,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
+- **F2-event-stream (§3): código/teste/gates verdes, 3× harness OK; JUIZ VISUAL PENDENTE (§7).**
+  Falta também o **gate de sessão F2**: humano rodar Firefox-snap no tty3 (passo 1 de `F7-compat-snap.md`) e, com o
+  dado, decidir reduzir aquele cartão ou mantê-lo. **Não fazer snapd/slot.** Não abrir próximo cartão F2 sem "ok".
 - **F1 FECHADA (§3).** GATE FINAL no nested: foot/qterminal/gedit/Kate com 0 erros de protocolo; humano determinou
   o fechamento com os protocolos provados. Instância deixada aberta para o humano (PID 44480, apps
   44496/44523/44599/44833) — quem fecha é ele. Snap virou **cartão NOSSO** `F7-compat-snap.md` (§5), não ressalva DX;
@@ -1462,6 +1485,13 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **F2-event-stream (2026-11-23): amostras e armadilhas do cartão.** Baseline sem stream falhou; 2 corridas do
+  harness falharam por corrida (socket de eventos ainda não existia) e por `ipc_title` tentar parsear a linha inteira
+  com os campos extras do F1 — corrigidas, amostras preservadas. O bundle do painel foi reconstruído
+  (`bun build … --outfile packages/panel/dist/app.js`) e o harness passou a ler `BRIDGE aeroEvent` em vez de `list`
+  periódico; flutuou 2× no mapeamento de clique. `frame_window_id` segue com o flake pré-existente. Um
+  `aeroshell-shell` antigo (PID 29980, tty3 do humano) segura `dev.aeroshell.shell` no D-Bus e faz novas instâncias
+  saírem 0: o harness do painel agora usa `dbus-run-session`; o processo do humano NÃO foi tocado.
 - **GATE FINAL (2026-11-23): Nautilus 50 é GAP REAL de compatibilidade, NÃO é exceção DX.** Três execuções no nested:
   (1) bus do host: entra, loga `Connecting to org.freedesktop.Tracker3.Miner.Files` e sai sem janela;
   (2) `dbus-run-session -- nautilus`, 120 s: sem janela, `Cannot get portal org.freedesktop.host.portal.Registry
@@ -2035,6 +2065,10 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- **F2-event-stream (2026-11-23): JUIZ VISUAL PENDENTE + gate de sessão tty3 pendente.** O humano deve abrir a
+  instância nested deixada para ele, ver título/ícone da titlebar atualizarem ao vivo (sem poll) e confirmar; e rodar
+  Firefox-snap **como sessão** no tty3 (passo 1 de `F7-compat-snap.md`), trazendo o dado cru. Agente não troca VT e
+  não encerra a instância. Não medido: desempenho em GPU real (VM sem 3D) e DRM/tty3 deste cartão.
 - **GATE FINAL F1 (2026-11-23): humano determinou o fechamento com os protocolos provados.** Nested aberto (PID
   44480, socket `wayland-aero-f1-final`, log `/tmp/opencode/f1-final-gate/compositor.log`) com foot (44496), gedit
   (44523), qterminal (44599) e Kate (44833) mapeados no IPC e 0 erros de protocolo. Snap é cartão NOSSO
@@ -2463,7 +2497,14 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **SESSÃO ATUAL (2026-11-23): F1 FECHADA — commit `docs(state): F1 FECHADA` + cartão `F7-compat-snap` criado.**
+- **SESSÃO ATUAL (2026-11-23): F2-event-stream implementado, 3× OK, gates verdes; JUIZ VISUAL PENDENTE.**
+  Reproduzir (bench POR ÚLTIMO):
+  `cargo build --workspace --examples && cargo build -p aeroshell-compositor --features bench && python3 tests/integration/f2_event_stream.py`
+  → `VEREDITO: OK`; baseline sem `<ipc>.events` dava FALHA. `bun run generate:types` e `bun test` 10/10.
+  `check.sh` EXIT=0, clippy bench 0, no-default 0; sonda `EVENT_PUSH` 0 no binário normal. Instância para o juiz
+  deixada aberta (PID e socket no relatório da sessão). **Próximo: humano aprova o visual e traz o dado do
+  Firefox-snap no tty3; só então próximo cartão F2. Não mexer em snapd/slot.** Sem push.
+- **SESSÃO ANTERIOR (2026-11-23): F1 FECHADA — commit `docs(state): F1 FECHADA` + cartão `F7-compat-snap` criado.**
   Humano determinou o fechamento com *"F1 fecha com protocolos provados"* e reclassificou o snap: **não é ambiente
   descartável**; é lacuna nossa de integração/sessão (snapd provisiona só o socket padrão da SESSÃO no namespace do
   snap; GNOME funciona, nosso nested custom não). Cartão `docs/tasks/F7-compat-snap.md` (4 passos: tty3 como sessão,

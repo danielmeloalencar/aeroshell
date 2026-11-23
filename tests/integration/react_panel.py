@@ -10,6 +10,7 @@ A validação visual final é do humano, com a aplicação aberta (AGENTS.md §0
 """
 
 import atexit
+import json
 import os
 import re
 import socket
@@ -68,8 +69,10 @@ def launch(count):
         GTK4_LAYER_SHELL_LIB=os.environ.get("GTK4_LAYER_SHELL_LIB", "libgtk4-layer-shell.so.0"),
         RUST_LOG="info",
     )
+    # Bus privado: outra instância (ex.: tty3 do humano) pode segurar o nome
+    # D-Bus dev.aeroshell.shell e fazer este processo sair 0 sem ativar.
     shell = subprocess.Popen(
-        [str(ROOT / "target/debug/aeroshell-shell")],
+        ["dbus-run-session", "--", str(ROOT / "target/debug/aeroshell-shell")],
         env=shell_env, stdout=log_handle, stderr=subprocess.STDOUT,
     )
     proc._log_handle = log_handle
@@ -100,11 +103,20 @@ def wait_for(predicate, seconds=20):
 
 
 def panel_windows():
-    """Lista de `(id, título)` que o bridge entregou ao painel React.
+    """Lista de `(id, título)` do ÚLTIMO Snapshot PUSH entregue ao painel.
 
-    O bridge loga cada `list` com `lista=0 "foot" | 1 "foot"`. O campo `title`
-    vem do IPC como string JSON, então o regex captura o conteúdo entre aspas.
+    O bridge loga `BRIDGE aeroEvent event={"Snapshot":{...}}` (F2). Antes da F2
+    vinha de `painel React command="list" lista=...`; mantemos o fallback.
     """
+    events = re.findall(r'BRIDGE aeroEvent event=(\{.*\})$', clean(), re.MULTILINE)
+    for raw in reversed(events):
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        snapshot = parsed.get("Snapshot", {}).get("snapshot")
+        if snapshot is not None:
+            return [(w["id"], w["title"]) for w in snapshot.get("windows", [])]
     entries = re.findall(r'painel React command="list" lista=(.+)$', clean(), re.MULTILINE)
     if not entries:
         return []
@@ -179,7 +191,8 @@ def scenario(count):
         surfaces = [int(n) for n in re.findall(r'wl_surface@3\[(\d+)\]', before)]
         if len(surfaces) != count:
             fail(f"ordem de render inesperada: {before}")
-        back_id = surfaces[-1] - 1
+        # Sem o frame shell privilegeado os ids começam em 0; com ele, em 1.
+        back_id = surfaces[-1] - min(surfaces)
         if not 0 <= back_id < count:
             fail(f"id de trás fora da lista: {back_id} (ordem={before})")
         r = rects[back_id]
@@ -187,6 +200,8 @@ def scenario(count):
         cy = gy + int(r["y"]) + int(r["h"]) // 2
         print(f"geometry={gx},{gy} rects={rects} clique botão id={back_id} em {cx},{cy}")
 
+        event_count = lambda: len(re.findall(r'BRIDGE aeroEvent', clean()))
+        events_after = event_count()
         click(cx, cy)
         if not wait_for(lambda: render_order() != before, seconds=8):
             fail(f"clique não mudou a ordem de render (antes={before})")
@@ -195,17 +210,16 @@ def scenario(count):
         print("ordem depois:", after)
 
         front = after.split()[0] if after else ""
-        if f"[{back_id + 1}]" not in front:
-            fail(f"clique elegeu {front!r}, esperava o surface [{back_id + 1}] (id {back_id})")
+        # O índice do surface é o do render order (pode ser id ou id+1 conforme
+        # exista ou não o frame shell privilegeado); usar o valor observado.
+        if f"[{surfaces[-1]}]" not in front:
+            fail(f"clique elegeu {front!r}, esperava o surface [{surfaces[-1]}] (id {back_id})")
 
         # REGRESSÃO DO TRAVAMENTO: após o `focus`, o bridge precisa continuar
-        # respondendo `list`. Se `forward()` esperar o "." que só o `list`
-        # envia, o main loop congela e os botões ficam mortos na tela.
-        list_count = lambda: len(re.findall(r'painel React command="list"', clean()))
-        lists_after = list_count()
-        if not wait_for(lambda: list_count() > lists_after, seconds=6):
-            fail("bridge parou de responder após o clique (botões mortos na tela)")
-        print("bridge continuou respondendo após o clique")
+        # entregando eventos. Se o main loop congelar, o stream para.
+        if not wait_for(lambda: event_count() > events_after, seconds=6):
+            fail("bridge parou de entregar eventos após o clique (botões mortos)")
+        print("bridge continuou entregando eventos após o clique")
     finally:
         stop(procs)
 

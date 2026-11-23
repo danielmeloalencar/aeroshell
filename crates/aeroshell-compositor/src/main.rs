@@ -161,7 +161,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     // IPC de controle de janelas (list/focus/close/maximize) para o SDK/TS.
     if let Some(path) = std::env::var_os("AERO_WINDOW_IPC_SOCK") {
         let (sender, source) = channel::channel::<window_ipc::Command>();
-        window_ipc::spawn(&path.to_string_lossy(), sender)?;
+        window_ipc::spawn(&path.to_string_lossy(), sender.clone())?;
+        // F2: stream PUSH de eventos derivado do mesmo socket (sem env nova).
+        window_ipc::spawn_event_stream(&path.to_string_lossy(), sender.clone())?;
         event_loop
             .handle()
             .insert_source(source, |event, _, data| {

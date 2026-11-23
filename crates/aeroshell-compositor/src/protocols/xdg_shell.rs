@@ -65,7 +65,8 @@ struct ClientDrawsFrame(AtomicBool);
 #[derive(Default)]
 struct KdeAnsweredServer(AtomicBool);
 
-fn set_client_frame(surface: &WlSurface, value: bool) {
+fn set_client_frame(state: &mut AeroState, surface: &WlSurface, value: bool) {
+    let before = client_draws_frame(surface);
     with_states(surface, |states| {
         states
             .data_map
@@ -74,6 +75,19 @@ fn set_client_frame(surface: &WlSurface, value: bool) {
             flag.0.store(value, Ordering::Relaxed);
         }
     });
+    if before != value {
+        let id = state
+            .window_surfaces
+            .iter()
+            .find(|(_, candidate)| *candidate == surface)
+            .map(|(id, _)| *id);
+        if let Some(id) = id {
+            crate::window_ipc::emit_event(aeroshell_ipc::types::AeroEvent::Csd {
+                id,
+                client_frame: value,
+            });
+        }
+    }
 }
 
 pub fn client_draws_frame(surface: &WlSurface) -> bool {
@@ -165,6 +179,8 @@ impl XdgShellHandler for AeroState {
                 );
             }
         }
+        // F2: map/unmap é ponto de mudança do stream (sem pedir `list`).
+        self.emit_snapshot();
     }
 
     fn new_popup(&mut self, surface: PopupSurface, positioner: PositionerState) {
@@ -378,7 +394,7 @@ impl XdgDecorationHandler for AeroState {
                 .map(|id| id.to_string())
                 .unwrap_or_else(|| "?".to_owned())
         );
-        set_client_frame(toplevel.wl_surface(), false);
+        set_client_frame(self, toplevel.wl_surface(), false);
         self.server_side_decoration(toplevel);
     }
     fn request_mode(&mut self, toplevel: ToplevelSurface, mode: Mode) {
@@ -391,7 +407,7 @@ impl XdgDecorationHandler for AeroState {
                 .unwrap_or_else(|| "?".to_owned())
         );
         let client_frame = mode == Mode::ClientSide;
-        set_client_frame(toplevel.wl_surface(), client_frame);
+        set_client_frame(self, toplevel.wl_surface(), client_frame);
         #[cfg(feature = "bench")]
         if client_frame {
             eprintln!(
@@ -405,7 +421,7 @@ impl XdgDecorationHandler for AeroState {
         self.server_side_decoration(toplevel);
     }
     fn unset_mode(&mut self, toplevel: ToplevelSurface) {
-        set_client_frame(toplevel.wl_surface(), false);
+        set_client_frame(self, toplevel.wl_surface(), false);
         self.server_side_decoration(toplevel);
     }
 }
@@ -439,7 +455,7 @@ impl KdeDecorationHandler for AeroState {
                 .map(|id| id.to_string())
                 .unwrap_or_else(|| "?".to_owned())
         );
-        set_client_frame(surface, false);
+        set_client_frame(self, surface, false);
     }
 
     fn request_mode(
@@ -467,7 +483,7 @@ impl KdeDecorationHandler for AeroState {
                 .unwrap_or(false)
         });
         if let WEnum::Value(KdeMode::Client) = mode {
-            set_client_frame(surface, true);
+            set_client_frame(self, surface, true);
             #[cfg(feature = "bench")]
             if first_answer {
                 eprintln!(
@@ -485,7 +501,7 @@ impl KdeDecorationHandler for AeroState {
     }
 
     fn release(&mut self, _decoration: &OrgKdeKwinServerDecoration, surface: &WlSurface) {
-        set_client_frame(surface, false);
+        set_client_frame(self, surface, false);
     }
 }
 delegate_kde_decoration!(AeroState);

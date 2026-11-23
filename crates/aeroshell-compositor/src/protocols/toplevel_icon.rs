@@ -32,7 +32,9 @@ use smithay::{
     },
 };
 
-use crate::state::AeroState;
+use aeroshell_ipc::types::AeroEvent;
+
+use crate::{state::AeroState, window_ipc::emit_event};
 
 /// Um buffer de ícone já copiado: (largura, altura, escala, formato, pixels BGRA).
 pub type CopiedIconBuffer = (i32, i32, i32, &'static str, Vec<u8>);
@@ -240,11 +242,23 @@ impl Dispatch<XdgToplevelIconManagerV1, (), AeroState> for IconManager {
                         ),
                     }
                 }
+                let window_id = state
+                    .window_surfaces
+                    .iter()
+                    .find(|(_, s)| **s == surface)
+                    .map(|(id, _)| *id);
+                let icon_event = window_id.map(|id| AeroEvent::Icon {
+                    id,
+                    name: pixels.name.clone(),
+                    has_pixels: pixels.biggest.is_some(),
+                });
                 compositor::with_states(&surface, |states| {
                     let mut cached = states.cached_state.get::<IconPixels>();
                     *cached.pending() = pixels;
                 });
-                let _ = state;
+                if let Some(event) = icon_event {
+                    emit_event(event);
+                }
             }
             xdg_toplevel_icon_manager_v1::Request::Destroy => {}
             _ => unreachable!(),

@@ -13,6 +13,68 @@ fn ipc_socket_path() -> Option<std::ffi::OsString> {
     std::env::var_os("AERO_WINDOW_IPC_SOCK")
 }
 
+/// `<ipc>.events`: o mesmo socket derivado pelo compositor, sem env nova.
+fn event_socket_path() -> Option<std::path::PathBuf> {
+    let ipc = ipc_socket_path()?;
+    let mut path = std::path::PathBuf::from(ipc);
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("aero-ipc")
+        .to_owned();
+    path.set_file_name(format!("{name}.events"));
+    Some(path)
+}
+
+/// Consome o stream PUSH numa thread e entrega cada evento ao WebView no main loop.
+/// Não há `timeout`: o evento chega quando o compositor publica.
+pub fn install_event_stream(webview: &WebView) {
+    let Some(path) = event_socket_path() else {
+        tracing::warn!("AERO_WINDOW_IPC_SOCK ausente; stream de eventos desligado");
+        return;
+    };
+    // A thread ACORDA no socket; o main loop só drena o canal (1 ms, sem
+    // consultar o compositor nem fazer polling de 100 ms/1 s).
+    let (tx, rx) = std::sync::mpsc::channel::<String>();
+    let view = webview.clone();
+    gtk4::glib::timeout_add_local(std::time::Duration::from_millis(1), move || {
+        while let Ok(event) = rx.try_recv() {
+            let script = format!("window.__aeroEvent && window.__aeroEvent({event});");
+            view.evaluate_javascript(
+                &script,
+                None,
+                None,
+                None::<&webkit6::gio::Cancellable>,
+                |result| {
+                    if let Err(err) = result {
+                        tracing::warn!(%err, "evaluate_javascript do evento falhou");
+                    }
+                },
+            );
+            tracing::info!(event = %event, "BRIDGE aeroEvent");
+        }
+        gtk4::glib::ControlFlow::Continue
+    });
+    std::thread::spawn(move || {
+        let stream = match UnixStream::connect(&path) {
+            Ok(stream) => stream,
+            Err(err) => {
+                tracing::warn!(%err, ?path, "falha ao conectar no stream de eventos");
+                return;
+            }
+        };
+        tracing::info!(?path, "BRIDGE stream de eventos conectado");
+        for line in BufReader::new(stream).lines().map_while(Result::ok) {
+            if line.is_empty() {
+                continue;
+            }
+            if tx.send(line).is_err() {
+                break;
+            }
+        }
+    });
+}
+
 /// Encaminha um comando ao compositor e devolve as linhas da resposta.
 /// Uma conexão por comando: o protocolo IPC é textual e não mantém sessão.
 fn forward(command: &str) -> Vec<String> {

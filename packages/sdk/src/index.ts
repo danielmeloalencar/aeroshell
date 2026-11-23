@@ -1,6 +1,7 @@
 //! SDK mínimo: política TS sobre o transporte IPC do compositor.
 //! Os tipos de estado vêm de `./generated` (gerados por ts-rs a partir do Rust).
 
+import type { AeroEvent } from "./generated/AeroEvent";
 import type { Snapshot } from "./generated/Snapshot";
 import type { WindowInfo } from "./generated/WindowInfo";
 import { WindowStore } from "./store";
@@ -13,16 +14,30 @@ export function parseWindows(lines: string[]): WindowInfo[] {
   return lines
     .filter((line) => line.startsWith("W "))
     .map((line) => {
-      const [id, x, y, width, height, ...titleParts] = line.slice(2).split(" ");
+      const [id, x, y, width, height] = line.slice(2).split(" ");
+      // O título é uma string JSON (pode conter espaços); campos extras do F1
+      // (app_id/csd/transient/mode) vêm DEPOIS e não devem entrar no parse.
+      const quoted = line.match(/"(?:[^"\\]|\\.)*"/)?.[0];
       return {
         id: Number(id),
         x: Number(x),
         y: Number(y),
         width: Number(width),
         height: Number(height),
-        title: JSON.parse(titleParts.join(" ")) as string,
+        title: quoted ? (JSON.parse(quoted) as string) : "",
       };
     });
+}
+
+/** Converte uma linha do stream PUSH no tipo gerado por ts-rs. */
+export function parseEvent(json: string): AeroEvent | null {
+  try {
+    const value: unknown = JSON.parse(json);
+    if (typeof value !== "object" || value === null) return null;
+    return value as AeroEvent;
+  } catch {
+    return null;
+  }
 }
 
 function sameWindow(a: WindowInfo, b: WindowInfo): boolean {

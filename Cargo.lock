@@ -14,6 +14,7 @@ version = "0.0.0"
 name = "aeroshell-compositor"
 version = "0.0.0"
 dependencies = [
+ "aeroshell-ipc",
  "bitflags 2.13.2",
  "calloop 0.14.5",
  "rustix 1.1.6",

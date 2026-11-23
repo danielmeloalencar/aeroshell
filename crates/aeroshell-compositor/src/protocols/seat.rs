@@ -33,7 +33,9 @@ use smithay::{
     },
 };
 
-use crate::state::AeroState;
+use aeroshell_ipc::types::AeroEvent;
+
+use crate::{state::AeroState, window_ipc::emit_event};
 
 impl SeatHandler for AeroState {
     type KeyboardFocus = WlSurface;
@@ -74,6 +76,14 @@ impl SeatHandler for AeroState {
             "TESTE foco de teclado alterado"
         );
         let client = focused.and_then(|s| self.display_handle.get_client(s.id()).ok());
+        // F2: foco é ponto de mudança do stream (sem consultar IPC).
+        let focus_id = focused.and_then(|surface| {
+            self.window_surfaces
+                .iter()
+                .find(|(_, candidate)| *candidate == surface)
+                .map(|(id, _)| *id)
+        });
+        emit_event(AeroEvent::Focus { id: focus_id });
         set_data_device_focus(&self.display_handle, seat, client.clone());
         // F1-primary-selection: a primária segue o mesmo foco de teclado; o Smithay
         // recusa set_selection de cliente sem foco (device.rs:56-77).

@@ -5,6 +5,27 @@ import { createConnection, type Socket } from "node:net";
 
 import type { Transport } from "../../sdk/src/index";
 
+/** Stream PUSH: `<ipc>.events`, uma linha JSON por evento, sem polling. */
+export function eventStream(
+  path: string,
+  onEvent: (json: string) => void,
+): () => void {
+  const eventPath = `${path}.events`;
+  const socket: Socket = createConnection(eventPath);
+  let buffer = "";
+  socket.setEncoding("utf8");
+  socket.on("data", (chunk: string) => {
+    buffer += chunk;
+    let index: number;
+    while ((index = buffer.indexOf("\n")) !== -1) {
+      const line = buffer.slice(0, index).trim();
+      buffer = buffer.slice(index + 1);
+      if (line) onEvent(line);
+    }
+  });
+  return () => socket.destroy();
+}
+
 export function ipcTransport(path: string): Transport {
   return (command) =>
     new Promise<string[]>((resolve, reject) => {

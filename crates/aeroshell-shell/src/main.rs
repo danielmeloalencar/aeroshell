@@ -99,6 +99,7 @@ fn main() {
         scheme::install(&context);
         let webview = WebView::builder().web_context(&context).build();
         bridge::install(&window, &webview);
+        bridge::install_event_stream(&webview);
         webview.set_background_color(&gtk4::gdk::RGBA::new(0.0, 0.0, 0.0, 0.0));
         tracing::info!(
             alpha = webview.background_color().alpha(),
