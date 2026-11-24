@@ -43,8 +43,10 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
       binário normal. Vizinhos: `frame_title`, `frame_buttons`, `frame_resize_glue`, `headless_render_damage` OK;
       `f1_csd_gtk`, `f1_toplevel_icon` (com binário bench), `f1_csd_gtk --geometry-only` e `frame_buttons` falharam 1×
       e passaram nas repetições; `frame_window_id` segue no flake pré-existente com A/B em HEAD sem mudanças (§6).
-      **Não toquei no snap/F7 nem em F1.** Instância nested deixada para o juiz: PID 114460, socket
-      `wayland-aero-f2-ts-visual`.
+      **Não toquei no snap/F7 nem em F1.** Juiz visual: humano viu só `foot`/`gedit` porque os clientes sintéticos
+      tinham deadline fixo de 15 s; `policy_client.rs` passou a aceitar `AERO_POLICY_CLIENT_SECS` (padrão 15 s mantém
+      o harness) e a instância foi reiniciada limpa com clientes de 3600 s. Reiniciados somente PIDs iniciados pelo
+      agente. Instância final: PID 116497, socket `wayland-aero-f2-ts-visual3`; 4 janelas no IPC (§7).
 - [x] **F2-decoration-policy (2026-11-24) — FECHADO PELO JUIZ VISUAL: humano respondeu *"ok validado"*.**
       Veredito cobriu `foot` decorado, `gedit` sem barra dupla/flash, janela `aero-no-deco` sem moldura e botões do
       frame funcionando na instância nested (PID 103538). Commit `40e36b6`. Juiz visual aprovado; instância deixada
@@ -1543,6 +1545,12 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **F2-decoration-policy-ts (2026-11-24): juiz visual — clientes sintéticos desapareceram.** Humano relatou ver só
+  `foot`/`gedit`: `policy_client.rs` tinha deadline fixo de 15 s e ambos já tinham logado `POLICY_CLIENT OK` e saído
+  (IPC listava só 2 janelas). Relançar clientes na instância antiga não mapeou (clientes em `poll`, compositor em
+  `ep_poll`, IPC respondia só 2 janelas) → reiniciei a instância limpa com `AERO_POLICY_CLIENT_SECS=3600` e os 4
+  clientes apareceram. Correção mínima: duração configurável no example, padrão 15 s preservado; harness 1× OK e gate
+  verde depois. Instância antiga (PIDs 114460/114813/116292/116293) encerrada pelo agente; somente PIDs que iniciei.
 - **F2-decoration-policy-ts (2026-11-24): amostras e armadilhas.** Primeira execução do harness falhou só por case
   no parse (`policy=Client` vs `client` esperado); corrigido o `.lower()` no harness, sem tocar no runtime — amostra
   preservada em `/tmp/opencode/f2-fullpolicy/after1.log`. `f1_csd_gtk` falhou 1× em "grab de move não iniciou" e
@@ -2158,13 +2166,16 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- **F2-decoration-policy-ts (2026-11-24): JUIZ VISUAL PENDENTE.** Instância nested deixada aberta: compositor PID
-  114460, socket `wayland-aero-f2-ts-visual`, IPC `/tmp/opencode/f2-fullpolicy/visual/ipc.sock`, runtime Bun PID
-  114813 (`/tmp/opencode/f2-fullpolicy/visual/runtime-edited.log`, regras `rules-edited.ts`), clientes sintéticos PIDs
-  114505 (`aero-no-deco`) e 114833 (`aero-ts-visual`). Humano deve conferir: `foot` decorado, `gedit` sem barra
-  dupla/flash, `aero-no-deco` sem moldura, `aero-ts-visual` sem moldura por regra `.ts` editada sem recompilar Rust,
-  controlos do frame funcionando. Agente não encerrou processos; quem fecha é o humano. Não medido: GPU real/DRM
-  (VM sem 3D), latência da decisão TS em sessão real, hot-reload (fora de escopo).
+- **F2-decoration-policy-ts (2026-11-24): JUIZ VISUAL PENDENTE (reiniciado após relato do humano).** Instância nested
+  aberta: compositor PID 116497, socket `wayland-aero-f2-ts-visual3`, IPC
+  `/tmp/opencode/f2-fullpolicy/visual3/ipc.sock`, runtime Bun PID 116895
+  (`/tmp/opencode/f2-fullpolicy/visual3/runtime-edited.log`, regras `rules-edited.ts`), clientes sintéticos PIDs
+  116532 (`aero-no-deco`) e 116915 (`aero-ts-visual`), ambos com `AERO_POLICY_CLIENT_SECS=3600`. IPC lista 4 janelas
+  (`W 0 aero-no-deco`, `W 1 foot`, `W 2 gedit`, `W 3 aero-ts-visual`); decisões `none/server/client/none` com
+  `POLICY_RENDER suppressed=policy_none` 378× no id 0 e 250× no id 3. Humano deve conferir: `foot` decorado, `gedit`
+  sem barra dupla/flash, `aero-no-deco` e `aero-ts-visual` sem moldura (esta última por regra `.ts` editada sem
+  recompilar Rust), controlos do frame. Agente não encerrou esta instância; quem fecha é o humano. Não medido: GPU
+  real/DRM (VM sem 3D), latência da decisão TS em sessão real, hot-reload (fora de escopo).
 - **F2-decoration-policy (2026-11-24): JUIZ VISUAL APROVADO ("ok validado").** Instância nested (PID 103538,
   `wayland-aero-f2-policy-visual2`) deixada aberta; humano conferiu `foot` decorado, `gedit` sem barra dupla/flash,
   `aero-no-deco` sem moldura e controlos do frame. Não medido: GPU real/DRM (VM sem 3D) e desempenho da consulta de
@@ -2607,8 +2618,9 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
   → `VEREDITO: OK`; baseline sem runtime TS dava FALHA. Unitário `bun test packages/runtime/src/decoration-policy.test.ts`
   5/5, `bun test` 15/15. Regras em `packages/runtime/src/rules.ts`; runtime em `packages/runtime/src/policy.ts`;
   `AERO_DECORATION_RULES=<arquivo.ts>` troca as regras no startup. `check.sh` 0, clippy bench 0, no-default 0, sonda
-  `POLICY`/`POLICY_TS` 0 no binário normal. Vizinhos e amostras em §6. Instância do juiz: PID 114460, socket
-  `wayland-aero-f2-ts-visual` (§7). **Próximo: só com "ok" — cartão de hot-reload; NÃO tocar no snap.** Sem push.
+  `POLICY`/`POLICY_TS` 0 no binário normal. Vizinhos e amostras em §6. Instância do juiz: PID 116497, socket
+  `wayland-aero-f2-ts-visual3`, 4 janelas visíveis com clientes de 3600 s (§7). **Próximo: só com "ok" — cartão de
+  hot-reload; NÃO tocar no snap.** Sem push.
 - **SESSÃO ENCERRADA (2026-11-24): F2-decoration-policy FECHADA PELO JUIZ VISUAL ("ok validado").**
   Reproduzir (bench POR ÚLTIMO):
   `cargo build --workspace --examples && cargo build -p aeroshell-compositor --features bench && python3 tests/integration/f2_decoration_policy.py`

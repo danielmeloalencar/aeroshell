@@ -135,7 +135,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     surface.commit();
     queue.roundtrip(&mut app)?;
     eprintln!("POLICY_CLIENT READY app_id={app_id}");
-    let deadline = Instant::now() + Duration::from_secs(15);
+    // Harness usa 15 s; juiz visual pode manter a janela aberta com env.
+    let secs = std::env::var("AERO_POLICY_CLIENT_SECS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(15);
+    let deadline = Instant::now() + Duration::from_secs(secs);
     while Instant::now() < deadline {
         queue.roundtrip(&mut app)?;
         std::thread::sleep(Duration::from_millis(40));
