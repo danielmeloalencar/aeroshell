@@ -550,9 +550,13 @@ impl AeroState {
                 let explicit = client_draws_frame(toplevel.wl_surface());
                 // GTK4/gedit NÃO pede ClientSide, mas desenha sombra fora da
                 // window geometry (Domicile: window_geometry.rs). Origem != 0
-                // é o sinal observável no caso real.
+                // é o sinal observável no caso real — SÓ enquanto não há decisão
+                // explícita da política (F2). O shell pergunta `csd` para decidir
+                // se esconde a barra: se a geometria vencesse, um `Client→Server`
+                // ao vivo nunca restaurava a moldura (juiz visual 2026-11-24).
                 let geo = window.geometry();
-                let from_geometry = geo.loc.x != 0 || geo.loc.y != 0;
+                let from_geometry = self.decoration(id as u32).is_none()
+                    && (geo.loc.x != 0 || geo.loc.y != 0);
                 #[cfg(feature = "bench")]
                 eprintln!(
                     "CSD_GEOM t={} window_id={id} loc=({},{}) size=({},{}) explicit={explicit} from_geometry={from_geometry}",

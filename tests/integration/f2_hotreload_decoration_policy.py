@@ -153,9 +153,17 @@ def main():
 
         def frameweb_event(action):
             """Barra do frame no DOM: o que o olho vê, além do mapa de decisões."""
+            text = clog()
+            if action == "frame_restored":
+                # eprintln! concorrente pode intercalar a linha do frame_restored;
+                # csd_restored (linha intacta) é a prova do window_id.
+                restored_ids = re.findall(
+                    r"FRAMEWEB: csd_restored[^\n]*window_id=(\d+)", text
+                )
+                return [int(w) for w in restored_ids] if "FRAMEWEB: frame_restored" in text else []
             return [
                 int(wid)
-                for wid in re.findall(rf"FRAMEWEB: {action}[^\n]*window_id=(\d+)", clog())
+                for wid in re.findall(rf"FRAMEWEB: {action}[^\n]*window_id=(\d+)", text)
             ]
 
         initial_ok = wait_for(
