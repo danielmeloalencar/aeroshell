@@ -21,6 +21,19 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [~] **F2-shell-real — 2ª correção da moldura: `configure` ao trocar insets (2026-11-24); juiz 7ª rodada pendente (§7).**
+      Juiz da 6ª rodada: o `frame_cb_request` passou a acontecer, mas a decoração ainda falhava
+      **aleatoriamente** — 3ª troca para `Server` preenchia, 4ª preenchia só um `foot`. Log mostrou
+      que só a **primeira** restauração gerou `configure`/`frame_painted`; `set_insets` atualizava a
+      geometria interna, mas o WebView só pinta a moldura nova ao receber um `configure`.
+      **Correção:** `FrameRequest::SetInsets` em `aero_frame.rs` envia `send_frame_configure()` com o
+      conteúdo atual quando as insets mudam. **Teste-first estendido**
+      (`f2_shell_real_policy_restore.py` agora exige `FRAMEWEB: configure serial=` após CADA
+      transição): baseline no binário pré-fix `VEREDITO: FALHA` (configure 2→2, 2→2) → **3× `OK`**
+      com configure novo em `None` e `Server`. Gates `check.sh` EXIT=0, clippy bench 0, build 0;
+      `f2_hotreload_*`/`f2_full_decoration_policy` OK; vizinhos OK. `f2_shell_real` falhou 1× por
+      `ERR timeout` no transporte IPC (3 s) sob carga e passou 2× depois — amostra em §6, não
+      descartada. **Não toquei snap/F7/F1.**
 - [~] **F2-shell-real — correção da moldura parcial ao restaurar `Server` (2026-11-24); juiz 6ª rodada pendente (§7).**
       Juiz da 5ª rodada: com 18 GiB de RAM e **sem `--size`**, o atraso de 5–10 s e o desalinhamento de
       clique/move/resize desapareceram; `Server→None` escondeu a decoração. Mas `None→Server` não a
@@ -1622,6 +1635,21 @@ fechados, fora da fila.
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **F2-shell-real — `set_insets` sem `configure` deixava a moldura aleatória (2026-11-24).** O
+  `wl_surface.frame()` pedido pelo shell não basta: o WebView só repinta ao receber
+  `aero_frame.configure`. Só a 1ª transição tinha configure (por commit casual do cliente);
+  corrigido em `aero_frame.rs` (`send_frame_configure` quando `old.insets != new.insets`).
+  Baseline FALHA, 3× OK. A 1ª correção (`request_frame_recompute`) continua necessária — as duas
+  juntas são a correção completa.
+- **F2-shell-real — `f2_shell_real.py` intermitente por timeout de IPC (2026-11-24).** 1 execução
+  falhou só em `zero erros de protocolo` (`POLICY_TS RELOAD ERROR dispatch: ERR timeout`,
+  `reason=timeout` em 2 janelas) com ~11 clientes e `bench`; repetida 2× → `VEREDITO: OK`. Amostra
+  preservada em `/tmp/opencode/f2-shell-real/reg-cfg-f2_shell_real.log`. Transporte IPC tem timer
+  fixo de 3 s em `packages/runtime/src/ipc-client.ts:37` — não mexido neste cartão.
+- **Setup do juiz — o humano fecha as instâncias quando vê artefatos visuais**, não são mortes
+  espontâneas (corrigido o diagnóstico em 2026-11-24). Na 6ª rodada ele viu um `foot` enorme e 2
+  outros `foot` no harness e fechou; tamanhos medidos nos configure eram 798x598 (não enormes),
+  então a causa do "enorme" segue sem medição — registrar, não descartar.
 - **F2-shell-real — moldura parcial ao voltar a `Server` após resize (2026-11-24).** Juiz visual:
   título decorado, sem borda inferior e metade das laterais. Causa medida: troca de insets/slices
   sem `wl_surface.frame()` — o compositor só recomputava o 9-slice no commit following do resize,
@@ -2335,6 +2363,12 @@ fechados, fora da fila.
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- **F2-shell-real (2026-11-24): 7ª RODADA DO JUIZ ABERTA (com `send_frame_configure` ao trocar insets).**
+  Instância sem `bench`, sem `--size`, 18 GiB: comp PID 23103, runtime 23123, shell 23175, gedit
+  23443, socket `wayland-aero-f2-shell-real-visual7`, IPC `/tmp/opencode/f2-shell-real/visual7/ipc.sock`,
+  regras `/tmp/opencode/f2-shell-real/visual7/config/aeroshell/rules.ts` (`foot→Server`, `gedit→Client`).
+  3 janelas no IPC (798x598, 798x598, 800x600) e 3 linhas no painel. **Aguardando veredito final;
+  não fechar a instância.** Rodadas 1–6 reprovadas ou com defeito relatado; cartão ainda NÃO fechado.
 - **F2-shell-real (2026-11-24): 6ª RODADA DO JUIZ ABERTA (com correção da moldura parcial).** A 5ª
   rodada (sem `--size`) confirmou a correção do atraso/desalinhamento e encontrou a moldura parcial
   ao voltar a `Server` após resize; corrigida e provada por `f2_shell_real_policy_restore.py`
@@ -2824,13 +2858,14 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **SESSÃO ATUAL (2026-11-24): F2-shell-real — correção da moldura parcial aplicada e provada
-  (baseline FALHA, 3× OK); JUIZ VISUAL 6ª RODADA ABERTA (§7).** O medidor A/B (§6) descartou loop em
-  repouso e falso reload; o defeito real era a falta de `wl_surface.frame()` após trocar insets.
-  Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build --workspace --examples && python3 tests/integration/f2_shell_real_policy_restore.py`
-  → `VEREDITO: OK`; baseline no `HEAD` pré-fix `VEREDITO: FALHA`. `check.sh` EXIT=0, clippy bench 0,
-  regressões e vizinhos OK. **Próximo passo imediato:** humano olhar a instância visual6 e repetir
-  resize + `Server→None→Server`; se aprovou, dar o "ok", atualizar §3/§7/§9 e fechar o cartão, e PARAR.
+- **SESSÃO ATUAL (2026-11-24): F2-shell-real — 2ª correção da moldura (configure ao trocar insets)
+  provada (baseline FALHA, 3× OK); JUIZ VISUAL 7ª RODADA ABERTA (§7).** A 1ª correção
+  (`wl_surface.frame`) sozinha era insuficiente; o WebView só repinta com `configure`. Reproduzir:
+  `cargo build -p aeroshell-compositor --features bench && cargo build --workspace --examples && python3 tests/integration/f2_shell_real_policy_restore.py`
+  → `VEREDITO: OK`; baseline pré-fix `VEREDITO: FALHA`. `check.sh` EXIT=0, clippy bench 0,
+  `f2_hotreload_*`/full OK, vizinhos OK; `f2_shell_real` 1× `ERR timeout` sob carga e 2× OK (§6).
+  **Próximo passo imediato:** humano olhar a instância visual7 e repetir `Server→None→Server` várias
+  vezes, com e sem resize; se aprovou, dar o "ok", atualizar §3/§7/§9, fechar o cartão e PARAR.
   Worktree A/B em `/home/daniel/Projetos/aeroshell-stable` (b532a0c). snap/F7/F1 intocados; sem push.
   Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build --workspace --examples && cargo build -p aeroshell-shell && bun build packages/panel/src/index.tsx --target=browser --outfile=packages/panel/dist/app.js && bun run generate:types && python3 tests/integration/f2_shell_real.py`
   → `VEREDITO: OK` 3× (`finalC{1,2,3}.log`); baseline no HEAD `VEREDITO: FALHA`. Unitário 28/28,

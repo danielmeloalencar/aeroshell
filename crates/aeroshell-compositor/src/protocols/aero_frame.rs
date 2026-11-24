@@ -560,8 +560,18 @@ impl Dispatch<AeroFrameV1, u32> for AeroState {
                         insets: (left, top, right, bottom),
                         ..old
                     };
+                    let changed = old.insets != new.insets;
                     state.frame_geometries.insert(surface.clone(), new);
                     state.sync_initial_canvas_insets(&surface, old, new);
+                    // `set_insets` sozinho muda a geometria interna, mas o WebView
+                    // só pinta a moldura nova quando recebe um configure. Sem isto,
+                    // ao voltar a Server a decoração aparecia parcial (ou não
+                    // aparecia) até um commit casual do cliente (juiz 6ª rodada).
+                    if changed {
+                        if let Some(content) = state.client_content_size(*window_id) {
+                            state.send_frame_configure(*window_id, content, "insets");
+                        }
+                    }
                 }
                 tracing::info!(window_id = *window_id, left, top, right, bottom, "insets");
             }
