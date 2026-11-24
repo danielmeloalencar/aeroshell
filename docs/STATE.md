@@ -1608,13 +1608,15 @@ fechados, fora da fila.
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
-- **F2-shell-real — 1ª rodada do juiz reprovada (2026-11-24): sessão instável e desenho incompleto.**
-  Humano viu janelas impossíveis de mover, desenho incompleto e lentidão extrema. O compositor da
-  instância morreu ~45–58 s após subir, sem panic no log (última linha `FRAME_SUMMARY`), e o shell
-  perdeu a conexão Wayland. Hipótese (NÃO confirmada): ambiente VM sem 3D sob carga do host
-  (`gnome-shell` em R, llvmpipe) — `f1_csd_gtk`/`frame_buttons` passam em instância limpa, então o
-  código de move/frame não regrediu nos harnesses. Falta medidor de sobrevivência e de integridade
-  de pixels na sessão longa do juiz; não corrigir no escuro.
+- **F2-shell-real — JUIZ VISUAL REPROVADO 3× (2026-11-24): tremor, vazamento e redesenho infinito.**
+  Humano: janelas impossíveis de mover, desenho incompleto, lentidão extrema, e (nas 3 tentativas)
+  a janela do compositor tremia com o conteúdo vazado, mostrando a área de trabalho por trás, como
+  um rastro de redesenho infinito. **Hipóteses descartadas com evidência:** (1) "compositor morre
+  sozinho" — o humano quem fechou; (2) "sondas bench alagando o log" — a 3ª rodada foi sem bench e
+  com 259 linhas de log e o defeito persistiu. `f1_csd_gtk`/`frame_buttons`/`headless_render_damage`
+  passam, então o mecanismo de move/damage não regrediu nos harnesses existentes. **Lacuna:** não
+  existe medidor de estabilidade de redesenho da janela winit nem de integridade de pixels na sessão
+  longa — é exatamente o que o humano vê. Criar essa medição antes de qualquer correção. VM sem 3D.
 - **F2-shell-real — `react_panel.py` falhou 3× no clique de foco (2026-11-24).** O log prova que o clique
   focou a janela certa (`BRIDGE aeroEvent {"Focus":{"id":1}}`, `ordem de render` mudou); a asserção
   quebrada é a suposição antiga `id N -> wl_surface@3[N+1]`, que não vale com os frames associados.
@@ -2304,9 +2306,14 @@ fechados, fora da fila.
   indicadores `server`/`client`, foco), mas o resto da sessão falhou. A instância (compositor PID
   22526, shell 22584, gedit 22883, runtime 22545, socket `wayland-aero-f2-shell-real-visual2`) morreu
   sozinha ~58 s após subir: `shell.log` registra `Lost connection to Wayland compositor`, e
-  `comp.log` termina em `FRAME_SUMMARY … mean_ms=49 p95_ms=73` **sem panic**. A 1ª instância já
-  tinha morrido ~45 s após subir (PIDs 21119/21183/21468). Duas tentativas de juiz, mesma causa
-  aparente — **PARE e peça decisão, sem terceira via por conta própria** (AGENTS §4.1/§0.4).
+  **CORREÇÃO DO HUMANO: as instâncias NÃO morreram sozinhas — ele quem as fechou.** O `Lost
+  connection` no log do shell é consequência do fechamento, não causa. Sintoma exato relatado na
+  2ª/3ª tentativa: *"estava tremendo a janela do compositor e seu conteúdo estava vazado, mostrando
+  a janela por trás (área de trabalho), estava um rastro, como se estivesse redesenhando algo
+  várias vezes, infinitamente"*. A 3ª instância (PID 25045, `visual3`) rodou **sem `--features
+  bench`** e com `RUST_LOG=info` (259 linhas de log, contra 131.775 da 1ª) e **apresentou o mesmo
+  problema** — hipótese do dilúvio de sondas DESCARTADA. Causa permanece desconhecida; sem medidor
+  de tremor/redesenho infinito, não corrigir no escuro. **PARAR: regra das duas tentativas.**
   **Lacuna de medição:** `f1_csd_gtk.py` (move + resize) e `frame_buttons.py` passaram DEPOIS das
   mudanças, em instância limpa — mas nenhum harness mede estabilidade de longa duração nem
   integridade de pixels na sessão do juiz, que é justamente o que o humano viu. Registrar e criar
@@ -2762,11 +2769,12 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **SESSÃO ATUAL (2026-11-24): F2-shell-real — código/teste/gates verdes, JUIZ VISUAL REPROVADO NA 1ª
-  RODADA (§7); PARE.** Causa aparente é a instância morrer sozinha ~1 min após subir (duas vezes),
-  sem panic no log; harnesses de move/resize limpos passam. **Próximo passo: decisão do humano** —
-  relançar numa sessão com o host estável OU investigar a sobrevivência do compositor com medidor
-  novo (não fazer as duas coisas ao mesmo tempo). Não tocar snap/F7/F1; sem push.
+- **SESSÃO ATUAL (2026-11-24): F2-shell-real — código/teste/gates verdes, JUIZ VISUAL REPROVADO 3×
+  (§7); PARE.** O humano fechou as 3 instâncias por tremor/vazamento/redesenho infinito. Duas
+  hipóteses descartadas (morte espontânea; dilúvio de bench). **Próximo passo (decisão do humano):**
+  escrever um medidor objetivo de redesenho contínuo + integridade de pixels na janela winit antes
+  de tocar no código — os harnesses atuais não medem o que ele viu. Não relançar ainda; não tocar
+  snap/F7/F1; sem push.
   Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build --workspace --examples && cargo build -p aeroshell-shell && bun build packages/panel/src/index.tsx --target=browser --outfile=packages/panel/dist/app.js && bun run generate:types && python3 tests/integration/f2_shell_real.py`
   → `VEREDITO: OK` 3× (`finalC{1,2,3}.log`); baseline no HEAD `VEREDITO: FALHA`. Unitário 28/28,
   gate `gate-close.log` EXIT=0. **Próximo passo imediato:** humano olhar o painel da instância aberta
