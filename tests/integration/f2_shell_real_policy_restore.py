@@ -131,6 +131,8 @@ def main():
                                ("Server", "FRAMEWEB: csd_restored")):
             before = clean(comp_log).count("FRAMEWEB: frame_cb_request window_id=0")
             before_cfg = clean(comp_log).count("FRAMEWEB: configure serial=")
+            before_nudge = clean(comp_log).count("FRAMEWEB: repaint_nudge")
+            before_buffer = clean(comp_log).count("FRAME_BUFFER_COMMIT buffer=Some")
             write_rules(rules, policy)
             if not wait_for(
                 lambda: any(
@@ -158,6 +160,21 @@ def main():
                 )
             checks[f"{policy} entrega buffer pintado"] = no_buffer == 0
             print(f"=== {policy}: commits sem buffer após transição={no_buffer} ===")
+            if policy == "Server":
+                nudge_ok = wait_for(
+                    lambda: clean(comp_log).count("FRAMEWEB: repaint_nudge") > before_nudge,
+                    5,
+                )
+                buffer_ok = wait_for(
+                    lambda: clean(comp_log).count("FRAME_BUFFER_COMMIT buffer=Some") > before_buffer,
+                    5,
+                )
+                checks["nudge sincronizado após a restauração"] = nudge_ok
+                checks["novo buffer pintado após a restauração"] = buffer_ok
+                print(
+                    f"=== Server: nudge {before_nudge}->{clean(comp_log).count('FRAMEWEB: repaint_nudge')} "
+                    f"buffer {before_buffer}->{clean(comp_log).count('FRAME_BUFFER_COMMIT buffer=Some')} ==="
+                )
             cfg_ok = wait_for(
                 lambda: clean(comp_log).count("FRAMEWEB: configure serial=") > before_cfg,
                 8,

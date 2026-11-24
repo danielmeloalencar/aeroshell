@@ -1067,12 +1067,18 @@ const TITLEBAR_HTML: &str = r#"<!doctype html>
     window.aeroShowFrame = () => {
       const bar = document.getElementById('bar');
       const border = document.getElementById('border');
-      bar.style.display = '';
-      border.style.display = '';
+      bar.style.display = 'flex';
+      border.style.display = 'block';
       window.webkit.messageHandlers.aero.postMessage({
         action: 'frame_restored',
         bar: getComputedStyle(bar).display,
         border: getComputedStyle(border).display
+      });
+      // O host precisa redesenhar o WebView DEPOIS de o estilo virar commit
+      // de layout. Sem o rAF, queue_draw() chega antes do reflow e o dano
+      // gerado é 0x0 — a moldura fica invisível mas interativa (juiz visual).
+      requestAnimationFrame(() => {
+        window.webkit.messageHandlers.aero.postMessage({ action: 'frame_needs_repaint' });
       });
     };
     window.aeroSetTitle = (title) => {
@@ -1382,6 +1388,7 @@ fn prewarm_frame() {
 
     let window_id = Rc::new(Cell::new(None));
     let callback_window_id = Rc::clone(&window_id);
+    let repaint_window = window.clone();
     let manager = UserContentManager::new();
     manager.register_script_message_handler("aero", None);
     manager.connect_script_message_received(Some("aero"), move |_, value| {
@@ -1415,6 +1422,21 @@ fn prewarm_frame() {
                     if bar == "none" { "hidden" } else { bar },
                     if border == "none" { "hidden" } else { border }
                 );
+            }
+            Some("frame_needs_repaint") => {
+                // Chega num requestAnimationFrame posterior ao `display:flex`,
+                // então o reflow já aconteceu: o queue_draw agora gera dano real.
+                if let Some(view) = repaint_window
+                    .child()
+                    .and_then(|child| child.downcast::<WebView>().ok())
+                {
+                    view.queue_draw();
+                    eprintln!(
+                        "FRAMEWEB: repaint_nudge window_id={:?} t={}",
+                        callback_window_id.get(),
+                        bench_t()
+                    );
+                }
             }
             Some("frame_restored") => {
                 let bar = parsed.get("bar").and_then(|v| v.as_str()).unwrap_or("");

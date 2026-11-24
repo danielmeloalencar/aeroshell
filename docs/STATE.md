@@ -21,6 +21,18 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [~] **F2-shell-real — nudge de repaint sincronizado (2026-11-24); juiz 9ª rodada pendente (§7).**
+      O humano descartou a hipótese "falta `aeroShowFrame` no JS" — verificado: a função existe em
+      `frame_webview.rs:1067`, é chamada em `:1002`, e o log mostra `frame_restored … bar=flex
+      border=block` nos dois ciclos. Hipótese aceita: o `queue_draw()` precisava acontecer **depois**
+      do reflow do `display:flex/block`, não antes (dano 0×0).
+      **Mudança:** `requestAnimationFrame` no JS posta `frame_needs_repaint`; o handler Rust faz
+      `webview.queue_draw()` e loga `FRAMEWEB: repaint_nudge` (`frame_webview.rs:1392`, `:1420`).
+      **Teste-first:** `f2_shell_real_policy_restore.py` agora exige `repaint_nudge` e novo
+      `FRAME_BUFFER_COMMIT buffer=Some` após a restauração → baseline `VEREDITO: FALHA` (nudge 0→0) →
+      **3× `VEREDITO: OK`**. `check.sh` EXIT=0, clippy bench 0, `f2_shell_real_reload_after_timeout`,
+      `f2_hotreload_*`, `f2_full_decoration_policy` OK; vizinhos OK (`frame_title` 1 falha + 1 OK,
+      flake documentado). **Não toquei snap/F7/F1.**
 - [~] **F2-shell-real — `policy-reload` reconsulta TODAS as janelas (2026-11-24); juiz 8ª rodada pendente (§7).**
       O medidor de pixels revelou que, após um `reason=timeout`, a janela afetada deixava de ser
       reconsultada: `policy-reload` percorria só `decorations.keys()`, e `policy_fallback` não guarda
@@ -2398,6 +2410,12 @@ fechados, fora da fila.
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- **F2-shell-real (2026-11-24): 9ª RODADA DO JUIZ ABERTA (com nudge sincronizado).** Instância sem
+  `bench`, sem `--size`: comp PID 51320, runtime 51332, shell 51414, gedit 51644, socket
+  `wayland-aero-f2-shell-real-visual9`, IPC `/tmp/opencode/f2-shell-real/visual9/ipc.sock`, regras
+  `/tmp/opencode/f2-shell-real/visual9/config/aeroshell/rules.ts` (`foot→Server`, `gedit→Client`).
+  3 janelas no IPC. **Aguardando veredito; não fechar a instância.** Rodadas 1–8 com defeitos
+  relatados; cartão ainda NÃO fechado.
 - **F2-shell-real (2026-11-24): 8ª RODADA DO JUIZ ABERTA (após `policy-reload` todas as janelas).**
   Instância sem `bench`, sem `--size`: comp PID 43704, runtime 43720, shell 43803, gedit 44036,
   socket `wayland-aero-f2-shell-real-visual8`, IPC `/tmp/opencode/f2-shell-real/visual8/ipc.sock`,
@@ -2899,15 +2917,16 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **SESSÃO ATUAL (2026-11-24): F2-shell-real — `policy-reload` reconsulta todas as janelas
-  (baseline FALHA, 3× OK); JUIZ VISUAL 8ª RODADA ABERTA (§7).** Correções anteriores mantidas:
-  `request_frame_recompute` (shell) e `send_frame_configure` ao trocar insets (compositor).
-  Medidor de pixels e duas hipóteses não provadas foram revertidos (§6). Reproduzir:
-  `cargo build -p aeroshell-compositor --features bench && cargo build --workspace --examples && python3 tests/integration/f2_shell_real_reload_after_timeout.py && python3 tests/integration/f2_shell_real_policy_restore.py`
-  → ambos `VEREDITO: OK`. `check.sh` EXIT=0, clippy bench 0. **Próximo passo imediato:** humano
-  olhar a instância visual8 e alternar `Server↔None` nas DUAS janelas; se aprovou, dar o "ok",
-  atualizar §3/§7/§9, fechar o cartão e PARAR. Worktree A/B em
-  `/home/daniel/Projetos/aeroshell-stable` (b532a0c). snap/F7/F1 intocados; sem push.
+- **SESSÃO ATUAL (2026-11-24): F2-shell-real — nudge de repaint sincronizado provado
+  (baseline FALHA, 3× OK); JUIZ VISUAL 9ª RODADA ABERTA (§7).** Correções mantidas:
+  `request_frame_recompute`, `send_frame_configure` ao trocar insets e `policy-reload` sobre todas
+  as janelas. A hipótese "aeroShowFrame ausente" foi descartada com `arquivo:linha` e log; a causa
+  agora é o dano 0×0 do `queue_draw` antes do reflow, resolvida com `requestAnimationFrame`.
+  Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build --workspace --examples && python3 tests/integration/f2_shell_real_policy_restore.py`
+  → `VEREDITO: OK`. `check.sh` EXIT=0, clippy bench 0. **Próximo passo imediato:** humano olhar a
+  instância visual9 e alternar `Server↔None` nas DUAS janelas 3×; se aprovou, dar o "ok", atualizar
+  §3/§7/§9, fechar o cartão e PARAR. Worktree A/B em `/home/daniel/Projetos/aeroshell-stable`.
+  snap/F7/F1 intocados; sem push.
   Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build --workspace --examples && cargo build -p aeroshell-shell && bun build packages/panel/src/index.tsx --target=browser --outfile=packages/panel/dist/app.js && bun run generate:types && python3 tests/integration/f2_shell_real.py`
   → `VEREDITO: OK` 3× (`finalC{1,2,3}.log`); baseline no HEAD `VEREDITO: FALHA`. Unitário 28/28,
   gate `gate-close.log` EXIT=0. **Próximo passo imediato:** humano olhar o painel da instância aberta
