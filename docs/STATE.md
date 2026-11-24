@@ -1509,7 +1509,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
    ("aprovado"); F1-presentation-time FECHADO (3× OK headless+winit, gates verdes, sonda fora do binário normal,
    juiz visual N/A). **GATE FINAL executado e F1 FECHADA (§3).**
    **F2: `F2-event-stream-typed-sdk.md` FECHADO (juiz); `F2-decoration-policy.md` FECHADO (juiz);
-   `F2-decoration-policy-ts.md` em execução nesta sessão (política completa em TS/Bun), aguardando juiz visual.
+   `F2-decoration-policy-ts.md` FECHADO (juiz, "sim. aprovado"): política completa em TS/Bun e regra editada sem
+    recompilar Rust.
    `F7-compat-snap.md` segue como cartão nosso de sessão, com dado + plano de experimento, sem snapd/slot e sem
    intercalar com F2.**
    **Próximo: só com "ok" — cartão de hot-reload das regras TS (carregamento no startup neste cartão).**
