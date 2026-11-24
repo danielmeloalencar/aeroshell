@@ -387,8 +387,17 @@ impl AeroState {
                 if !self.policy_runtime {
                     return "ERR runtime de política não conectado".to_owned();
                 }
-                let mut ids: Vec<u32> = self.decorations.keys().copied().collect();
+                // TODAS as janelas existentes, não só `decorations`: uma decisão
+                // que expirou (reason=timeout) cai em `policy_fallback` e NÃO
+                // entra no mapa — com o código antigo ela nunca mais era
+                // reconsultada e ficava sem decoração para sempre (juiz visual).
+                let mut ids: Vec<u32> = self.window_surfaces.keys().copied().collect();
                 for id in self.pending_policies.keys().copied() {
+                    if !ids.contains(&id) {
+                        ids.push(id);
+                    }
+                }
+                for id in self.decorations.keys().copied() {
                     if !ids.contains(&id) {
                         ids.push(id);
                     }
