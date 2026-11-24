@@ -2310,10 +2310,15 @@ fechados, fora da fila.
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- **F2-shell-real (2026-11-24): JUIZ VISUAL REPROVADO NA 1ª RODADA — NÃO FECHAR.** Humano, com
-  screenshot: *"Não está dando para mover as janelas, as janelas estao com falha de desenho
-  (incompletas) e está extremamente lento"*. O painel em si apareceu correto na imagem (3 linhas,
-  indicadores `server`/`client`, foco), mas o resto da sessão falhou. A instância (compositor PID
+- **F2-shell-real (2026-11-24): 4ª RODADA DO JUIZ ABERTA (após +RAM na VM).** Humano pediu repetir o
+  teste visual com 18 GiB de RAM (antes 7 GiB). Instância relançada com compositor **sem bench** e
+  `RUST_LOG=info`: comp PID 8018, runtime 8037, shell 8086, gedit 8350, socket
+  `wayland-aero-f2-shell-real-visual4`, IPC `/tmp/opencode/f2-shell-real/visual4/ipc.sock`, regras
+  `/tmp/opencode/f2-shell-real/visual4/config/aeroshell/rules.ts` (`foot→Server`, `gedit→Client`).
+  Log de setup: 249/124/9 linhas; 3 janelas no IPC e 3 linhas no painel com decoração correta.
+  **Aguardando veredito; não fechar a instância.**
+  Rodadas 1–3 reprovadas (registro abaixo) — juiz visual reprovado até novo "ok".
+  Instância da 1ª rodada (compositor PID
   22526, shell 22584, gedit 22883, runtime 22545, socket `wayland-aero-f2-shell-real-visual2`) morreu
   sozinha ~58 s após subir: `shell.log` registra `Lost connection to Wayland compositor`, e
   **CORREÇÃO DO HUMANO: as instâncias NÃO morreram sozinhas — ele quem as fechou.** O `Lost
