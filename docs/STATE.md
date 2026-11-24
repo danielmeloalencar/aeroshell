@@ -2437,6 +2437,14 @@ fechados, fora da fila.
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- **F2-shell-real (2026-11-24): 10ª RODADA DO JUIZ ABERTA (Correção 1 / setTimeout 50 ms, sem fallback).**
+  Humano pediu ver visualmente antes de autorizar o fallback. Instância: comp PID 61830, runtime
+  61847, shell 61931, gedit 62163, socket `wayland-aero-f2-shell-real-visual10`, IPC
+  `/tmp/opencode/f2-shell-real/visual10/ipc.sock`, regras
+  `/tmp/opencode/f2-shell-real/visual10/config/aeroshell/rules.ts` (`foot→Server`, `gedit→Client`).
+  3 janelas no IPC. **Aguardando veredito; não fechar a instância.** Spike já provou que o commit
+  sem buffer persiste (3× FALHA), então a expectativa é de nova reprovação — mas a sentença visual é
+  do humano.
 - **F2-shell-real (2026-11-24): 9ª RODADA REPROVADA — "mesmo sintoma anterior".** Humano repetiu
   `Server↔None` 3× e a moldura voltou pela metade/invisível em uma janela. Log da instância
   (compositor PID 51320, runtime 51332, shell 51414, gedit 51644, socket
