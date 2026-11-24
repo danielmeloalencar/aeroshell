@@ -17126,6 +17126,8 @@ class WindowStore {
   listeners = new Set;
   indicatorsState = { focusedId: null, decorations: {} };
   indicatorListeners = new Set;
+  workspacesState = { workspaces: [], activeId: null };
+  workspaceListeners = new Set;
   constructor(initial = { revision: 0, windows: [] }) {
     this.state = initial;
   }
@@ -17147,6 +17149,23 @@ class WindowStore {
       this.indicatorListeners.delete(listener);
     };
   }
+  getWorkspaces() {
+    return this.workspacesState;
+  }
+  subscribeWorkspaces(listener) {
+    this.workspaceListeners.add(listener);
+    return () => {
+      this.workspaceListeners.delete(listener);
+    };
+  }
+  applyWorkspaces(workspaces, activeId) {
+    this.setWorkspaces({ workspaces, activeId });
+  }
+  setWorkspaces(next) {
+    this.workspacesState = next;
+    for (const listener of this.workspaceListeners)
+      listener();
+  }
   setIndicators(next) {
     this.indicatorsState = next;
     for (const listener of this.indicatorListeners)
@@ -17155,6 +17174,16 @@ class WindowStore {
   applySnapshot(snapshot) {
     this.state = snapshot;
     this.emit();
+    const live = new Set(snapshot.windows.map((window2) => window2.id));
+    let changed = false;
+    const workspaces = this.workspacesState.workspaces.map((workspace) => {
+      const window_ids = workspace.window_ids.filter((id) => live.has(id));
+      if (window_ids.length !== workspace.window_ids.length)
+        changed = true;
+      return changed ? { ...workspace, window_ids } : workspace;
+    });
+    if (changed)
+      this.setWorkspaces({ ...this.workspacesState, workspaces });
   }
   applyPatch(patch) {
     if (patch.revision <= this.state.revision)
@@ -17174,6 +17203,62 @@ class WindowStore {
   applyEvent(event) {
     if ("Snapshot" in event) {
       this.applySnapshot(event.Snapshot.snapshot);
+      return;
+    }
+    if ("WorkspaceCreated" in event) {
+      const workspace = event.WorkspaceCreated.workspace;
+      const index = this.workspacesState.workspaces.findIndex((item) => item.id === workspace.id);
+      if (index !== -1 && this.workspacesState.workspaces[index] === workspace)
+        return;
+      const workspaces = this.workspacesState.workspaces.filter((item) => item.id !== workspace.id);
+      workspaces.push(workspace);
+      workspaces.sort((a, b) => a.id - b.id);
+      this.setWorkspaces({ ...this.workspacesState, workspaces });
+      return;
+    }
+    if ("WorkspaceActivated" in event) {
+      const activeId = event.WorkspaceActivated.id;
+      if (this.workspacesState.activeId !== activeId) {
+        this.setWorkspaces({ ...this.workspacesState, activeId });
+      }
+      return;
+    }
+    if ("WorkspaceRenamed" in event) {
+      const { id, name } = event.WorkspaceRenamed;
+      const current = this.workspacesState.workspaces.find((workspace) => workspace.id === id);
+      if (!current || current.name === name)
+        return;
+      this.setWorkspaces({
+        ...this.workspacesState,
+        workspaces: this.workspacesState.workspaces.map((workspace) => workspace.id === id ? { ...workspace, name } : workspace)
+      });
+      return;
+    }
+    if ("WorkspaceDestroyed" in event) {
+      const id = event.WorkspaceDestroyed.id;
+      if (!this.workspacesState.workspaces.some((workspace) => workspace.id === id))
+        return;
+      this.setWorkspaces({
+        workspaces: this.workspacesState.workspaces.filter((workspace) => workspace.id !== id),
+        activeId: this.workspacesState.activeId === id ? null : this.workspacesState.activeId
+      });
+      return;
+    }
+    if ("WindowMovedToWorkspace" in event) {
+      const { window_id, workspace_id } = event.WindowMovedToWorkspace;
+      if (!this.workspacesState.workspaces.some((workspace) => workspace.id === workspace_id))
+        return;
+      const alreadyThere = this.workspacesState.workspaces.every((workspace) => workspace.id === workspace_id ? workspace.window_ids.includes(window_id) : !workspace.window_ids.includes(window_id));
+      if (alreadyThere)
+        return;
+      const workspaces = this.workspacesState.workspaces.map((workspace) => {
+        const window_ids = workspace.window_ids.filter((id) => id !== window_id);
+        if (workspace.id === workspace_id)
+          window_ids.push(window_id);
+        window_ids.sort((a, b) => a - b);
+        return { ...workspace, window_ids };
+      });
+      this.setWorkspaces({ ...this.workspacesState, workspaces });
       return;
     }
     if ("Focus" in event) {
@@ -17242,6 +17327,18 @@ function parseWindows(lines) {
     };
   });
 }
+function parseWorkspaces(lines) {
+  return lines.filter((line) => line.startsWith("WS ")).map((line) => {
+    const match = line.match(/^WS (\d+) active=[01] windows=([0-9,]*) (".*")$/);
+    if (!match)
+      throw new Error(`linha de workspace inválida: ${line}`);
+    return {
+      id: Number(match[1]),
+      name: JSON.parse(match[3]),
+      window_ids: match[2] ? match[2].split(",").map(Number) : []
+    };
+  });
+}
 var EVENT_KEYS = [
   "Snapshot",
   "Title",
@@ -17250,6 +17347,11 @@ var EVENT_KEYS = [
   "Geometry",
   "Csd",
   "FramePainted",
+  "WorkspaceCreated",
+  "WorkspaceActivated",
+  "WorkspaceRenamed",
+  "WorkspaceDestroyed",
+  "WindowMovedToWorkspace",
   "DecorationRequest",
   "DecorationApplied"
 ];
@@ -17267,6 +17369,11 @@ function parseEvent(raw) {
 }
 function sameWindow(a, b) {
   return a.id === b.id && a.title === b.title && a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+}
+function expectOk(lines) {
+  if (lines[0] !== "OK")
+    throw new Error(lines.join(`
+`) || "IPC sem resposta");
 }
 function createAero(transport) {
   const store = new WindowStore;
@@ -17290,8 +17397,56 @@ function createAero(transport) {
     }
     return store.getSnapshot();
   }
+  async function refreshWorkspaces() {
+    const lines = await transport("workspace-list");
+    if (lines[0]?.startsWith("ERR"))
+      throw new Error(lines.join(`
+`));
+    const workspaces = parseWorkspaces(lines);
+    const activeLine = lines.find((line) => line.startsWith("WS ") && line.includes(" active=1 "));
+    const activeId = activeLine ? Number(activeLine.match(/^WS (\d+)/)?.[1]) : null;
+    store.applyWorkspaces(workspaces, activeId);
+    return workspaces;
+  }
+  async function listWorkspaces() {
+    return refreshWorkspaces();
+  }
+  async function createWorkspace(name) {
+    const command = name === undefined ? "workspace-create" : `workspace-create ${JSON.stringify(name)}`;
+    const response = await transport(command);
+    const id = Number(response[0]?.match(/^WORKSPACE (\d+)$/)?.[1]);
+    if (!Number.isInteger(id))
+      throw new Error(response.join(`
+`) || "resposta inválida ao criar workspace");
+    const workspace = (await refreshWorkspaces()).find((item) => item.id === id);
+    if (!workspace)
+      throw new Error(`workspace ${id} não apareceu após a criação`);
+    return workspace;
+  }
+  async function renameWorkspace(id, name) {
+    expectOk(await transport(`workspace-rename ${id} ${JSON.stringify(name)}`));
+    await refreshWorkspaces();
+  }
+  async function activateWorkspace(id) {
+    expectOk(await transport(`workspace-activate ${id}`));
+    await refreshWorkspaces();
+  }
+  async function moveWindowToWorkspace(windowId, workspaceId) {
+    expectOk(await transport(`window-workspace ${windowId} ${workspaceId}`));
+    await refreshWorkspaces();
+  }
+  async function destroyWorkspace(id) {
+    expectOk(await transport(`workspace-destroy ${id}`));
+    await refreshWorkspaces();
+  }
   return {
     store,
+    listWorkspaces,
+    createWorkspace,
+    renameWorkspace,
+    activateWorkspace,
+    moveWindowToWorkspace,
+    destroyWorkspace,
     windows: {
       list: async () => (await refresh()).windows,
       focus: async (id) => {
@@ -17316,6 +17471,9 @@ function useWindows(store) {
 }
 function useIndicators(store) {
   return import_react.useSyncExternalStore((listener) => store.subscribeIndicators(listener), () => store.getIndicators(), () => store.getIndicators());
+}
+function useWorkspaces(store) {
+  return import_react.useSyncExternalStore((listener) => store.subscribeWorkspaces(listener), () => store.getWorkspaces(), () => store.getWorkspaces());
 }
 
 // packages/panel/src/index.tsx
@@ -17345,15 +17503,26 @@ window.__aeroEvent = (json) => {
     aero.store.applyEvent(event);
 };
 post({ type: "ready" });
-function publishPanelState(windows, indicators) {
-  const rects = Array.from(document.querySelectorAll(".aero-row")).map((el) => {
+function publishPanelState(windows, indicators, workspaceState) {
+  const rect = (el) => {
     const r = el.getBoundingClientRect();
     return { x: r.left, y: r.top, w: r.width, h: r.height };
-  }).filter((r) => r.w > 0 && r.h > 0);
-  post({ type: "interactive", rects, cursor: "pointer" });
+  };
+  const rowRects = Array.from(document.querySelectorAll(".aero-row")).map(rect).filter((r) => r.w > 0 && r.h > 0);
+  const workspaceRects = Array.from(document.querySelectorAll(".aero-workspace, .aero-workspace-add")).map(rect).filter((r) => r.w > 0 && r.h > 0);
+  const tabs = {};
+  document.querySelectorAll(".aero-workspace").forEach((element) => {
+    const id = Number(element.dataset.workspaceId);
+    const r = rect(element);
+    if (Number.isInteger(id) && r.w > 0)
+      tabs[id] = r;
+  });
+  const addControl = document.querySelector(".aero-workspace-add");
+  const addRect = addControl ? rect(addControl) : null;
+  post({ type: "interactive", rects: [...rowRects, ...workspaceRects], cursor: "pointer" });
   const closes = {};
   windows.forEach((window2, index) => {
-    const row = rects[index];
+    const row = rowRects[index];
     if (row) {
       closes[window2.id] = { x: row.x + row.w - 18, y: row.y + 1, w: 18, h: row.h - 2 };
     }
@@ -17366,68 +17535,132 @@ function publishPanelState(windows, indicators) {
       focused: indicators.focusedId === w.id,
       decoration: indicators.decorations[w.id] ?? "default"
     })),
-    closes
+    closes,
+    workspaces: workspaceState.workspaces.map((workspace) => ({
+      id: workspace.id,
+      name: workspace.name,
+      active: workspace.id === workspaceState.activeId,
+      windowIds: workspace.window_ids
+    })),
+    activeWorkspace: workspaceState.activeId,
+    workspaceRects: tabs,
+    addRect
   });
 }
+function WorkspaceTab({ workspace, active }) {
+  const [name, setName] = import_react2.useState(workspace.name);
+  import_react2.useEffect(() => setName(workspace.name), [workspace.id, workspace.name]);
+  function commitName() {
+    const next = name.trim();
+    if (!next || next === workspace.name) {
+      setName(workspace.name);
+      return;
+    }
+    aero.renameWorkspace(workspace.id, next);
+  }
+  return /* @__PURE__ */ jsx_dev_runtime.jsxDEV("div", {
+    className: "aero-workspace",
+    "data-workspace-id": workspace.id,
+    "data-active": active ? "1" : "0",
+    role: "button",
+    tabIndex: 0,
+    onClick: () => void aero.activateWorkspace(workspace.id),
+    children: /* @__PURE__ */ jsx_dev_runtime.jsxDEV("input", {
+      "aria-label": `nome do workspace ${workspace.id}`,
+      value: name,
+      onChange: (event) => setName(event.currentTarget.value),
+      onBlur: commitName,
+      onKeyDown: (event) => {
+        if (event.key === "Enter")
+          event.currentTarget.blur();
+        if (event.key === "Escape") {
+          setName(workspace.name);
+          event.currentTarget.blur();
+        }
+      }
+    }, undefined, false, undefined, this)
+  }, undefined, false, undefined, this);
+}
 function Panel() {
-  const windows = useWindows(aero.store);
+  const allWindows = useWindows(aero.store);
   const indicators = useIndicators(aero.store);
+  const workspaceState = useWorkspaces(aero.store);
+  const activeWorkspace = workspaceState.workspaces.find((workspace) => workspace.id === workspaceState.activeId);
+  const windows = activeWorkspace ? allWindows.filter((window2) => activeWorkspace.window_ids.includes(window2.id)) : allWindows;
   import_react2.useEffect(() => {
-    aero.windows.list().then(() => {
+    Promise.all([aero.windows.list(), aero.listWorkspaces()]).then(() => {
       const current = aero.store.getSnapshot().windows;
       console.info("painel React:", current.map((w) => `${w.id} ${w.title}`).join(" | "));
     });
   }, []);
   import_react2.useEffect(() => {
-    publishPanelState(windows, indicators);
-  }, [windows, indicators]);
+    publishPanelState(windows, indicators, workspaceState);
+  }, [windows, indicators, workspaceState]);
   return /* @__PURE__ */ jsx_dev_runtime.jsxDEV("div", {
     className: "aero-panel",
-    children: windows.map((w) => /* @__PURE__ */ jsx_dev_runtime.jsxDEV("div", {
-      "data-window-id": w.id,
-      className: "aero-row",
-      role: "button",
-      tabIndex: 0,
-      "data-focused": indicators.focusedId === w.id ? "1" : "0",
-      "data-decoration": indicators.decorations[w.id] ?? "default",
-      onClick: (event) => {
-        const bounds = event.currentTarget.getBoundingClientRect();
-        if (event.clientX >= bounds.right - 18)
-          aero.windows.close(w.id);
-        else
-          aero.windows.focus(w.id);
-      },
-      children: [
-        /* @__PURE__ */ jsx_dev_runtime.jsxDEV("span", {
-          className: "aero-focus",
-          children: indicators.focusedId === w.id ? "●" : "○"
-        }, undefined, false, undefined, this),
-        /* @__PURE__ */ jsx_dev_runtime.jsxDEV("span", {
-          className: "aero-id",
-          children: w.id
-        }, undefined, false, undefined, this),
-        /* @__PURE__ */ jsx_dev_runtime.jsxDEV("span", {
-          className: "aero-title",
-          children: w.title
-        }, undefined, false, undefined, this),
-        /* @__PURE__ */ jsx_dev_runtime.jsxDEV("span", {
-          className: "aero-decoration",
-          children: (indicators.decorations[w.id] ?? "default").toLowerCase()
-        }, undefined, false, undefined, this),
-        /* @__PURE__ */ jsx_dev_runtime.jsxDEV("span", {
-          className: "aero-close",
-          "data-close-id": w.id,
-          role: "button",
-          "aria-label": `fechar ${w.title}`,
-          onClick: (event) => {
-            event.stopPropagation();
+    children: [
+      /* @__PURE__ */ jsx_dev_runtime.jsxDEV("div", {
+        className: "aero-workspaces",
+        children: [
+          workspaceState.workspaces.map((workspace) => /* @__PURE__ */ jsx_dev_runtime.jsxDEV(WorkspaceTab, {
+            workspace,
+            active: workspace.id === workspaceState.activeId
+          }, workspace.id, false, undefined, this)),
+          /* @__PURE__ */ jsx_dev_runtime.jsxDEV("button", {
+            type: "button",
+            className: "aero-workspace-add",
+            "aria-label": "criar workspace",
+            onClick: () => void aero.createWorkspace(),
+            children: "+"
+          }, undefined, false, undefined, this)
+        ]
+      }, undefined, true, undefined, this),
+      windows.map((w) => /* @__PURE__ */ jsx_dev_runtime.jsxDEV("div", {
+        "data-window-id": w.id,
+        className: "aero-row",
+        role: "button",
+        tabIndex: 0,
+        "data-focused": indicators.focusedId === w.id ? "1" : "0",
+        "data-decoration": indicators.decorations[w.id] ?? "default",
+        onClick: (event) => {
+          const bounds = event.currentTarget.getBoundingClientRect();
+          if (event.clientX >= bounds.right - 18)
             aero.windows.close(w.id);
-          },
-          children: "✕"
-        }, undefined, false, undefined, this)
-      ]
-    }, w.id, true, undefined, this))
-  }, undefined, false, undefined, this);
+          else
+            aero.windows.focus(w.id);
+        },
+        children: [
+          /* @__PURE__ */ jsx_dev_runtime.jsxDEV("span", {
+            className: "aero-focus",
+            children: indicators.focusedId === w.id ? "●" : "○"
+          }, undefined, false, undefined, this),
+          /* @__PURE__ */ jsx_dev_runtime.jsxDEV("span", {
+            className: "aero-id",
+            children: w.id
+          }, undefined, false, undefined, this),
+          /* @__PURE__ */ jsx_dev_runtime.jsxDEV("span", {
+            className: "aero-title",
+            children: w.title
+          }, undefined, false, undefined, this),
+          /* @__PURE__ */ jsx_dev_runtime.jsxDEV("span", {
+            className: "aero-decoration",
+            children: (indicators.decorations[w.id] ?? "default").toLowerCase()
+          }, undefined, false, undefined, this),
+          /* @__PURE__ */ jsx_dev_runtime.jsxDEV("span", {
+            className: "aero-close",
+            "data-close-id": w.id,
+            role: "button",
+            "aria-label": `fechar ${w.title}`,
+            onClick: (event) => {
+              event.stopPropagation();
+              aero.windows.close(w.id);
+            },
+            children: "✕"
+          }, undefined, false, undefined, this)
+        ]
+      }, w.id, true, undefined, this))
+    ]
+  }, undefined, true, undefined, this);
 }
 var host = document.getElementById("root");
 if (!host)

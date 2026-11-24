@@ -4,7 +4,7 @@
 import { useSyncExternalStore } from "react";
 
 import type { WindowInfo } from "../../sdk/src/generated/WindowInfo";
-import type { PanelIndicators, WindowStore } from "../../sdk/src/store";
+import type { PanelIndicators, WindowStore, WorkspacesState } from "../../sdk/src/store";
 
 export function useWindows(store: WindowStore): WindowInfo[] {
   const snapshot = useSyncExternalStore(
@@ -21,5 +21,13 @@ export function useIndicators(store: WindowStore): PanelIndicators {
     (listener) => store.subscribeIndicators(listener),
     () => store.getIndicators(),
     () => store.getIndicators(),
+  );
+}
+
+export function useWorkspaces(store: WindowStore): WorkspacesState {
+  return useSyncExternalStore(
+    (listener) => store.subscribeWorkspaces(listener),
+    () => store.getWorkspaces(),
+    () => store.getWorkspaces(),
   );
 }

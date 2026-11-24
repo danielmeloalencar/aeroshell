@@ -33,7 +33,7 @@ export function ipcTransport(path: string): Transport {
       const lines: string[] = [];
       let buffer = "";
       let settled = false;
-      const waitsForDot = command.trim() === "list";
+      const waitsForDot = command.trim() === "list" || command.trim() === "workspace-list";
       const timer = setTimeout(() => finish(new Error(`IPC timeout: ${command}`)), 3000);
 
       function finish(error?: Error): void {
@@ -65,7 +65,7 @@ export function ipcTransport(path: string): Transport {
             return;
           }
           lines.push(line);
-          if (!waitsForDot && line === "OK") {
+          if (!waitsForDot && (line === "OK" || line.startsWith("WORKSPACE "))) {
             finish();
             return;
           }

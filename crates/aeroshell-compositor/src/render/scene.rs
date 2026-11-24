@@ -125,6 +125,27 @@ pub fn collect_output_elements(
         let mut placed_frames = Vec::new();
         let mut render_order: Vec<String> = Vec::new();
         for window in state.space.elements_for_output(output).rev() {
+            let workspace_window_id = window.toplevel().and_then(|toplevel| {
+                state
+                    .window_surfaces
+                    .iter()
+                    .find(|(_, surface)| *surface == toplevel.wl_surface())
+                    .map(|(id, _)| *id)
+            });
+            let workspace_visible = workspace_window_id
+                .map(|id| state.window_visible(id))
+                .unwrap_or(true);
+            #[cfg(feature = "bench")]
+            if let Some(id) = workspace_window_id {
+                let t = crate::frame_diagnostics::now_ns();
+                eprintln!("WORKSPACE_RENDER t={t} window_id={id} visible={workspace_visible}");
+                if !workspace_visible {
+                    eprintln!("WORKSPACE_FRAME_RENDER t={t} window_id={id} visible=false");
+                }
+            }
+            if !workspace_visible {
+                continue;
+            }
             let Some(geo) = state.space.element_geometry(window) else {
                 continue;
             };
@@ -337,6 +358,10 @@ pub fn collect_output_elements(
                         render_order.push(format!("{kind}@{:?}", frame_surface.id()));
                         #[cfg(feature = "bench")]
                         {
+                            let t = crate::frame_diagnostics::now_ns();
+                            eprintln!(
+                                "WORKSPACE_FRAME_RENDER t={t} window_id={_window_id} visible=true"
+                            );
                             if _log_render_shared {
                                 eprintln!("RENDER_SHARED window_id={_window_id} kind={kind}");
                             }

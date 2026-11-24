@@ -517,6 +517,31 @@ pub fn init_winit(
                                 let mut placed_frames = Vec::new();
                                 let mut render_order: Vec<String> = Vec::new();
                                 for window in state.space.elements_for_output(&output).rev() {
+                                    let workspace_window_id = window.toplevel().and_then(|toplevel| {
+                                        state
+                                            .window_surfaces
+                                            .iter()
+                                            .find(|(_, surface)| *surface == toplevel.wl_surface())
+                                            .map(|(id, _)| *id)
+                                    });
+                                    let workspace_visible = workspace_window_id
+                                        .map(|id| state.window_visible(id))
+                                        .unwrap_or(true);
+                                    #[cfg(feature = "bench")]
+                                    if let Some(id) = workspace_window_id {
+                                        let t = crate::frame_diagnostics::now_ns();
+                                        eprintln!(
+                                            "WORKSPACE_RENDER t={t} window_id={id} visible={workspace_visible}"
+                                        );
+                                        if !workspace_visible {
+                                            eprintln!(
+                                                "WORKSPACE_FRAME_RENDER t={t} window_id={id} visible=false"
+                                            );
+                                        }
+                                    }
+                                    if !workspace_visible {
+                                        continue;
+                                    }
                                     let Some(geo) = state.space.element_geometry(window) else {
                                         continue;
                                     };
@@ -640,8 +665,14 @@ pub fn init_winit(
                                             render_order
                                                 .push(format!("{kind}@{:?}", frame_surface.id()));
                                             #[cfg(feature = "bench")]
-                                            if let Some(probe) = result.titlebar_probe {
-                                                titlebar_probe = Some(probe);
+                                            {
+                                                let t = crate::frame_diagnostics::now_ns();
+                                                eprintln!(
+                                                    "WORKSPACE_FRAME_RENDER t={t} window_id={_window_id} visible=true"
+                                                );
+                                                if let Some(probe) = result.titlebar_probe {
+                                                    titlebar_probe = Some(probe);
+                                                }
                                             }
                                         }
                                       }
@@ -703,6 +734,7 @@ pub fn init_winit(
                                     if !layer.alive()
                                         || placed_frames.contains(layer.wl_surface())
                                         || state.frame_suppressed(layer.wl_surface())
+                                        || !state.frame_visible_in_active_workspace(layer.wl_surface())
                                     {
                                         continue;
                                     }

@@ -258,6 +258,14 @@ impl AeroState {
         add_destruction_hook::<AeroState, _>(&client, |state, dead| {
             // O id pode ser reatribuído a uma janela nova; não deixe o mapa
             // estável apontando para a superfície que acabou de morrer.
+            if let Some(window_id) = state
+                .window_surfaces
+                .iter()
+                .find(|(_, surface)| *surface == dead)
+                .map(|(id, _)| *id)
+            {
+                state.workspaces.remove_window(window_id);
+            }
             state.window_surfaces.retain(|_, cs| *cs != *dead);
             if let Some(pos) = state
                 .associated_frames
@@ -444,6 +452,14 @@ impl Dispatch<AeroFrameManagerV1, ()> for AeroState {
                         // Mesma limpeza do hook de `bind_pending_frame_client`: sem
                         // remover do mapa e emitir Snapshot, o painel (que só consome
                         // o stream) mantinha a linha da janela fechada para sempre.
+                        if let Some(window_id) = state
+                            .window_surfaces
+                            .iter()
+                            .find(|(_, surface)| *surface == dead)
+                            .map(|(id, _)| *id)
+                        {
+                            state.workspaces.remove_window(window_id);
+                        }
                         state.window_surfaces.retain(|_, cs| *cs != *dead);
                         if let Some(pos) = state
                             .associated_frames

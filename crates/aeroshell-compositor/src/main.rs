@@ -21,6 +21,7 @@ mod render;
 mod state;
 mod supervisor;
 mod window_ipc;
+mod workspaces;
 
 use std::{error::Error, io::BufRead, os::unix::net::UnixListener};
 

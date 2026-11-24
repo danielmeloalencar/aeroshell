@@ -22,6 +22,17 @@ pub struct WindowInfo {
     pub height: u32,
 }
 
+/// Um workspace e as janelas que pertencem a ele. A janela continua existindo
+/// quando seu workspace está inativo; apenas sua participação na cena muda.
+#[cfg_attr(feature = "export-bindings", derive(TS))]
+#[cfg_attr(feature = "export-bindings", ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Workspace {
+    pub id: u32,
+    pub name: String,
+    pub window_ids: Vec<u32>,
+}
+
 /// Estado completo publicado pelo compositor.
 #[cfg_attr(feature = "export-bindings", derive(TS))]
 #[cfg_attr(feature = "export-bindings", ts(export))]
@@ -117,6 +128,23 @@ pub enum AeroEvent {
     },
     FramePainted {
         id: u32,
+    },
+    WorkspaceCreated {
+        workspace: Workspace,
+    },
+    WorkspaceActivated {
+        id: u32,
+    },
+    WorkspaceRenamed {
+        id: u32,
+        name: String,
+    },
+    WorkspaceDestroyed {
+        id: u32,
+    },
+    WindowMovedToWorkspace {
+        window_id: u32,
+        workspace_id: u32,
     },
     /// Pergunta ao runtime Bun como decorar esta janela.
     DecorationRequest {

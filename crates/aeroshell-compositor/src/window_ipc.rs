@@ -21,7 +21,7 @@ use std::{
     time::Duration,
 };
 
-use aeroshell_ipc::types::{AeroEvent, DecorationPolicy, Snapshot, WindowInfo};
+use aeroshell_ipc::types::{AeroEvent, DecorationPolicy, Snapshot, WindowInfo, Workspace};
 use calloop::channel;
 use serde_json::{json, Value};
 use smithay::{
@@ -140,6 +140,14 @@ pub fn spawn_event_stream(ipc_path: &str, sender: channel::Sender<Command>) -> i
     Ok(())
 }
 
+fn workspace_json(workspace: &Workspace) -> Value {
+    json!({
+        "id": workspace.id,
+        "name": workspace.name,
+        "window_ids": workspace.window_ids,
+    })
+}
+
 /// Serialização manual no formato tagged-object que o ts-rs gera para `AeroEvent`.
 fn event_json(event: &AeroEvent) -> Value {
     match event {
@@ -182,6 +190,26 @@ fn event_json(event: &AeroEvent) -> Value {
             json!({ "Csd": { "id": id, "client_frame": client_frame } })
         }
         AeroEvent::FramePainted { id } => json!({ "FramePainted": { "id": id } }),
+        AeroEvent::WorkspaceCreated { workspace } => {
+            json!({ "WorkspaceCreated": { "workspace": workspace_json(workspace) } })
+        }
+        AeroEvent::WorkspaceActivated { id } => {
+            json!({ "WorkspaceActivated": { "id": id } })
+        }
+        AeroEvent::WorkspaceRenamed { id, name } => {
+            json!({ "WorkspaceRenamed": { "id": id, "name": name } })
+        }
+        AeroEvent::WorkspaceDestroyed { id } => {
+            json!({ "WorkspaceDestroyed": { "id": id } })
+        }
+        AeroEvent::WindowMovedToWorkspace {
+            window_id,
+            workspace_id,
+        } => {
+            json!({ "WindowMovedToWorkspace": {
+                "window_id": window_id, "workspace_id": workspace_id
+            } })
+        }
         AeroEvent::DecorationRequest {
             id,
             app_id,
@@ -255,6 +283,11 @@ fn event_name(event: &AeroEvent) -> &'static str {
         AeroEvent::Geometry { .. } => "geometry",
         AeroEvent::Csd { .. } => "csd",
         AeroEvent::FramePainted { .. } => "frame_painted",
+        AeroEvent::WorkspaceCreated { .. } => "workspace_created",
+        AeroEvent::WorkspaceActivated { .. } => "workspace_activated",
+        AeroEvent::WorkspaceRenamed { .. } => "workspace_renamed",
+        AeroEvent::WorkspaceDestroyed { .. } => "workspace_destroyed",
+        AeroEvent::WindowMovedToWorkspace { .. } => "window_moved_to_workspace",
         AeroEvent::DecorationRequest { .. } => "decoration_request",
         AeroEvent::DecorationApplied { .. } => "decoration_applied",
     }
@@ -363,6 +396,14 @@ impl AeroState {
             // antes dele e se perdiam (indicador ficava "default" até editar).
             "__subscribe__" => {
                 self.emit_snapshot();
+                for workspace in self.workspaces.list() {
+                    emit_event(AeroEvent::WorkspaceCreated {
+                        workspace: workspace.clone(),
+                    });
+                }
+                emit_event(AeroEvent::WorkspaceActivated {
+                    id: self.workspaces.active_id(),
+                });
                 for (&id, &decision) in self.decorations.iter() {
                     emit_event(AeroEvent::DecorationApplied {
                         id,
@@ -428,6 +469,109 @@ impl AeroState {
                     "ERR janela sem pedido de política pendente".to_owned()
                 }
             }
+            "workspace-list" => {
+                let mut out = String::new();
+                for workspace in self.workspaces.list() {
+                    let windows = workspace
+                        .window_ids
+                        .iter()
+                        .map(u32::to_string)
+                        .collect::<Vec<_>>()
+                        .join(",");
+                    let name = serde_json::to_string(&workspace.name)
+                        .unwrap_or_else(|_| "\"Workspace\"".to_owned());
+                    out.push_str(&format!(
+                        "WS {} active={} windows={} {}\n",
+                        workspace.id,
+                        if workspace.id == self.workspaces.active_id() {
+                            1
+                        } else {
+                            0
+                        },
+                        windows,
+                        name,
+                    ));
+                }
+                out.push('.');
+                out
+            }
+            "workspace-create" => {
+                let raw = cmd.strip_prefix("workspace-create").unwrap_or("").trim();
+                let name = if raw.is_empty() {
+                    None
+                } else {
+                    Some(serde_json::from_str::<String>(raw).unwrap_or_else(|_| raw.to_owned()))
+                };
+                let workspace = self.workspaces.create(name);
+                let id = workspace.id;
+                emit_event(AeroEvent::WorkspaceCreated { workspace });
+                format!("WORKSPACE {id}")
+            }
+            "workspace-rename" => {
+                let Some(id) = id.map(|value| value as u32) else {
+                    return "ERR uso: workspace-rename <id> <nome>".to_owned();
+                };
+                let raw = cmd.splitn(3, ' ').nth(2).unwrap_or("").trim();
+                let name = serde_json::from_str::<String>(raw).unwrap_or_else(|_| raw.to_owned());
+                match self.workspaces.rename(id, name.clone()) {
+                    Ok(()) => {
+                        emit_event(AeroEvent::WorkspaceRenamed { id, name });
+                        "OK".to_owned()
+                    }
+                    Err(err) => err,
+                }
+            }
+            "workspace-activate" => {
+                let Some(id) = id.map(|value| value as u32) else {
+                    return "ERR workspace inexistente".to_owned();
+                };
+                match self.workspaces.activate(id) {
+                    Ok(()) => {
+                        emit_event(AeroEvent::WorkspaceActivated { id });
+                        self.refresh_workspace_focus();
+                        "OK".to_owned()
+                    }
+                    Err(err) => err,
+                }
+            }
+            "window-workspace" => {
+                let (Some(window_id), Some(workspace_id)) = (
+                    id.map(|value| value as u32),
+                    parts.next().and_then(|value| value.parse::<u32>().ok()),
+                ) else {
+                    return "ERR uso: window-workspace <window_id> <workspace_id>".to_owned();
+                };
+                if self.window_for_id(window_id).is_none() {
+                    return "ERR janela inexistente".to_owned();
+                }
+                match self.workspaces.move_window(window_id, workspace_id) {
+                    Ok(()) => {
+                        emit_event(AeroEvent::WindowMovedToWorkspace {
+                            window_id,
+                            workspace_id,
+                        });
+                        self.refresh_workspace_focus();
+                        "OK".to_owned()
+                    }
+                    Err(err) => err,
+                }
+            }
+            "workspace-destroy" => {
+                let Some(id) = id.map(|value| value as u32) else {
+                    return "ERR workspace inexistente".to_owned();
+                };
+                match self.workspaces.destroy(id) {
+                    Ok((_, activated)) => {
+                        emit_event(AeroEvent::WorkspaceDestroyed { id });
+                        if let Some(active_id) = activated {
+                            emit_event(AeroEvent::WorkspaceActivated { id: active_id });
+                        }
+                        self.refresh_workspace_focus();
+                        "OK".to_owned()
+                    }
+                    Err(err) => err,
+                }
+            }
             "list" => {
                 let mut out = String::new();
                 // `space.elements()` é ordem z e muda a cada raise_element: usar o
@@ -487,9 +631,15 @@ impl AeroState {
                 out
             }
             "focus" => {
-                let Some(window) = id.and_then(|i| self.window_for_id(i as u32).cloned()) else {
+                let Some(window_id) = id.map(|value| value as u32) else {
                     return "ERR janela inexistente".to_owned();
                 };
+                let Some(window) = self.window_for_id(window_id).cloned() else {
+                    return "ERR janela inexistente".to_owned();
+                };
+                if !self.window_visible(window_id) {
+                    return "ERR janela fora do workspace ativo".to_owned();
+                }
                 self.space.raise_element(&window, true);
                 if let Some(toplevel) = window.toplevel() {
                     let serial = SERIAL_COUNTER.next_serial();

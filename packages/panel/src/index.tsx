@@ -2,13 +2,14 @@
 //! O transporte é a ponte privada `window.webkit.messageHandlers.aero`: o host
 //! encaminha cada comando ao socket IPC e devolve as linhas por `__aeroReply`.
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import type { WindowInfo } from "../../sdk/src/generated/WindowInfo";
-import type { PanelIndicators } from "../../sdk/src/store";
+import type { PanelIndicators, WorkspacesState } from "../../sdk/src/store";
+import type { Workspace } from "../../sdk/src/generated/Workspace";
 import { createAero, parseEvent } from "../../sdk/src/index";
-import { useIndicators, useWindows } from "../../react/src/useWindows";
+import { useIndicators, useWindows, useWorkspaces } from "../../react/src/useWindows";
 
 type Reply = (lines: string[]) => void;
 
@@ -54,21 +55,38 @@ window.__aeroEvent = (json: string) => {
 post({ type: "ready" });
 
 /** Retângulos reais das linhas e dos ✕, lidos do DOM para o hit-test (S3). */
-function publishPanelState(windows: WindowInfo[], indicators: PanelIndicators): void {
-  const rects = Array.from(document.querySelectorAll<HTMLElement>(".aero-row"))
-    .map((el) => {
-      const r = el.getBoundingClientRect();
-      return { x: r.left, y: r.top, w: r.width, h: r.height };
-    })
+function publishPanelState(
+  windows: WindowInfo[],
+  indicators: PanelIndicators,
+  workspaceState: WorkspacesState,
+): void {
+  const rect = (el: HTMLElement) => {
+    const r = el.getBoundingClientRect();
+    return { x: r.left, y: r.top, w: r.width, h: r.height };
+  };
+  const rowRects = Array.from(document.querySelectorAll<HTMLElement>(".aero-row"))
+    .map(rect)
     .filter((r) => r.w > 0 && r.h > 0);
-  post({ type: "interactive", rects, cursor: "pointer" });
+  const workspaceRects = Array.from(
+    document.querySelectorAll<HTMLElement>(".aero-workspace, .aero-workspace-add"),
+  ).map(rect).filter((r) => r.w > 0 && r.h > 0);
+  const tabs: Record<number, { x: number; y: number; w: number; h: number }> = {};
+  document.querySelectorAll<HTMLElement>(".aero-workspace").forEach((element) => {
+    const id = Number(element.dataset.workspaceId);
+    const r = rect(element);
+    if (Number.isInteger(id) && r.w > 0) tabs[id] = r;
+  });
+  const addControl = document.querySelector<HTMLElement>(".aero-workspace-add");
+  const addRect = addControl ? rect(addControl) : null;
+  // Janelas continuam nos primeiros índices (contrato dos harnesses S3/F2).
+  post({ type: "interactive", rects: [...rowRects, ...workspaceRects], cursor: "pointer" });
 
   // O ✕ pode ficar fora do box da linha quando o conteúdo transborda (o CSS
   // de reset usa overflow:hidden). A linha mesma trata os 18 px finais como
   // botão de fechar; publicamos esse retângulo para o harness clicar nele.
   const closes: Record<number, { x: number; y: number; w: number; h: number }> = {};
   windows.forEach((window, index) => {
-    const row = rects[index];
+    const row = rowRects[index];
     if (row) {
       closes[window.id] = { x: row.x + row.w - 18, y: row.y + 1, w: 18, h: row.h - 2 };
     }
@@ -84,16 +102,71 @@ function publishPanelState(windows: WindowInfo[], indicators: PanelIndicators): 
       decoration: indicators.decorations[w.id] ?? "default",
     })),
     closes,
+    workspaces: workspaceState.workspaces.map((workspace) => ({
+      id: workspace.id,
+      name: workspace.name,
+      active: workspace.id === workspaceState.activeId,
+      windowIds: workspace.window_ids,
+    })),
+    activeWorkspace: workspaceState.activeId,
+    workspaceRects: tabs,
+    addRect,
   });
 }
 
+function WorkspaceTab({ workspace, active }: { workspace: Workspace; active: boolean }) {
+  const [name, setName] = useState(workspace.name);
+  useEffect(() => setName(workspace.name), [workspace.id, workspace.name]);
+
+  function commitName(): void {
+    const next = name.trim();
+    if (!next || next === workspace.name) {
+      setName(workspace.name);
+      return;
+    }
+    void aero.renameWorkspace(workspace.id, next);
+  }
+
+  return (
+    <div
+      className="aero-workspace"
+      data-workspace-id={workspace.id}
+      data-active={active ? "1" : "0"}
+      role="button"
+      tabIndex={0}
+      onClick={() => void aero.activateWorkspace(workspace.id)}
+    >
+      <input
+        aria-label={`nome do workspace ${workspace.id}`}
+        value={name}
+        onChange={(event) => setName(event.currentTarget.value)}
+        onBlur={commitName}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") event.currentTarget.blur();
+          if (event.key === "Escape") {
+            setName(workspace.name);
+            event.currentTarget.blur();
+          }
+        }}
+      />
+    </div>
+  );
+}
+
 function Panel() {
-  const windows = useWindows(aero.store);
+  const allWindows = useWindows(aero.store);
   const indicators = useIndicators(aero.store);
+  const workspaceState = useWorkspaces(aero.store);
+  const activeWorkspace = workspaceState.workspaces.find(
+    (workspace) => workspace.id === workspaceState.activeId,
+  );
+  const windows = activeWorkspace
+    ? allWindows.filter((window) => activeWorkspace.window_ids.includes(window.id))
+    : allWindows;
 
   useEffect(() => {
-    // Snapshot inicial único; mudanças posteriores chegam por __aeroEvent.
-    void aero.windows.list().then(() => {
+    // Snapshots iniciais únicos; mudanças posteriores chegam por __aeroEvent.
+    void Promise.all([aero.windows.list(), aero.listWorkspaces()]).then(() => {
       const current = aero.store.getSnapshot().windows;
       console.info(
         "painel React:",
@@ -104,11 +177,28 @@ function Panel() {
 
   // Roda após o commit: os rects refletem o layout real dos botões.
   useEffect(() => {
-    publishPanelState(windows, indicators);
-  }, [windows, indicators]);
+    publishPanelState(windows, indicators, workspaceState);
+  }, [windows, indicators, workspaceState]);
 
   return (
     <div className="aero-panel">
+      <div className="aero-workspaces">
+        {workspaceState.workspaces.map((workspace) => (
+          <WorkspaceTab
+            key={workspace.id}
+            workspace={workspace}
+            active={workspace.id === workspaceState.activeId}
+          />
+        ))}
+        <button
+          type="button"
+          className="aero-workspace-add"
+          aria-label="criar workspace"
+          onClick={() => void aero.createWorkspace()}
+        >
+          +
+        </button>
+      </div>
       {windows.map((w) => (
         <div
           key={w.id}

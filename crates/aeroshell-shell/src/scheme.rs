@@ -20,7 +20,16 @@ const REACT_PANEL_HTML: &str = r##"
     <style>
       #root { height: 100%; display: flex; align-items: center; padding: 0 8px;
         color: #e8f6ff; font: 14px sans-serif; }
-      .aero-panel { display: flex; gap: 8px; width: 100%; }
+      .aero-panel { display: flex; align-items: center; gap: 8px; width: 100%; }
+      .aero-workspaces { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+      .aero-workspace { width: 88px; height: 20px; padding: 0 3px; border: 1px solid #4a6b8a;
+        border-radius: 4px; background: #23364a; cursor: pointer; }
+      .aero-workspace[data-active="1"] { background: #34618a; border-color: #9fd0ff; }
+      .aero-workspace input { width: 100%; height: 18px; padding: 0; border: 0; outline: none;
+        background: transparent; color: #e8f6ff; font: 12px sans-serif; text-align: center; }
+      .aero-workspace-add { width: 24px; height: 22px; padding: 0; border: 1px solid #4a6b8a;
+        border-radius: 4px; background: #23364a; color: #e8f6ff; font: 16px sans-serif; cursor: pointer; }
+      .aero-workspace-add:hover { border-color: #9fd0ff; }
       .aero-row { display: flex; gap: 6px; align-items: center; height: 18px;
         background: #23364a; color: #e8f6ff; border: 1px solid #4a6b8a;
         border-radius: 4px; padding: 0 6px; font: inherit; cursor: pointer; }

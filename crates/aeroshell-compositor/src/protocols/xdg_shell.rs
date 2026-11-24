@@ -32,6 +32,8 @@ use smithay::{
 };
 
 use crate::state::AeroState;
+use crate::window_ipc::emit_event;
+use aeroshell_ipc::types::AeroEvent;
 use smithay::reexports::wayland_protocols::xdg::{
     decoration::zv1::server::zxdg_toplevel_decoration_v1::Mode,
     shell::server::xdg_toplevel::ResizeEdge as XdgResizeEdge,
@@ -178,6 +180,11 @@ impl XdgShellHandler for AeroState {
         if let Some(wl) = client_surface {
             self.window_surfaces.insert(n as u32, wl.clone());
             self.bind_pending_frame_client(n as u32, wl);
+            let workspace_id = self.workspaces.assign_window(n as u32);
+            emit_event(AeroEvent::WindowMovedToWorkspace {
+                window_id: n as u32,
+                workspace_id,
+            });
         }
         // Janelas que mapeiam SEM frame precisam ser anunciadas ao shell para que
         // ele crie uma WebView por window_id. O associate do cliente inicial cobre

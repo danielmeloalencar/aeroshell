@@ -4,14 +4,14 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-24 · **F2-cursor-shape-top-edges FECHADO PELO JUIZ VISUAL ("aprovado")** · **F2-compositor-cursor-shape FECHADO PELO JUIZ VISUAL ("ok. aprovado")** · **F1 FECHADA — base de compositor completa para F2 (protocolos provados; snap é cartão NOSSO de sessão/compat `F7-compat-snap`, Nautilus/Mutter e Ozone seguem como estavam)** · **F1-presentation-time FECHADO (juiz visual N/A)** · **F1-xdg-toplevel-states FECHADO PELO JUIZ VISUAL ("aprovado")** · **F1-subsurfaces FECHADO PELO JUIZ VISUAL (2026-11-23: "Funcionou tudo")** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · **F1i+ FECHADA PELO JUIZ VISUAL (digitação normal; só aviso de toplevel-icon, fora de escopo)** · **título real na titlebar FECHADO PELO JUIZ VISUAL ("ok")** · **F1-toplevel-icon FECHADO PELO JUIZ VISUAL ("vi o icone perfeitamente")** · **F1-csd-gtk-move-resize FECHADO PELO JUIZ VISUAL ("ok": gedit, gnome-disks e Calculadora OK)** · **F1-csd-sem-flash FECHADO PELO JUIZ VISUAL ("aprovado")** · cursor invisível no udev segue em cartão separado · 02q REABERTA E FECHADA PELO JUIZ em 2026-11-22 (sem adiamento, spike 12×36 eliminado; harness de 300 ms segue como limitação de VM registrada) · **02r FECHADA PELO JUIZ (nested + tty3) e 02s FECHADA PELO JUIZ (duas instâncias no mesmo D-Bus, "ok aprovado")**
+Última atualização: 2026-11-24 · **F2-workspaces FECHADO PELO JUIZ VISUAL ("aprovado")** · **F2-cursor-shape-top-edges FECHADO PELO JUIZ VISUAL ("aprovado")** · **F2-compositor-cursor-shape FECHADO PELO JUIZ VISUAL ("ok. aprovado")** · **F1 FECHADA — base de compositor completa para F2 (protocolos provados; snap é cartão NOSSO de sessão/compat `F7-compat-snap`, Nautilus/Mutter e Ozone seguem como estavam)** · **F1-presentation-time FECHADO (juiz visual N/A)** · **F1-xdg-toplevel-states FECHADO PELO JUIZ VISUAL ("aprovado")** · **F1-subsurfaces FECHADO PELO JUIZ VISUAL (2026-11-23: "Funcionou tudo")** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · **F1i+ FECHADA PELO JUIZ VISUAL (digitação normal; só aviso de toplevel-icon, fora de escopo)** · **título real na titlebar FECHADO PELO JUIZ VISUAL ("ok")** · **F1-toplevel-icon FECHADO PELO JUIZ VISUAL ("vi o icone perfeitamente")** · **F1-csd-gtk-move-resize FECHADO PELO JUIZ VISUAL ("ok": gedit, gnome-disks e Calculadora OK)** · **F1-csd-sem-flash FECHADO PELO JUIZ VISUAL ("aprovado")** · cursor invisível no udev segue em cartão separado · 02q REABERTA E FECHADA PELO JUIZ em 2026-11-22 (sem adiamento, spike 12×36 eliminado; harness de 300 ms segue como limitação de VM registrada) · **02r FECHADA PELO JUIZ (nested + tty3) e 02s FECHADA PELO JUIZ (duas instâncias no mesmo D-Bus, "ok aprovado")**
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
 lock, login) é TSX renderizado por WebKitGTK; runtime de política em Bun. Dev em nested (winit).
  
 ## 2. Objetivo atual (F1 autorizada)
-**Fase atual: F2 ABERTA — primeiro cartão `F2-event-stream` em execução** (F1 FECHADA em `585fa6f`; ver §3/§9). F0/fatia vertical FECHADA pelo humano em 2026-11-21: `foot` com
+**Fase atual: F2 ABERTA — cartão `F2-workspaces` FECHADO PELO JUIZ VISUAL** (F1 FECHADA em `585fa6f`; ver §3/§9). F0/fatia vertical FECHADA pelo humano em 2026-11-21: `foot` com
 decoração HTML funcional e painel React/TSX; fechamento formal em `docs/f0-relatorio-go-no-go.md` (quadro
 S1–S5, ratificação registrada dos ADRs, S4→F2/F9 e S5→F5/F6 deferidos com justificativa).
 F1 em andamento por cartões pequenos: F1a, F1b e F1c FECHADAS (juiz visual OK nas três; F1c em 2026-11-21);
@@ -21,6 +21,33 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **F2-workspaces (2026-11-24) — FECHADO PELO JUIZ VISUAL: humano respondeu *"aprovado"*.**
+       Cartão `docs/tasks/F2-workspaces.md` versionado do texto aprovado. Sem XML/ADR/dependência nova.
+       Compositor: `WorkspaceManager` puro (`workspaces.rs`) mantém lista ordenada, workspace ativo e
+       membership; janelas inativas **continuam no Space** e são filtradas em `render/scene.rs`, no
+       caminho winit N=1 e no fallback de frames, além do hit-test (`state.rs::surface_under`).
+       Comandos IPC: `workspace-list` (termina com `.`), `workspace-create` (`WORKSPACE <id>`),
+       `workspace-rename` (nome JSON, preserva espaços), `workspace-activate`, `window-workspace`,
+       `workspace-destroy` (recusa último/não vazio). Stream publica os 5 eventos pedidos + `WorkspaceRenamed`
+       (necessário para editar nomes) e faz replay no `__subscribe__`; foco de teclado/ponteiro é refeito ao ativar/mover.
+       Tipos `Workspace`/eventos vêm de `aeroshell-ipc` via `bun run generate:types`; SDK expõe
+       `listWorkspaces/createWorkspace/renameWorkspace/activateWorkspace/moveWindowToWorkspace/destroyWorkspace`
+       com `ERR` propagado; `WindowStore` tem listeners próprios e reconcilia janelas fechadas; painel React
+       tem abas editáveis, botão `+`, filtro da lista pela ativa e publica geometria das abas no `panel-state`.
+       **Teste-first:** `f2_workspaces.py` baseline `VEREDITO: FALHA` (`/tmp/opencode/f2-workspaces-baseline2.log`);
+       `workspaces.test.ts` baseline `Export named 'parseWorkspaces' not found`; `workspaces.rs` baseline
+       `unresolved import WorkspaceManager`. Depois: 3× `VEREDITO: OK` dos dois harnesses
+       (`/tmp/opencode/f2-ws-f2_workspaces-final{1,2,3}.log`, `-f2_workspaces_panel-final{1,2,3}.log`),
+       3 testes Rust, `bun test` 32/32, SDK Bun com transporte IPC real ("SDK_WORKSPACES OK"), fechar cliente limpa
+       membership, 0 erros de protocolo. `check.sh` EXIT=0 (`/tmp/opencode/f2-workspaces-gate-final.log`),
+       clippy `--features bench -D warnings` 0, `--no-default-features` 0 (avisos antigos de cursor).
+       Vizinhos: 11 OK; `frame_window_id` falhou 2× aqui e **também no HEAD** (A/B em
+       `/tmp/opencode/aero-head-ab`, sem minhas mudanças) — pré-existente (§6). **Não toquei snap/F7/F1.**
+       Correção descoberta pelo pré-filtro: `stopPropagation()` no `<input>` da aba impedia o clique de ativar; removido.
+       **Veredito visual:** humano operou a instância `wayland-aero-f2-workspaces-visual` (compositor PID 55030,
+       shell 55043, `foot` 55189/55312), viu WS1 com o primeiro `foot` e WS2 com o segundo, alternou pelas abas
+       e respondeu *"aprovado"* — sem flicker/ghost frame relatados. A instância permanece aberta; quem fecha é
+       o humano. **CARTÃO FECHADO.**
 - [x] **F2-cursor-shape-top-edges (2026-11-24) — FECHADO PELO JUIZ VISUAL: humano respondeu *"aprovado"*.**
        Seguimento do cartão de cursor: humano aprovou quase todos os cantos da moldura SSD, mas
        relatou falta de cursor de resize no **topo central** e nos **cantos superiores**. Causa
@@ -1589,6 +1616,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
+- **F2-workspaces FECHADO (§3): humano aprovou o juiz visual ("aprovado").**
+  A instância `wayland-aero-f2-workspaces-visual` foi deixada aberta; quem fecha é o humano.
+  **PARAR: nenhum próximo cartão autorizado; snap/F7 segue pendente de aprovação explícita.**
 - **F2-cursor-shape-top-edges FECHADO (§3): humano aprovou o juiz visual ("aprovado").**
   A instância `wayland-aero-f2-cursor-top` foi fechada pelo humano, não pelo agente.
   **PARAR: nenhum próximo cartão autorizado.** snap/F7 segue pendente de aprovação explícita.
@@ -1680,6 +1710,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
+**Hot-reload/Juiz F2-workspaces aprovado: PARAR — nenhum próximo cartão autorizado.** `F7-compat-snap.md`,
+drag-and-drop entre workspaces e tiling continuam sem autorização explícita; Snap/F7/F1 fora de escopo.
+Nenhuma próxima fase foi aberta.
 **Hot-reload FECHADO pelo juiz (2026-11-24): PARAR — nenhum próximo cartão autorizado.** `F7-compat-snap.md` segue
 pendente de aprovação explícita; não tocar em snapd/slot nem intercalar com F2. cursor-shape e primary-selection já
 fechados, fora da fila.
@@ -1731,6 +1764,12 @@ fechados, fora da fila.
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **F2-workspaces — `frame_window_id.py` pré-existente (2026-11-24):** falhou 2× em `hit_test=None` no ✕ da janela 1;
+  A/B no HEAD sem minhas mudanças (`/tmp/opencode/aero-head-ab`, `git archive HEAD`, sem tocar no repo) falhou
+  exatamente igual (`/tmp/opencode/f2-ws-ab-head-frame_window_id2.log`). Não é regressão do filtro de workspaces.
+- **Infra TS (2026-11-24):** `bun run check` falha antes de checar tipos: `tsc --noEmit` imprime a ajuda e sai 1,
+  e `tsc` local não roda porque o ambiente não tem `node`. `scripts/check.sh` (fonte única do gate) passa;
+  não alterei pacote/ambiente fora do repositório.
 - **F2-cursor-shape-top-edges — amostra falha preservada (2026-11-24):** `frame_resize_edges.py`
   falhou 1× em `Bottom`/`BottomRight` (`detectado=None`, `grab=None`, `VEREDITO: FALHA`,
   `/tmp/opencode/cursor-top-neigh-frame_resize_edges.log`) e passou 2× em seguida com o mesmo
@@ -2533,6 +2572,10 @@ fechados, fora da fila.
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- **F2-workspaces (2026-11-24): juiz visual APROVADO; partes NÃO medidas.** Humano operou
+  `wayland-aero-f2-workspaces-visual` com WS1/`foot 0` e WS2/`foot 1`, alternou pelas abas e respondeu
+  *"aprovado"* (§3). O pré-filtro mediu estado/eventos/sondas e cliques, mas não mediu pixels nem temporização
+  de flicker; a sentença foi visual. Não medido: udev/tty3, GPU real, drag-and-drop (fora de escopo).
 - **F2-cursor-shape-top-edges (2026-11-24): partes NÃO medidas (cartão fechado pelo juiz).**
   O harness mede sondas de protocolo, não o cursor na tela; a sentença foi o *"aprovado"* do humano
   na instância nested. Não medido: udev/tty3, GPU real, tempos de transição do cursor.
@@ -3077,6 +3120,16 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
+- **SESSÃO ENCERRADA (2026-11-24): F2-workspaces FECHADO PELO JUIZ VISUAL ("aprovado").**
+  Workspaces no compositor, eventos no stream, SDK Bun tipado e painel React; janelas inativas continuam no Space
+  e são filtradas na cena e no hit-test. Baseline FALHA; 3× `VEREDITO: OK` nos dois harnesses, 32/32 Bun,
+  36 Rust, `check.sh` EXIT=0, clippy bench 0, `--no-default-features` 0, 11 vizinhos OK
+  (`frame_window_id` pré-existente por A/B no HEAD, §6). Reproduzir (bench por último):
+  `bun build packages/panel/src/index.tsx --target=browser --outfile=packages/panel/dist/app.js &&
+  cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-shell &&
+  python3 tests/integration/f2_workspaces.py && python3 tests/integration/f2_workspaces_panel.py`.
+  Humano aprovou a instância `wayland-aero-f2-workspaces-visual` (PIDs 55030/55043/55189/55312), deixada aberta;
+  quem fecha é ele. **Nenhum próximo passo autorizado; PARAR.** Sem push; snap/F7/F1 intocados.
 - **SESSÃO ENCERRADA (2026-11-24): F2-cursor-shape-top-edges FECHADO PELO JUIZ ("aprovado").**
   `#edge-t` + `z-index` no HTML da moldura (`frame_webview.rs`); harness com 6 pontos SSD 3× OK,
   gate final EXIT=0, clippy bench 0, `--no-default-features` 0, 3 vizinhos OK (1 flake de

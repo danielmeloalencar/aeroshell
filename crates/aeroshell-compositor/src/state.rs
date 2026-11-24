@@ -9,7 +9,10 @@ use std::{
 
 use smithay::{
     desktop::{PopupManager, Space, Window, WindowSurfaceType},
-    input::{pointer::CursorImageStatus, Seat, SeatState},
+    input::{
+        pointer::{CursorImageStatus, MotionEvent},
+        Seat, SeatState,
+    },
     output::Output,
     reexports::{
         calloop::{EventLoop, LoopSignal},
@@ -19,7 +22,7 @@ use smithay::{
             Display, DisplayHandle, Resource,
         },
     },
-    utils::{Logical, Point, Rectangle, Size},
+    utils::{Logical, Point, Rectangle, Size, SERIAL_COUNTER},
     wayland::{
         compositor::{with_states, CompositorClientState, CompositorState},
         cursor_shape::CursorShapeManagerState,
@@ -55,6 +58,7 @@ use crate::{
     },
     render::cursor::CursorImage,
     window_ipc::{emit_event, window_title},
+    workspaces::WorkspaceManager,
     CalloopData,
 };
 
@@ -234,6 +238,8 @@ pub struct AeroState {
     pub presentation_seq: HashMap<String, u64>,
     /// F2: revisão monotônica dos snapshots/eventos publicados no stream.
     pub event_revision: u32,
+    /// F2-workspaces: membership canônica; janelas inativas seguem no Space.
+    pub workspaces: WorkspaceManager,
     /// F2-decoration-policy: runtime conectado? decisões e pedidos pendentes.
     pub policy_runtime: bool,
     pub decorations: HashMap<u32, DecorationPolicy>,
@@ -304,6 +310,68 @@ impl AeroState {
         self.space
             .elements()
             .find(|w| w.toplevel().map(|t| t.wl_surface()) == Some(surface))
+    }
+
+    /// Visibilidade não altera map/lifetime: é apenas filtro de cena e input.
+    pub fn window_visible(&self, window_id: u32) -> bool {
+        self.workspaces.window_visible(window_id)
+    }
+
+    /// Frames ainda não associados preservam o comportamento de startup. Um
+    /// frame associado acompanha exatamente a visibilidade do cliente dono.
+    pub fn frame_visible_in_active_workspace(&self, frame_surface: &WlSurface) -> bool {
+        self.associated_frames
+            .iter()
+            .find(|(surface, _, _, _)| surface == frame_surface)
+            .map(|(_, _, id, _)| self.window_visible(*id))
+            .unwrap_or(true)
+    }
+
+    /// Após trocar membership/ativa, foco de teclado e ponteiro não podem ficar
+    /// presos à superfície agora invisível. Não eleva nem reconfigura janelas.
+    pub fn refresh_workspace_focus(&mut self) {
+        let window = self
+            .space
+            .elements()
+            .rev()
+            .find(|window| {
+                window
+                    .toplevel()
+                    .and_then(|toplevel| {
+                        self.window_surfaces
+                            .iter()
+                            .find(|(_, surface)| *surface == toplevel.wl_surface())
+                            .map(|(id, _)| self.window_visible(*id))
+                    })
+                    .unwrap_or(false)
+            })
+            .cloned();
+        let surface = window.and_then(|window| {
+            window
+                .toplevel()
+                .map(|toplevel| toplevel.wl_surface().clone())
+        });
+        if let Some(keyboard) = self.seat.get_keyboard() {
+            keyboard.set_focus(self, surface, SERIAL_COUNTER.next_serial());
+        }
+        if let Some(pointer) = self.seat.get_pointer() {
+            let location = pointer.current_location();
+            let under = self.surface_under(location);
+            self.cursor_over_interactive = under
+                .as_ref()
+                .map(|(surface, _)| self.is_interactive_layer_surface(surface))
+                .unwrap_or(false);
+            pointer.motion(
+                self,
+                under,
+                &MotionEvent {
+                    location,
+                    serial: SERIAL_COUNTER.next_serial(),
+                    time: 0,
+                },
+            );
+            pointer.frame(self);
+        }
     }
 
     /// 02r: área não exclusiva do primeiro output em coordenadas do Space.
@@ -660,6 +728,7 @@ impl AeroState {
             presentation_state,
             presentation_seq: HashMap::new(),
             event_revision: 0,
+            workspaces: WorkspaceManager::default(),
             policy_runtime: false,
             decorations: HashMap::new(),
             policy_requested: HashSet::new(),
@@ -729,13 +798,16 @@ impl AeroState {
             let Some(cs) = window.toplevel().map(|t| t.wl_surface()) else {
                 continue;
             };
-            let Some((frame_surface, _, _, _)) = self
+            let Some((frame_surface, _, window_id, _)) = self
                 .associated_frames
                 .iter()
                 .find(|(_, _, _, c)| c.as_ref() == Some(cs))
             else {
                 continue;
             };
+            if !self.window_visible(*window_id) {
+                continue;
+            }
             let Some(geo) = self.space.element_geometry(window) else {
                 continue;
             };
@@ -787,12 +859,37 @@ impl AeroState {
             tracing::debug!(?pos, ?frame_rect, ?content_rect, ?pointer_origin, hit_frame = ?frame_surface.id(), "hit-test frame (região de decoração)");
             return Some((frame_surface.clone(), pointer_origin));
         }
-        if let Some((window, location)) = self.space.element_under(pos) {
-            if let Some((s, p)) =
-                window.surface_under(pos - location.to_f64(), WindowSurfaceType::ALL)
+        // `Space::element_under` não aceita excluir elementos. Repetimos o
+        // algoritmo do Smithay 0.7 (`desktop/space/mod.rs:176-199`) com o
+        // filtro de workspace, mantendo popups/subsurfaces via Window::surface_under.
+        for window in self.space.elements().rev() {
+            let visible = window
+                .toplevel()
+                .and_then(|toplevel| {
+                    self.window_surfaces
+                        .iter()
+                        .find(|(_, surface)| *surface == toplevel.wl_surface())
+                        .map(|(id, _)| self.window_visible(*id))
+                })
+                .unwrap_or(true);
+            if !visible {
+                continue;
+            }
+            let Some(bbox) = self.space.element_bbox(window) else {
+                continue;
+            };
+            if !bbox.to_f64().contains(pos) {
+                continue;
+            }
+            let Some(location) = self.space.element_location(window) else {
+                continue;
+            };
+            let render_location = location - window.geometry().loc;
+            if let Some((surface, point)) =
+                window.surface_under(pos - render_location.to_f64(), WindowSurfaceType::ALL)
             {
-                tracing::debug!(?pos, hit_client = ?s.id(), "hit-test cliente");
-                return Some((s, (p + location).to_f64()));
+                tracing::debug!(?pos, hit_client = ?surface.id(), "hit-test cliente");
+                return Some((surface, (point + render_location).to_f64()));
             }
         }
         None

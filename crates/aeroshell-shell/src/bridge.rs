@@ -204,6 +204,9 @@ pub fn install(window: &gtk4::ApplicationWindow, webview: &WebView) -> UserConte
                     return;
                 };
                 let lines = forward(command);
+                if command.starts_with("workspace-") || command.starts_with("window-workspace") {
+                    tracing::info!(command, ?lines, "PONTE IPC workspace");
+                }
                 if command == "list" {
                     let summary: Vec<String> = lines
                         .iter()
