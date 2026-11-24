@@ -59,6 +59,29 @@ pub enum DecorationPolicy {
     None,
 }
 
+/// Uma regra declarativa da política de decoração (F2-decoration-policy-ts).
+/// `null` num seletor significa "casa qualquer janela"; a primeira regra que
+/// casa vence. Tipos exportados por ts-rs: o runtime TS não escreve tipos à mão.
+#[cfg_attr(feature = "export-bindings", derive(TS))]
+#[cfg_attr(feature = "export-bindings", ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DecorationRule {
+    /// app_id exato do xdg_toplevel.
+    pub app_id: Option<String>,
+    /// "Classe": Wayland não tem WM_CLASS; casa o app_id ou seu último segmento.
+    pub class: Option<String>,
+    pub policy: DecorationPolicy,
+}
+
+/// Configuração carregada pelo runtime Bun no startup (sem hot-reload neste cartão).
+#[cfg_attr(feature = "export-bindings", derive(TS))]
+#[cfg_attr(feature = "export-bindings", ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DecorationPolicyConfig {
+    pub rules: Vec<DecorationRule>,
+    pub default: DecorationPolicy,
+}
+
 /// Evento PUSH do compositor para shell/SDK (substitui o polling do S4).
 /// A serialização na wire é o enum em forma de tagged object do ts-rs, ex.:
 /// `{"Title":{"id":0,"title":"foot"}}`.
