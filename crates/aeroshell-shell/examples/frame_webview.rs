@@ -979,17 +979,12 @@ fn apply_policy_csd(window_id: u32) {
     }
     let restored = RUNTIME.with(|cell| {
         let mut borrow = cell.borrow_mut();
-        let Some(rt) = borrow.as_mut() else {
-            return None;
-        };
-        let Some(entry) = rt
+        let rt = borrow.as_mut()?;
+        let entry = rt
             .state
             .entries
             .iter_mut()
-            .find(|entry| entry.window_id == window_id)
-        else {
-            return None;
-        };
+            .find(|entry| entry.window_id == window_id)?;
         if !entry.csd_active || entry.fullscreen {
             return None;
         }
