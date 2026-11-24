@@ -2292,9 +2292,10 @@ fechados, fora da fila.
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
 - **F2-shell-real (2026-11-24): JUIZ VISUAL PENDENTE.** Instância nested deixada **aberta**: compositor
-  PID 21119, runtime Bun PID 21143, `aeroshell-shell` PID 21183, `gedit` PID 21468, socket
-  `wayland-aero-f2-shell-real-visual`, IPC `/tmp/opencode/f2-shell-real/visual/ipc.sock`, regras
-  `$XDG_CONFIG_HOME=/tmp/opencode/f2-shell-real/visual/config` (`foot→Server`, `gedit→Client`).
+  PID 22526, runtime Bun PID 22545, `aeroshell-shell` PID 22584, `gedit` PID 22883, socket
+  `wayland-aero-f2-shell-real-visual2`, IPC `/tmp/opencode/f2-shell-real/visual2/ipc.sock`, regras
+  `$XDG_CONFIG_HOME=/tmp/opencode/f2-shell-real/visual2/config` (`foot→Server`, `gedit→Client`).
+  (A 1ª instância morreu sozinha ~45 s após subir; relançada e verificada viva.)
   Painel com 3 linhas: `foot`, `foot` (Server) e `gedit` (Client), uma com indicador de foco.
   Humano deve confirmar: lista ao vivo ao abrir/fechar, foco por clique, indicadores, e a decoração
   mudar ao editar `config/aeroshell/rules.ts` sem restart. **Sem "ok" nesta sessão o item NÃO está
