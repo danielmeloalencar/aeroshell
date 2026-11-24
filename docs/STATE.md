@@ -2310,13 +2310,15 @@ fechados, fora da fila.
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- **F2-shell-real (2026-11-24): 4ª RODADA DO JUIZ ABERTA (após +RAM na VM).** Humano pediu repetir o
-  teste visual com 18 GiB de RAM (antes 7 GiB). Instância relançada com compositor **sem bench** e
-  `RUST_LOG=info`: comp PID 8018, runtime 8037, shell 8086, gedit 8350, socket
-  `wayland-aero-f2-shell-real-visual4`, IPC `/tmp/opencode/f2-shell-real/visual4/ipc.sock`, regras
-  `/tmp/opencode/f2-shell-real/visual4/config/aeroshell/rules.ts` (`foot→Server`, `gedit→Client`).
-  Log de setup: 249/124/9 linhas; 3 janelas no IPC e 3 linhas no painel com decoração correta.
-  **Aguardando veredito; não fechar a instância.**
+- **F2-shell-real (2026-11-24): 5ª RODADA DO JUIZ ABERTA (sem `--size`).** Humano, na 4ª rodada:
+  janelas abrem cortadas por 5–10 s e depois completam; **clique/move/resize acontecem em posição
+  diferente da janela**. Causa aparente: eu havia passado `--size 1000x600`, e o RUNBOOK:196 registra
+  que o winit mantém a janela host em 1280×800 com output lógico diferente — desalinhamento de
+  coordenadas de input. Instância relançada **sem `--size`**, sem bench, `RUST_LOG=info`: comp PID
+  9130, runtime 9147, shell 9200, gedit 9469, socket `wayland-aero-f2-shell-real-visual5`, IPC
+  `/tmp/opencode/f2-shell-real/visual5/ipc.sock`, regras
+  `/tmp/opencode/f2-shell-real/visual5/config/aeroshell/rules.ts` (`foot→Server`, `gedit→Client`).
+  3 janelas no IPC, 3 linhas no painel com decoração correta. **Aguardando veredito; não fechar.**
   Rodadas 1–3 reprovadas (registro abaixo) — juiz visual reprovado até novo "ok".
   Instância da 1ª rodada (compositor PID
   22526, shell 22584, gedit 22883, runtime 22545, socket `wayland-aero-f2-shell-real-visual2`) morreu
