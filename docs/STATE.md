@@ -1608,6 +1608,16 @@ fechados, fora da fila.
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **F2-shell-real — medidor objetivo de redesenho, A/B (2026-11-24): NÃO reproduziu o loop em idle.**
+  `tests/integration/f2_shell_real_redraw_probe.py` (90 s, nested winit, painel + 2 foot, sem
+  interação nem edição) rodado no HEAD atual (`9d9ff71`) e no estável (`b532a0c`, worktree
+  `/home/daniel/Projetos/aeroshell-stable`): commits/s **0,07 vs 0,07**; `frame_painted`/s **0,04 vs
+  0,04**; configures de frame **2 vs 2**; tamanhos distintos por janela **1 vs 1**; `policy-reloads
+  sem edição` **0 vs 0**; `panel-state`/s **0,09 vs 0** (só a nova telemetria, não um loop). Ambos
+  `VEREDITO: IDLE`. Conclusão: **não é regressão do F2-shell-real nem loop em repouso**, e o
+  `fs.watch` não dispara reparse sem mudança. Lacuna restante: o medidor é idle — o humano relatou
+  o defeito ao **tentar mover/clicar**, com 3 janelas (inclui `gedit`); falta medir durante
+  interação real e com a 3ª janela. Artefatos: `/tmp/aero-redraw-{atual,estavel}-*/metrics.json`.
 - **F2-shell-real — JUIZ VISUAL REPROVADO 3× (2026-11-24): tremor, vazamento e redesenho infinito.**
   Humano: janelas impossíveis de mover, desenho incompleto, lentidão extrema, e (nas 3 tentativas)
   a janela do compositor tremia com o conteúdo vazado, mostrando a área de trabalho por trás, como
@@ -2770,11 +2780,13 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
 - **SESSÃO ATUAL (2026-11-24): F2-shell-real — código/teste/gates verdes, JUIZ VISUAL REPROVADO 3×
-  (§7); PARE.** O humano fechou as 3 instâncias por tremor/vazamento/redesenho infinito. Duas
-  hipóteses descartadas (morte espontânea; dilúvio de bench). **Próximo passo (decisão do humano):**
-  escrever um medidor objetivo de redesenho contínuo + integridade de pixels na janela winit antes
-  de tocar no código — os harnesses atuais não medem o que ele viu. Não relançar ainda; não tocar
-  snap/F7/F1; sem push.
+  (§7). Medidor A/B executado (§6): IDLE nos dois commits, sem loop e sem falso reload.** Ou seja,
+  **não há regressão mensurável em repouso**; o defeito só apareceu na interação humana (mover/
+  clicar, 3 janelas), que o medidor ainda não cobre. **Próximo passo (decisão do humano):** estender
+  o medidor com fase de drag real + 3ª janela (gedit), ainda sem tocar no código de produto, para
+  reproduzir o tremor; só depois propor fix. Worktree A/B em `/home/daniel/Projetos/aeroshell-stable`
+  (b532a0c) preservado para repetir comparação. Não relançar o juiz sem ok; snap/F7/F1 intocados;
+  sem push.
   Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build --workspace --examples && cargo build -p aeroshell-shell && bun build packages/panel/src/index.tsx --target=browser --outfile=packages/panel/dist/app.js && bun run generate:types && python3 tests/integration/f2_shell_real.py`
   → `VEREDITO: OK` 3× (`finalC{1,2,3}.log`); baseline no HEAD `VEREDITO: FALHA`. Unitário 28/28,
   gate `gate-close.log` EXIT=0. **Próximo passo imediato:** humano olhar o painel da instância aberta
