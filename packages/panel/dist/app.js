@@ -17130,6 +17130,9 @@ class WindowStore {
   workspaceListeners = new Set;
   appsState = [];
   appListeners = new Set;
+  notificationsState = [];
+  notificationListeners = new Set;
+  notificationCallbacks = new Set;
   constructor(initial = { revision: 0, windows: [] }) {
     this.state = initial;
   }
@@ -17172,6 +17175,26 @@ class WindowStore {
   setApps(apps) {
     this.appsState = apps;
     for (const listener of this.appListeners)
+      listener();
+  }
+  getNotifications() {
+    return this.notificationsState;
+  }
+  subscribeNotifications(listener) {
+    this.notificationListeners.add(listener);
+    return () => {
+      this.notificationListeners.delete(listener);
+    };
+  }
+  subscribeNotification(callback) {
+    this.notificationCallbacks.add(callback);
+    return () => {
+      this.notificationCallbacks.delete(callback);
+    };
+  }
+  setNotifications(notifications) {
+    this.notificationsState = notifications;
+    for (const listener of this.notificationListeners)
       listener();
   }
   applyWorkspaces(workspaces, activeId) {
@@ -17223,6 +17246,22 @@ class WindowStore {
     }
     if ("AppListUpdated" in event) {
       this.setApps(event.AppListUpdated.apps);
+      return;
+    }
+    if ("NotificationShown" in event) {
+      const notification = event.NotificationShown.notification;
+      if (this.notificationsState.some((item) => item.id === notification.id))
+        return;
+      this.setNotifications([...this.notificationsState, notification]);
+      for (const callback of this.notificationCallbacks)
+        callback(notification);
+      return;
+    }
+    if ("NotificationDismissed" in event) {
+      const id = event.NotificationDismissed.id;
+      if (!this.notificationsState.some((item) => item.id === id))
+        return;
+      this.setNotifications(this.notificationsState.filter((item) => item.id !== id));
       return;
     }
     if ("WorkspaceCreated" in event) {
@@ -17373,6 +17412,8 @@ var EVENT_KEYS = [
   "WorkspaceDestroyed",
   "WindowMovedToWorkspace",
   "AppListUpdated",
+  "NotificationShown",
+  "NotificationDismissed",
   "DecorationRequest",
   "DecorationApplied"
 ];
@@ -17396,6 +17437,8 @@ function expectOk(lines) {
     throw new Error(lines.join(`
 `) || "IPC sem resposta");
 }
+var notificationPrefix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+var nextNotificationId = 1;
 function normalized(value) {
   return value.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLocaleLowerCase();
 }
@@ -17468,6 +17511,22 @@ function createAero(transport) {
       console.error(`falha ao lançar ${appId}:`, error);
     });
   }
+  function showNotification(title, body, icon, timeoutMs) {
+    const id = `${notificationPrefix}-${nextNotificationId++}`;
+    const command = `notify ${JSON.stringify(title)} ${JSON.stringify(body)} ` + `${JSON.stringify(icon ?? null)} ${timeoutMs ?? 5000} ${JSON.stringify(id)}`;
+    transport(command).then(expectOk).catch((error) => {
+      console.error(`falha ao publicar notificação ${id}:`, error);
+    });
+    return id;
+  }
+  function dismissNotification(id) {
+    transport(`dismiss-notification ${JSON.stringify(id)}`).then(expectOk).catch((error) => {
+      console.error(`falha ao dispensar notificação ${id}:`, error);
+    });
+  }
+  function onNotification(callback) {
+    return store.subscribeNotification(callback);
+  }
   async function listWorkspaces() {
     return refreshWorkspaces();
   }
@@ -17504,6 +17563,9 @@ function createAero(transport) {
     listApps,
     searchApps,
     launchApp,
+    showNotification,
+    dismissNotification,
+    onNotification,
     listWorkspaces,
     createWorkspace,
     renameWorkspace,
@@ -17538,6 +17600,9 @@ function useIndicators(store) {
 function useApps(store) {
   return import_react.useSyncExternalStore((listener) => store.subscribeApps(listener), () => store.getApps(), () => store.getApps());
 }
+function useNotifications(store) {
+  return import_react.useSyncExternalStore((listener) => store.subscribeNotifications(listener), () => store.getNotifications(), () => store.getNotifications());
+}
 function useWorkspaces(store) {
   return import_react.useSyncExternalStore((listener) => store.subscribeWorkspaces(listener), () => store.getWorkspaces(), () => store.getWorkspaces());
 }
@@ -17569,7 +17634,7 @@ window.__aeroEvent = (json) => {
     aero.store.applyEvent(event);
 };
 post({ type: "ready" });
-function publishPanelState(windows, indicators, workspaceState, launcherOpen, query, apps) {
+function publishPanelState(windows, indicators, workspaceState, launcherOpen, query, apps, notifications) {
   const rect = (el) => {
     const r = el.getBoundingClientRect();
     return { x: r.left, y: r.top, w: r.width, h: r.height };
@@ -17586,9 +17651,10 @@ function publishPanelState(windows, indicators, workspaceState, launcherOpen, qu
   const addControl = document.querySelector(".aero-workspace-add");
   const addRect = addControl ? rect(addControl) : null;
   const launcherRects = Array.from(document.querySelectorAll(".aero-launcher-toggle, .aero-launcher-search, .aero-app-row")).map(rect).filter((r) => r.w > 0 && r.h > 0);
+  const notificationRects = Array.from(document.querySelectorAll(".aero-notification-close")).map(rect).filter((r) => r.w > 0 && r.h > 0);
   post({
     type: "interactive",
-    rects: [...rowRects, ...workspaceRects, ...launcherRects],
+    rects: [...rowRects, ...workspaceRects, ...launcherRects, ...notificationRects],
     cursor: "pointer"
   });
   const closes = {};
@@ -17603,6 +17669,12 @@ function publishPanelState(windows, indicators, workspaceState, launcherOpen, qu
     const id = element.dataset.appId;
     if (id)
       appRects[id] = rect(element);
+  });
+  const notificationCloseRects = {};
+  document.querySelectorAll(".aero-notification-close").forEach((element) => {
+    const id = element.dataset.notificationId;
+    if (id)
+      notificationCloseRects[id] = rect(element);
   });
   const toggle = document.querySelector(".aero-launcher-toggle");
   const search = document.querySelector(".aero-launcher-search");
@@ -17631,8 +17703,58 @@ function publishPanelState(windows, indicators, workspaceState, launcherOpen, qu
       appRects,
       toggleRect: toggle ? rect(toggle) : null,
       searchRect: search ? rect(search) : null
-    }
+    },
+    notifications: notifications.map((notification) => ({
+      id: notification.id,
+      title: notification.title,
+      body: notification.body,
+      icon: notification.icon,
+      iconSource: notification.icon || "dialog-information",
+      timeout_ms: notification.timeout_ms
+    })),
+    notificationRects: notificationCloseRects
   });
+}
+function NotificationToast({ notification }) {
+  import_react2.useEffect(() => {
+    const timer = window.setTimeout(() => {
+      aero.dismissNotification(notification.id);
+    }, notification.timeout_ms);
+    return () => window.clearTimeout(timer);
+  }, [notification.id, notification.timeout_ms]);
+  return /* @__PURE__ */ jsx_dev_runtime.jsxDEV("div", {
+    className: "aero-notification",
+    role: "alert",
+    "data-notification-id": notification.id,
+    children: [
+      /* @__PURE__ */ jsx_dev_runtime.jsxDEV("img", {
+        className: "aero-notification-icon",
+        alt: "",
+        src: `aero://icon/${encodeURIComponent(notification.icon || "dialog-information")}`
+      }, undefined, false, undefined, this),
+      /* @__PURE__ */ jsx_dev_runtime.jsxDEV("div", {
+        className: "aero-notification-content",
+        children: [
+          /* @__PURE__ */ jsx_dev_runtime.jsxDEV("strong", {
+            className: "aero-notification-title",
+            children: notification.title
+          }, undefined, false, undefined, this),
+          /* @__PURE__ */ jsx_dev_runtime.jsxDEV("span", {
+            className: "aero-notification-body",
+            children: notification.body
+          }, undefined, false, undefined, this)
+        ]
+      }, undefined, true, undefined, this),
+      /* @__PURE__ */ jsx_dev_runtime.jsxDEV("button", {
+        type: "button",
+        className: "aero-notification-close",
+        "data-notification-id": notification.id,
+        "aria-label": `fechar notificação ${notification.title}`,
+        onClick: () => void aero.dismissNotification(notification.id),
+        children: "✕"
+      }, undefined, false, undefined, this)
+    ]
+  }, undefined, true, undefined, this);
 }
 function WorkspaceTab({ workspace, active }) {
   const [name, setName] = import_react2.useState(workspace.name);
@@ -17673,6 +17795,7 @@ function Panel() {
   const indicators = useIndicators(aero.store);
   const workspaceState = useWorkspaces(aero.store);
   const allApps = useApps(aero.store);
+  const notifications = useNotifications(aero.store);
   const [launcherOpen, setLauncherOpen] = import_react2.useState(false);
   const [query, setQuery] = import_react2.useState("");
   const filteredApps = launcherOpen ? aero.searchApps(query) : [];
@@ -17685,134 +17808,172 @@ function Panel() {
     });
   }, []);
   import_react2.useEffect(() => {
-    publishPanelState(launcherOpen ? [] : windows, indicators, workspaceState, launcherOpen, query, filteredApps);
-  }, [windows, indicators, workspaceState, launcherOpen, query, filteredApps, allApps]);
-  return /* @__PURE__ */ jsx_dev_runtime.jsxDEV("div", {
-    className: "aero-panel",
+    publishPanelState(launcherOpen ? [] : windows, indicators, workspaceState, launcherOpen, query, filteredApps, notifications);
+  }, [
+    windows,
+    indicators,
+    workspaceState,
+    launcherOpen,
+    query,
+    filteredApps,
+    allApps,
+    notifications
+  ]);
+  import_react2.useEffect(() => {
+    const height = notifications.length === 0 ? 48 : Math.min(480, 64 + notifications.length * 88);
+    post({ type: "surface-height", height });
+  }, [notifications.length]);
+  import_react2.useEffect(() => {
+    const republish = () => publishPanelState(launcherOpen ? [] : windows, indicators, workspaceState, launcherOpen, query, filteredApps, notifications);
+    window.addEventListener("resize", republish);
+    return () => window.removeEventListener("resize", republish);
+  }, [
+    windows,
+    indicators,
+    workspaceState,
+    launcherOpen,
+    query,
+    filteredApps,
+    notifications
+  ]);
+  return /* @__PURE__ */ jsx_dev_runtime.jsxDEV(jsx_dev_runtime.Fragment, {
     children: [
-      /* @__PURE__ */ jsx_dev_runtime.jsxDEV("div", {
-        className: "aero-workspaces",
-        children: [
-          workspaceState.workspaces.map((workspace) => /* @__PURE__ */ jsx_dev_runtime.jsxDEV(WorkspaceTab, {
-            workspace,
-            active: workspace.id === workspaceState.activeId
-          }, workspace.id, false, undefined, this)),
-          /* @__PURE__ */ jsx_dev_runtime.jsxDEV("button", {
-            type: "button",
-            className: "aero-workspace-add",
-            "aria-label": "criar workspace",
-            onClick: () => void aero.createWorkspace(),
-            children: "+"
-          }, undefined, false, undefined, this)
-        ]
-      }, undefined, true, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime.jsxDEV("button", {
-        type: "button",
-        className: "aero-launcher-toggle",
-        "aria-label": launcherOpen ? "fechar launcher" : "abrir launcher",
-        onClick: () => {
-          setLauncherOpen((open) => !open);
-          setQuery("");
-        },
-        children: launcherOpen ? "Fechar" : "Apps"
+      notifications.length > 0 && /* @__PURE__ */ jsx_dev_runtime.jsxDEV("div", {
+        className: "aero-notifications",
+        role: "list",
+        "aria-label": "notificações",
+        children: notifications.map((notification) => /* @__PURE__ */ jsx_dev_runtime.jsxDEV(NotificationToast, {
+          notification
+        }, notification.id, false, undefined, this))
       }, undefined, false, undefined, this),
-      launcherOpen && /* @__PURE__ */ jsx_dev_runtime.jsxDEV("div", {
-        className: "aero-launcher",
+      /* @__PURE__ */ jsx_dev_runtime.jsxDEV("div", {
+        className: "aero-panel",
         children: [
-          /* @__PURE__ */ jsx_dev_runtime.jsxDEV("input", {
-            className: "aero-launcher-search",
-            "aria-label": "buscar aplicativos",
-            placeholder: "Buscar aplicativos",
-            value: query,
-            autoFocus: true,
-            onChange: (event) => setQuery(event.currentTarget.value),
-            onKeyDown: (event) => {
-              if (event.key === "Escape") {
-                setLauncherOpen(false);
-                setQuery("");
-              }
-            }
-          }, undefined, false, undefined, this),
           /* @__PURE__ */ jsx_dev_runtime.jsxDEV("div", {
-            className: "aero-apps",
-            role: "list",
-            "aria-label": "aplicativos filtrados",
+            className: "aero-workspaces",
             children: [
-              filteredApps.map((app) => /* @__PURE__ */ jsx_dev_runtime.jsxDEV("button", {
+              workspaceState.workspaces.map((workspace) => /* @__PURE__ */ jsx_dev_runtime.jsxDEV(WorkspaceTab, {
+                workspace,
+                active: workspace.id === workspaceState.activeId
+              }, workspace.id, false, undefined, this)),
+              /* @__PURE__ */ jsx_dev_runtime.jsxDEV("button", {
                 type: "button",
-                role: "listitem",
-                className: "aero-app-row",
-                "data-app-id": app.id,
-                title: app.exec,
-                onClick: () => {
-                  aero.launchApp(app.id, workspaceState.activeId ?? undefined);
-                  setLauncherOpen(false);
-                  setQuery("");
-                },
-                children: [
-                  /* @__PURE__ */ jsx_dev_runtime.jsxDEV("img", {
-                    className: "aero-app-icon",
-                    alt: "",
-                    src: `aero://icon/${encodeURIComponent(app.icon || "application-x-executable")}`
-                  }, undefined, false, undefined, this),
-                  /* @__PURE__ */ jsx_dev_runtime.jsxDEV("span", {
-                    className: "aero-app-name",
-                    children: app.name
-                  }, undefined, false, undefined, this)
-                ]
-              }, app.id, true, undefined, this)),
-              filteredApps.length === 0 && /* @__PURE__ */ jsx_dev_runtime.jsxDEV("span", {
-                className: "aero-apps-empty",
-                children: "Nenhum aplicativo"
+                className: "aero-workspace-add",
+                "aria-label": "criar workspace",
+                onClick: () => void aero.createWorkspace(),
+                children: "+"
               }, undefined, false, undefined, this)
             ]
-          }, undefined, true, undefined, this)
-        ]
-      }, undefined, true, undefined, this),
-      !launcherOpen && windows.map((w) => /* @__PURE__ */ jsx_dev_runtime.jsxDEV("div", {
-        "data-window-id": w.id,
-        className: "aero-row",
-        role: "button",
-        tabIndex: 0,
-        "data-focused": indicators.focusedId === w.id ? "1" : "0",
-        "data-decoration": indicators.decorations[w.id] ?? "default",
-        onClick: (event) => {
-          const bounds = event.currentTarget.getBoundingClientRect();
-          if (event.clientX >= bounds.right - 18)
-            aero.windows.close(w.id);
-          else
-            aero.windows.focus(w.id);
-        },
-        children: [
-          /* @__PURE__ */ jsx_dev_runtime.jsxDEV("span", {
-            className: "aero-focus",
-            children: indicators.focusedId === w.id ? "●" : "○"
-          }, undefined, false, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime.jsxDEV("span", {
-            className: "aero-id",
-            children: w.id
-          }, undefined, false, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime.jsxDEV("span", {
-            className: "aero-title",
-            children: w.title
-          }, undefined, false, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime.jsxDEV("span", {
-            className: "aero-decoration",
-            children: (indicators.decorations[w.id] ?? "default").toLowerCase()
-          }, undefined, false, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime.jsxDEV("span", {
-            className: "aero-close",
-            "data-close-id": w.id,
-            role: "button",
-            "aria-label": `fechar ${w.title}`,
-            onClick: (event) => {
-              event.stopPropagation();
-              aero.windows.close(w.id);
+          }, undefined, true, undefined, this),
+          /* @__PURE__ */ jsx_dev_runtime.jsxDEV("button", {
+            type: "button",
+            className: "aero-launcher-toggle",
+            "aria-label": launcherOpen ? "fechar launcher" : "abrir launcher",
+            onClick: () => {
+              setLauncherOpen((open) => !open);
+              setQuery("");
             },
-            children: "✕"
-          }, undefined, false, undefined, this)
+            children: launcherOpen ? "Fechar" : "Apps"
+          }, undefined, false, undefined, this),
+          launcherOpen && /* @__PURE__ */ jsx_dev_runtime.jsxDEV("div", {
+            className: "aero-launcher",
+            children: [
+              /* @__PURE__ */ jsx_dev_runtime.jsxDEV("input", {
+                className: "aero-launcher-search",
+                "aria-label": "buscar aplicativos",
+                placeholder: "Buscar aplicativos",
+                value: query,
+                autoFocus: true,
+                onChange: (event) => setQuery(event.currentTarget.value),
+                onKeyDown: (event) => {
+                  if (event.key === "Escape") {
+                    setLauncherOpen(false);
+                    setQuery("");
+                  }
+                }
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime.jsxDEV("div", {
+                className: "aero-apps",
+                role: "list",
+                "aria-label": "aplicativos filtrados",
+                children: [
+                  filteredApps.map((app) => /* @__PURE__ */ jsx_dev_runtime.jsxDEV("button", {
+                    type: "button",
+                    role: "listitem",
+                    className: "aero-app-row",
+                    "data-app-id": app.id,
+                    title: app.exec,
+                    onClick: () => {
+                      aero.launchApp(app.id, workspaceState.activeId ?? undefined);
+                      setLauncherOpen(false);
+                      setQuery("");
+                    },
+                    children: [
+                      /* @__PURE__ */ jsx_dev_runtime.jsxDEV("img", {
+                        className: "aero-app-icon",
+                        alt: "",
+                        src: `aero://icon/${encodeURIComponent(app.icon || "application-x-executable")}`
+                      }, undefined, false, undefined, this),
+                      /* @__PURE__ */ jsx_dev_runtime.jsxDEV("span", {
+                        className: "aero-app-name",
+                        children: app.name
+                      }, undefined, false, undefined, this)
+                    ]
+                  }, app.id, true, undefined, this)),
+                  filteredApps.length === 0 && /* @__PURE__ */ jsx_dev_runtime.jsxDEV("span", {
+                    className: "aero-apps-empty",
+                    children: "Nenhum aplicativo"
+                  }, undefined, false, undefined, this)
+                ]
+              }, undefined, true, undefined, this)
+            ]
+          }, undefined, true, undefined, this),
+          !launcherOpen && windows.map((w) => /* @__PURE__ */ jsx_dev_runtime.jsxDEV("div", {
+            "data-window-id": w.id,
+            className: "aero-row",
+            role: "button",
+            tabIndex: 0,
+            "data-focused": indicators.focusedId === w.id ? "1" : "0",
+            "data-decoration": indicators.decorations[w.id] ?? "default",
+            onClick: (event) => {
+              const bounds = event.currentTarget.getBoundingClientRect();
+              if (event.clientX >= bounds.right - 18)
+                aero.windows.close(w.id);
+              else
+                aero.windows.focus(w.id);
+            },
+            children: [
+              /* @__PURE__ */ jsx_dev_runtime.jsxDEV("span", {
+                className: "aero-focus",
+                children: indicators.focusedId === w.id ? "●" : "○"
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime.jsxDEV("span", {
+                className: "aero-id",
+                children: w.id
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime.jsxDEV("span", {
+                className: "aero-title",
+                children: w.title
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime.jsxDEV("span", {
+                className: "aero-decoration",
+                children: (indicators.decorations[w.id] ?? "default").toLowerCase()
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime.jsxDEV("span", {
+                className: "aero-close",
+                "data-close-id": w.id,
+                role: "button",
+                "aria-label": `fechar ${w.title}`,
+                onClick: (event) => {
+                  event.stopPropagation();
+                  aero.windows.close(w.id);
+                },
+                children: "✕"
+              }, undefined, false, undefined, this)
+            ]
+          }, w.id, true, undefined, this))
         ]
-      }, w.id, true, undefined, this))
+      }, undefined, true, undefined, this)
     ]
   }, undefined, true, undefined, this);
 }

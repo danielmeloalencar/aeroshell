@@ -195,6 +195,17 @@ pub fn install(window: &gtk4::ApplicationWindow, webview: &WebView) -> UserConte
 
         match message.get("type").and_then(|v| v.as_str()) {
             Some("ready") => event_gate().mark_ready(),
+            // Toasts vivem acima da barra de 48 px; a WebView só cresce enquanto
+            // houver notificações. A exclusive zone do painel não é alterada.
+            Some("surface-height") => {
+                if let (Some(window), Some(height)) = (
+                    weak_window.upgrade(),
+                    message.get("height").and_then(|v| v.as_u64()),
+                ) {
+                    window.set_height_request(height.clamp(48, 480) as i32);
+                    window.queue_resize();
+                }
+            }
             Some("ipc") => {
                 let (Some(webview), Some(command), Some(seq)) = (
                     weak_webview.upgrade(),

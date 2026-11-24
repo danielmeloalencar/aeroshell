@@ -4,6 +4,7 @@
 import { useSyncExternalStore } from "react";
 
 import type { App } from "../../sdk/src/generated/App";
+import type { Notification } from "../../sdk/src/generated/Notification";
 import type { WindowInfo } from "../../sdk/src/generated/WindowInfo";
 import type { PanelIndicators, WindowStore, WorkspacesState } from "../../sdk/src/store";
 
@@ -30,6 +31,14 @@ export function useApps(store: WindowStore): App[] {
     (listener) => store.subscribeApps(listener),
     () => store.getApps(),
     () => store.getApps(),
+  );
+}
+
+export function useNotifications(store: WindowStore): Notification[] {
+  return useSyncExternalStore(
+    (listener) => store.subscribeNotifications(listener),
+    () => store.getNotifications(),
+    () => store.getNotifications(),
   );
 }
 

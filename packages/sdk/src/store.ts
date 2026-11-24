@@ -1,6 +1,7 @@
 import type { AeroEvent } from "./generated/AeroEvent";
 import type { App } from "./generated/App";
 import type { DecorationPolicy } from "./generated/DecorationPolicy";
+import type { Notification } from "./generated/Notification";
 import type { Patch } from "./generated/Patch";
 import type { Snapshot } from "./generated/Snapshot";
 import type { WindowInfo } from "./generated/WindowInfo";
@@ -37,6 +38,9 @@ export class WindowStore {
   private readonly workspaceListeners = new Set<Listener>();
   private appsState: App[] = [];
   private readonly appListeners = new Set<Listener>();
+  private notificationsState: Notification[] = [];
+  private readonly notificationListeners = new Set<Listener>();
+  private readonly notificationCallbacks = new Set<(notification: Notification) => void>();
 
   constructor(initial: Snapshot = { revision: 0, windows: [] }) {
     this.state = initial;
@@ -89,6 +93,29 @@ export class WindowStore {
   private setApps(apps: App[]): void {
     this.appsState = apps;
     for (const listener of this.appListeners) listener();
+  }
+
+  getNotifications(): Notification[] {
+    return this.notificationsState;
+  }
+
+  subscribeNotifications(listener: Listener): () => void {
+    this.notificationListeners.add(listener);
+    return () => {
+      this.notificationListeners.delete(listener);
+    };
+  }
+
+  subscribeNotification(callback: (notification: Notification) => void): () => void {
+    this.notificationCallbacks.add(callback);
+    return () => {
+      this.notificationCallbacks.delete(callback);
+    };
+  }
+
+  private setNotifications(notifications: Notification[]): void {
+    this.notificationsState = notifications;
+    for (const listener of this.notificationListeners) listener();
   }
 
   applyWorkspaces(workspaces: Workspace[], activeId: number | null): void {
@@ -147,6 +174,19 @@ export class WindowStore {
     }
     if ("AppListUpdated" in event) {
       this.setApps(event.AppListUpdated.apps);
+      return;
+    }
+    if ("NotificationShown" in event) {
+      const notification = event.NotificationShown.notification;
+      if (this.notificationsState.some((item) => item.id === notification.id)) return;
+      this.setNotifications([...this.notificationsState, notification]);
+      for (const callback of this.notificationCallbacks) callback(notification);
+      return;
+    }
+    if ("NotificationDismissed" in event) {
+      const id = event.NotificationDismissed.id;
+      if (!this.notificationsState.some((item) => item.id === id)) return;
+      this.setNotifications(this.notificationsState.filter((item) => item.id !== id));
       return;
     }
     if ("WorkspaceCreated" in event) {

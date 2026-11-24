@@ -11,6 +11,9 @@
 //!   policy <id> ... -> OK (uso interno: decisão de decoração)
 //!   policy-reload   -> OK (uso interno: reemite DecorationRequest às janelas decididas)
 //!   launch <app_id> [workspace_id] -> OK (lança ou foca uma instância existente)
+//!   notify <titulo-json> <corpo-json> [icone-json] [timeout-ms] [id-json]
+//!                       -> OK (forma pública: notify <titulo> <corpo>)
+//!   dismiss-notification <id-json> -> OK
 //! Cada request é despachado no event loop (canal calloop) e respondido por um
 //! oneshot mpsc, para que `list` veja o estado atual do space sem snapshot obsoleto.
 
@@ -18,11 +21,16 @@ use std::{
     io::{self, BufRead, Write},
     os::unix::net::{UnixListener, UnixStream},
     path::PathBuf,
-    sync::{mpsc, Mutex, OnceLock},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        mpsc, Mutex, OnceLock,
+    },
     time::Duration,
 };
 
-use aeroshell_ipc::types::{AeroEvent, App, DecorationPolicy, Snapshot, WindowInfo, Workspace};
+use aeroshell_ipc::types::{
+    AeroEvent, App, DecorationPolicy, Notification, Snapshot, WindowInfo, Workspace,
+};
 use calloop::channel;
 use serde_json::{json, Value};
 use smithay::{
@@ -123,6 +131,9 @@ fn activate_workspace(state: &mut AeroState, workspace_id: u32) -> Result<(), St
 }
 
 pub type Command = (String, mpsc::Sender<String>);
+
+/// IDs das notificações criadas pelo comando público (sem estado persistente).
+static NOTIFICATION_SEQ: AtomicU64 = AtomicU64::new(1);
 
 /// Conexões assinantes do stream PUSH (uma linha JSON por evento).
 static SUBSCRIBERS: OnceLock<Mutex<Vec<UnixStream>>> = OnceLock::new();
@@ -242,6 +253,12 @@ fn event_json(event: &AeroEvent) -> Value {
             let apps: Vec<Value> = apps.iter().map(app_json).collect();
             json!({ "AppListUpdated": { "apps": apps } })
         }
+        AeroEvent::NotificationShown { notification } => json!({
+            "NotificationShown": { "notification": notification_json(notification) }
+        }),
+        AeroEvent::NotificationDismissed { id } => json!({
+            "NotificationDismissed": { "id": id }
+        }),
         AeroEvent::DecorationRequest {
             id,
             app_id,
@@ -276,6 +293,86 @@ fn app_json(app: &App) -> Value {
         "exec": app.exec,
         "categories": app.categories,
     })
+}
+
+fn notification_json(notification: &Notification) -> Value {
+    json!({
+        "id": notification.id,
+        "title": notification.title,
+        "body": notification.body,
+        "icon": notification.icon,
+        "timeout_ms": notification.timeout_ms,
+    })
+}
+
+fn next_json_string(
+    values: &mut impl Iterator<Item = Result<Value, serde_json::Error>>,
+    field: &str,
+) -> Result<String, String> {
+    match values.next() {
+        Some(Ok(Value::String(value))) => Ok(value),
+        Some(Ok(other)) => Err(format!("{field} deveria ser string: {other}")),
+        Some(Err(err)) => Err(format!("{field} inválido: {err}")),
+        None => Err(format!("falta {field}")),
+    }
+}
+
+/// A forma do SDK usa valores JSON sequenciais (espaços dentro do texto não
+/// quebram o parse); a forma pública aceita `notify <titulo> <corpo>` com o
+/// resto da linha como corpo.
+fn notification_from_command(raw: &str, default_id: String) -> Result<Notification, String> {
+    let mut values = serde_json::Deserializer::from_str(raw).into_iter::<Value>();
+    let title = match next_json_string(&mut values, "titulo") {
+        Ok(value) => value,
+        Err(_) => {
+            let mut plain = raw.splitn(2, |c: char| c.is_whitespace());
+            return Ok(Notification {
+                id: default_id,
+                title: plain.next().unwrap_or("").trim().to_owned(),
+                body: plain.next().unwrap_or("").trim().to_owned(),
+                icon: None,
+                timeout_ms: 5000,
+            });
+        }
+    };
+    let body = next_json_string(&mut values, "corpo")?;
+    let icon = match values.next() {
+        Some(Ok(Value::String(value))) => Some(value),
+        Some(Ok(Value::Null)) | None => None,
+        Some(Ok(other)) => return Err(format!("icone deveria ser string ou null: {other}")),
+        Some(Err(err)) => return Err(format!("icone inválido: {err}")),
+    };
+    let timeout_ms = match values.next() {
+        Some(Ok(Value::Number(number))) => number
+            .as_u64()
+            .ok_or_else(|| "timeout-ms deveria ser inteiro positivo".to_owned())?,
+        Some(Ok(other)) => return Err(format!("timeout-ms deveria ser número: {other}")),
+        Some(Err(err)) => return Err(format!("timeout-ms inválido: {err}")),
+        None => 5000,
+    };
+    let id = match values.next() {
+        Some(Ok(Value::String(value))) => value,
+        Some(Ok(other)) => return Err(format!("id deveria ser string: {other}")),
+        Some(Err(err)) => return Err(format!("id inválido: {err}")),
+        None => default_id,
+    };
+    if values.next().is_some() {
+        return Err("notify recebeu argumentos demais".to_owned());
+    }
+    Ok(Notification {
+        id,
+        title,
+        body,
+        icon,
+        timeout_ms,
+    })
+}
+
+fn notification_id_arg(raw: &str) -> String {
+    match serde_json::from_str::<String>(raw) {
+        Ok(id) => id,
+        Err(_) => raw.trim().to_owned(),
+    }
 }
 
 fn policy_name(policy: DecorationPolicy) -> &'static str {
@@ -331,6 +428,8 @@ fn event_name(event: &AeroEvent) -> &'static str {
         AeroEvent::WorkspaceDestroyed { .. } => "workspace_destroyed",
         AeroEvent::WindowMovedToWorkspace { .. } => "window_moved_to_workspace",
         AeroEvent::AppListUpdated { .. } => "app_list_updated",
+        AeroEvent::NotificationShown { .. } => "notification_shown",
+        AeroEvent::NotificationDismissed { .. } => "notification_dismissed",
         AeroEvent::DecorationRequest { .. } => "decoration_request",
         AeroEvent::DecorationApplied { .. } => "decoration_applied",
     }
@@ -706,6 +805,32 @@ impl AeroState {
                     },
                     Err(err) => format!("ERR falha ao lançar {}: {err}", app.info.id),
                 }
+            }
+            // F2-notifications: o compositor é apenas o mecanismo. O estado ativo
+            // vive no SDK/painel; aqui só publicamos shown/dismiss no stream.
+            "notify" => {
+                let raw = cmd.strip_prefix("notify").unwrap_or("").trim();
+                let generated = format!("ipc-{}", NOTIFICATION_SEQ.fetch_add(1, Ordering::Relaxed));
+                match notification_from_command(raw, generated) {
+                    Ok(notification) => {
+                        emit_event(AeroEvent::NotificationShown { notification });
+                        "OK".to_owned()
+                    }
+                    Err(err) => format!("ERR uso: notify: {err}"),
+                }
+            }
+            "dismiss-notification" => {
+                let raw = cmd
+                    .strip_prefix("dismiss-notification")
+                    .unwrap_or("")
+                    .trim();
+                if raw.is_empty() {
+                    return "ERR uso: dismiss-notification <id>".to_owned();
+                }
+                emit_event(AeroEvent::NotificationDismissed {
+                    id: notification_id_arg(raw),
+                });
+                "OK".to_owned()
             }
             "list" => {
                 let mut out = String::new();

@@ -22,6 +22,27 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [~] **F2-notifications (2026-11-24) — código/teste/gates verdes; JUIZ VISUAL PENDENTE (§7).**
+       Cartão `docs/tasks/F2-notifications.md` criado do texto aprovado (antecipação F2 explícita do
+       subconjunto interno; D-Bus fica na F4). Sem XML/ADR/dependência nova. SDK: `showNotification`
+       retorna ID string sincrônico, `dismissNotification`, `onNotification`, store reativo e eventos
+       `NotificationShown`/`NotificationDismissed` gerados por ts-rs. Compositor: `notify` aceita a
+       forma pública `notify <titulo> <corpo>` e a forma JSON do SDK (ícone/timeout/id), além de
+       `dismiss-notification`; publica no stream sem estado próprio. Painel: toast inferior direito com
+       título/corpo/ícone padrão, ✕, auto-dismiss e layer que cresce só com notificações ativas.
+       **Teste-first:** `bun test packages/sdk/src/notifications.test.ts` baseline 0/2
+       (`aero.onNotification is not a function`; `aero.showNotification is not a function` —
+       `/tmp/opencode/f2-notifications-sdk-baseline.log`); integração baseline `VEREDITO: FALHA` com
+       SDK ausente e `notify` desconhecido (`-integration-baseline.log`). Depois: SDK 17/17 (`-sdk-after.log`),
+       integração **3× `VEREDITO: OK`** (`-integration-after3.log`, `-final2.log`, `-final3.log`),
+       5.000 ms removido, 10.000 ms persistiu, clique real no ✕ e `notify`/dismiss IPC.
+       Duas falhas do instrumento foram corrigidas e preservadas: geometria antiga da layer e leitura de
+       `closeRect` no objeto errado (`-after1.log`, `-after2.log`). Gate `check.sh` EXIT=0
+       (39 Rust + 36 Bun, `-gate-final2.log`, após `cargo fmt`), clippy bench `-D warnings` 0,
+       `--no-default-features` 0 (só avisos antigos de cursor). Vizinhos: stream/launcher/workspaces/
+       painel/frame/CSD/policy/hotreload OK; `react_panel` falhou também no HEAD (A/B), `f1_csd_gtk`
+       falhou 1× e passou na repetição. Humano fechou o setup visual por redesenho do `foot` (§6) e
+       **não deu o ok**: cartão NÃO fechado. Não toquei snap/F7/F1.
 - [x] **F2-launcher (2026-11-24) — FECHADO PELO JUIZ VISUAL: humano respondeu *"ok aprovado"*.**
        Cartão `docs/tasks/F2-launcher.md` aprovado com "ok". Sem XML/ADR/dependência nova.
        Compositor lê `.desktop` do sistema/usuário (`apps.rs`), publica `AppListUpdated` no replay do stream e
@@ -1637,6 +1658,10 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
+- **F2-notifications: código, 3× harness e gates verdes; JUIZ VISUAL PENDENTE (§7).** Humano fechou a
+  instância com `foot` por redesenho contínuo (§6, A/B no HEAD com a mesma taxa); não aprovou os toasts.
+  Não reabrir setup com `foot` sem decisão; próximo passo é perguntar se julga sem `foot` ou se abre
+  cartão separado do redesenho. **PARAR.**
 - **F2-launcher FECHADO (§3): humano aprovou o juiz visual ("ok aprovado").**
   A instância `wayland-aero-f2-launcher-visual` não estava mais em `ps` no fechamento, sem encerramento pelo
   agente. **PARAR.**
@@ -1734,6 +1759,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
+**F2-notifications: decisão do humano — (1) julgar toasts em nested sem `foot`, ou (2) abrir cartão
+separado para a recorrência do redesenho do frame (§6). Nenhuma das duas executada sem ok.**
 **F2-launcher FECHADO PELO JUIZ: PARAR — nenhum próximo cartão autorizado.**
 **Hot-reload/Juiz F2-workspaces aprovado: PARAR — nenhum próximo cartão autorizado.** `F7-compat-snap.md`,
 drag-and-drop entre workspaces e tiling continuam sem autorização explícita; Snap/F7/F1 fora de escopo.
@@ -2601,7 +2628,43 @@ fechados, fora da fila.
   ativo o buffer chega ao target no mesmo frame em que o 9-slice cai. A comparação correta é entre o último frame
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
+- **F2-notifications (2026-11-24): redesenho contínuo do frame no setup visual do juiz — NÃO é regressão
+  desta sessão.** Humano fechou a instância `wayland-aero-f2-notifications-visual` com: *"fechei porque está
+  repintando alguma janela infinitamente"* e *"isso já havia ocorrido antes alguns cards atrás e já foi
+  resolvido, agora está acontecendo de novo"*. Log cru
+  `/tmp/opencode/f2-notifications-visual/compositor.log`: 0 `NotificationShown`, 0 painel, 1.923
+  `RESIZE_GLUE` em ~24 s (~80/s) e 2.216 `OUTPUT_FRAME`, começando no `foot` decorado pelo
+  `frame_webview` antes de qualquer notificação. A/B com o mesmo comando no HEAD sem minhas mudanças
+  (`/tmp/opencode/aero-head-f2-notifications`, `/tmp/opencode/f2-notifications-repaint-ab/head.log`):
+  808 `RESIZE_GLUE` em 10 s (~81/s) — mesma taxa. O diff desta sessão não toca `frame_webview.rs`,
+  `render/`, `aero_frame.rs` nem `window_ipc.rs::emit_event` fora dos 2 eventos novos.
+  O humano refinou o dado: o `foot` abria decorado normalmente; o que tremia era **outra janela
+  transparente, do tamanho do output, com decoração no canto superior direito**. No log do setup com
+  `--size 1000x600` há um 2º `frame_requested window_id=0 conteudo=1000x600` logo após o associate
+  (`aero_frame.rs:428-435` envia o tamanho do output, não o do cliente). O STATE já registrava que
+  `--size` desalinha o setup visual (linha ~1900); sem `--size`, sonda de 10 s com o humano observando:
+  *"abriu o foot normal decorado, sem painel nem nada nessa execução agora"*. Portanto o gatilho
+  imediato foi o **setup visual com `--size`**, não o código de notificações (o A/B no HEAD com o
+  mesmo `--size` também repintava). Não abrir cartão de redesenho por conta própria; usar o comando
+  canônico sem `--size` para o juiz.
+- **F2-notifications (2026-11-24): divergência de intenção levantada pelo humano.** O humano esclareceu
+  que a intenção era *"suporte a notificações gerais (internas e do sistema para qualquer app nativo
+  do Debian/Ubuntu notificar e aparecer no desktop)"*. O cartão aprovado diz explicitamente o
+  contrário: D-Bus `org.freedesktop.Notifications` FORA de escopo, "fazer via IPC interno por enquanto",
+  e `docs/plano-mestre.md:179` coloca notificações de sistema na F4. O que está implementado é a
+  fundação interna (SDK/painel/IPC); um serviço D-Bus próprio exigirá novo cartão, define se o nome
+  é registrado só no barramento privado do nested, escolhe dependência Rust (ex.: zbus, sujeita a
+  aprovação) e testes de segurança/isolamento. **NÃO implementar D-Bus sem cartão e aprovação
+  explícitos.** Aguardando decisão: manter F2 interna + novo cartão F4, ou reescopo deste cartão.
 ## 7. Não medido / não validado (não trate como fato)
+- **F2-notifications (2026-11-24): JUIZ VISUAL PENDENTE NA INSTÂNCIA CORRETA.** Código/testes/gates
+  verdes, 3× harness `VEREDITO: OK`. A 1ª instância (com `--size`) foi fechada pelo humano por uma
+  janela transparente do tamanho do output que repintava (§6); sem `--size` o `foot` ficou normal.
+  Reaberta a instância canônica `wayland-aero-f2-notifications-visual2` (compositor PID 54178, painel
+  PID 54191), sem `--size`, deixada aberta para o humano julgar. Não escrever "validado visualmente"
+  sem o ok. Pré-filtro medido:
+  toast com título/corpo/ícone, 5 s, 10 s, clique real no ✕, `notify`/dismiss por IPC e 0 erros de
+  protocolo. Não medido: pixels/legibilidade na tela, sessão udev/tty3 e GPU real (VM sem 3D).
 - **F2-launcher (2026-11-24): JUIZ VISUAL APROVADO; partes NÃO medidas.** O humano viu apps reais, ícones,
   busca e lançamento/foco no workspace; o pré-filtro usou fixtures `foot` e mediu stream/SDK/DOM/foco/teclado.
   Não medido: pixels dos ícones por instrumento, udev/tty3, GPU real, hot-reload de diretórios `.desktop`
@@ -3154,6 +3217,16 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
+- **F2-notifications (2026-11-24): código pronto, aguardando decisão do juiz.** Reproduzir (bench por
+  último): `bun build packages/panel/src/index.tsx --target=browser --outfile=packages/panel/dist/app.js &&
+  cargo build --workspace --examples && cargo build -p aeroshell-shell &&
+  cargo build -p aeroshell-compositor --features bench &&
+  python3 tests/integration/f2_notifications.py` → 3× `VEREDITO: OK`. Gate `check.sh` EXIT=0,
+  clippy bench 0, no-default 0. Setup visual com `--command foot` foi fechado pelo humano por
+  redesenho contínuo; A/B no HEAD deu a mesma taxa (~80 `RESIZE_GLUE`/s), então NÃO foi regressão
+  desta sessão (§6). Próximo passo imediato: perguntar ao humano se julga os toasts em nested **sem**
+  `foot` (recomendado) ou se prefere cartão separado para o redesenho. Sem ok visual, cartão aberto;
+  sem push; snap/F7/F1 intocados.
 - **SESSÃO ENCERRADA (2026-11-24): F2-launcher FECHADO PELO JUIZ VISUAL ("ok aprovado").**
   `.desktop` + `AppListUpdated` + `launch` no compositor, cache/fuzzy no SDK e launcher inline React com ícones;
   layer OnDemand recebe teclado. Baselines FALHA; harness completo 3× OK, 39 Rust/34 Bun, `check.sh` 0,

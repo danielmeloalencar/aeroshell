@@ -20,9 +20,26 @@ const REACT_PANEL_HTML: &str = r##"
     <meta charset="utf-8" />
     <link rel="stylesheet" href="aero://shell-reset.css" />
     <style>
-      #root { height: 100%; display: flex; align-items: center; padding: 0 8px;
-        color: #e8f6ff; font: 14px sans-serif; }
-      .aero-panel { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; }
+      #root { position: relative; height: 100%; color: #e8f6ff; font: 14px sans-serif; }
+      .aero-panel { position: absolute; left: 0; right: 0; bottom: 0; height: 48px;
+        display: flex; align-items: center; gap: 8px; padding: 0 8px; min-width: 0; }
+      .aero-notifications { position: absolute; right: 16px; bottom: 56px;
+        display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+        max-height: calc(100% - 56px); overflow: hidden; }
+      .aero-notification { display: flex; align-items: flex-start; gap: 8px;
+        width: 320px; min-height: 68px; padding: 8px; border: 1px solid #4a6b8a;
+        border-radius: 8px; background: #182635ee; box-shadow: 0 2px 10px #0008; }
+      .aero-notification-icon { width: 28px; height: 28px; flex: 0 0 28px; }
+      .aero-notification-content { display: flex; flex-direction: column; gap: 3px;
+        flex: 1 1 auto; min-width: 0; }
+      .aero-notification-title { font: 600 13px sans-serif; color: #e8f6ff; }
+      .aero-notification-body { font: 12px sans-serif; color: #c4d8ea;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .aero-notification-close { display: inline-flex; align-items: center;
+        justify-content: center; flex: 0 0 24px; width: 24px; height: 24px;
+        border: 1px solid transparent; border-radius: 4px; background: transparent;
+        color: #e8f6ff; font: 13px sans-serif; cursor: pointer; }
+      .aero-notification-close:hover { border-color: #9fd0ff; color: #ffd9d9; }
       .aero-workspaces { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
       .aero-launcher-toggle { flex: 0 0 auto; height: 24px; padding: 0 8px;
         border: 1px solid #4a6b8a; border-radius: 4px; background: #23364a;

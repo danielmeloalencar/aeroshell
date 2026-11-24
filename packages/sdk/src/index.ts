@@ -3,6 +3,7 @@
 
 import type { AeroEvent } from "./generated/AeroEvent";
 import type { App } from "./generated/App";
+import type { Notification } from "./generated/Notification";
 import type { Snapshot } from "./generated/Snapshot";
 import type { WindowInfo } from "./generated/WindowInfo";
 import type { Workspace } from "./generated/Workspace";
@@ -48,7 +49,7 @@ const EVENT_KEYS = [
   "Snapshot", "Title", "Icon", "Focus", "Geometry", "Csd",
   "FramePainted", "WorkspaceCreated", "WorkspaceActivated", "WorkspaceRenamed",
   "WorkspaceDestroyed", "WindowMovedToWorkspace", "AppListUpdated",
-  "DecorationRequest", "DecorationApplied",
+  "NotificationShown", "NotificationDismissed", "DecorationRequest", "DecorationApplied",
 ] as const;
 
 /**
@@ -83,6 +84,11 @@ function sameWindow(a: WindowInfo, b: WindowInfo): boolean {
 function expectOk(lines: string[]): void {
   if (lines[0] !== "OK") throw new Error(lines.join("\n") || "IPC sem resposta");
 }
+
+// O ID precisa existir sincronicamente para o retorno da API; o compositor apenas
+// o ecoa no evento. Prefixo por instância evita colisão entre painel e scripts Bun.
+const notificationPrefix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+let nextNotificationId = 1;
 
 function normalized(value: string): string {
   return value.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLocaleLowerCase();
@@ -169,6 +175,31 @@ export function createAero(transport: Transport) {
     });
   }
 
+  function showNotification(
+    title: string,
+    body: string,
+    icon?: string,
+    timeoutMs?: number,
+  ): string {
+    const id = `${notificationPrefix}-${nextNotificationId++}`;
+    const command = `notify ${JSON.stringify(title)} ${JSON.stringify(body)} `
+      + `${JSON.stringify(icon ?? null)} ${timeoutMs ?? 5000} ${JSON.stringify(id)}`;
+    void transport(command).then(expectOk).catch((error: unknown) => {
+      console.error(`falha ao publicar notificação ${id}:`, error);
+    });
+    return id;
+  }
+
+  function dismissNotification(id: string): void {
+    void transport(`dismiss-notification ${JSON.stringify(id)}`).then(expectOk).catch((error: unknown) => {
+      console.error(`falha ao dispensar notificação ${id}:`, error);
+    });
+  }
+
+  function onNotification(callback: (notification: Notification) => void): () => void {
+    return store.subscribeNotification(callback);
+  }
+
   async function listWorkspaces(): Promise<Workspace[]> {
     return refreshWorkspaces();
   }
@@ -210,6 +241,9 @@ export function createAero(transport: Transport) {
     listApps,
     searchApps,
     launchApp,
+    showNotification,
+    dismissNotification,
+    onNotification,
     listWorkspaces,
     createWorkspace,
     renameWorkspace,

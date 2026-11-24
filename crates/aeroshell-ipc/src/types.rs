@@ -106,6 +106,18 @@ pub struct App {
     pub categories: Vec<String>,
 }
 
+/// Notificação interna e efêmera exibida pelo shell (sem histórico/D-Bus).
+#[cfg_attr(feature = "export-bindings", derive(TS))]
+#[cfg_attr(feature = "export-bindings", ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Notification {
+    pub id: String,
+    pub title: String,
+    pub body: String,
+    pub icon: Option<String>,
+    pub timeout_ms: u64,
+}
+
 /// Evento PUSH do compositor para shell/SDK (substitui o polling do S4).
 /// A serialização na wire é o enum em forma de tagged object do ts-rs, ex.:
 /// `{"Title":{"id":0,"title":"foot"}}`.
@@ -161,6 +173,12 @@ pub enum AeroEvent {
     },
     AppListUpdated {
         apps: Vec<App>,
+    },
+    NotificationShown {
+        notification: Notification,
+    },
+    NotificationDismissed {
+        id: String,
     },
     /// Pergunta ao runtime Bun como decorar esta janela.
     DecorationRequest {

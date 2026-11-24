@@ -150,6 +150,16 @@ bun run packages/runtime/src/main.ts --list          # imprime "<id>\t<título>"
 bun run packages/runtime/src/main.ts --focus 0       # eleva a janela 0
 bun run packages/runtime/src/main.ts --close 1       # fecha só a janela 1
 ```
+
+### Notificações (F2-notifications)
+Com o nested acima aberto, dispare um toast pelo IPC ou pelo SDK tipado:
+```
+IPC=${AERO_WINDOW_IPC_SOCK:?defina AERO_WINDOW_IPC_SOCK}
+python3 -c 'import os,socket; s=socket.socket(socket.AF_UNIX); s.connect(os.environ["IPC"]); s.sendall(b"notify Teste Corpo da mensagem\n")'
+bun -e 'import { createAero } from "./packages/sdk/src/index.ts"; import { ipcTransport } from "./packages/runtime/src/ipc-client.ts"; const aero = createAero(ipcTransport(process.env.IPC)); aero.showNotification("Teste", "Corpo da mensagem", "utilities-terminal"); await new Promise(r => setTimeout(r, 200));'
+bun -e 'import { createAero } from "./packages/sdk/src/index.ts"; import { ipcTransport } from "./packages/runtime/src/ipc-client.ts"; const aero = createAero(ipcTransport(process.env.IPC)); aero.showNotification("Longa", "Dez segundos", undefined, 10000); await new Promise(r => setTimeout(r, 200));'
+```
+O toast aparece no canto inferior direito, acima do painel; some após 5 s (padrão) ou 10 s no segundo exemplo. O “X” fecha na hora. A layer do painel cresce só enquanto há notificação; a área transparente continua passando clique.
 O socket IPC só existe se `AERO_WINDOW_IPC_SOCK` estiver definido ao iniciar o compositor.
 
 ## Testes de integração (precisam de display; rodar à mão, não no CI)

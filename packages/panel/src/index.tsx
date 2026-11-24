@@ -6,11 +6,14 @@ import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import type { App } from "../../sdk/src/generated/App";
+import type { Notification } from "../../sdk/src/generated/Notification";
 import type { WindowInfo } from "../../sdk/src/generated/WindowInfo";
 import type { PanelIndicators, WorkspacesState } from "../../sdk/src/store";
 import type { Workspace } from "../../sdk/src/generated/Workspace";
 import { createAero, parseEvent } from "../../sdk/src/index";
-import { useApps, useIndicators, useWindows, useWorkspaces } from "../../react/src/useWindows";
+import {
+  useApps, useIndicators, useNotifications, useWindows, useWorkspaces,
+} from "../../react/src/useWindows";
 
 type Reply = (lines: string[]) => void;
 
@@ -63,6 +66,7 @@ function publishPanelState(
   launcherOpen: boolean,
   query: string,
   apps: App[],
+  notifications: Notification[],
 ): void {
   const rect = (el: HTMLElement) => {
     const r = el.getBoundingClientRect();
@@ -85,11 +89,14 @@ function publishPanelState(
   const launcherRects = Array.from(document.querySelectorAll<HTMLElement>(
     ".aero-launcher-toggle, .aero-launcher-search, .aero-app-row",
   )).map(rect).filter((r) => r.w > 0 && r.h > 0);
+  const notificationRects = Array.from(document.querySelectorAll<HTMLElement>(
+    ".aero-notification-close",
+  )).map(rect).filter((r) => r.w > 0 && r.h > 0);
   // Janelas/workspaces continuam nos primeiros índices (contrato S3/F2); os
   // controles novos são anexados DEPOIS para não deslocar os rects antigos.
   post({
     type: "interactive",
-    rects: [...rowRects, ...workspaceRects, ...launcherRects],
+    rects: [...rowRects, ...workspaceRects, ...launcherRects, ...notificationRects],
     cursor: "pointer",
   });
 
@@ -107,6 +114,11 @@ function publishPanelState(
   document.querySelectorAll<HTMLElement>(".aero-app-row").forEach((element) => {
     const id = element.dataset.appId;
     if (id) appRects[id] = rect(element);
+  });
+  const notificationCloseRects: Record<string, { x: number; y: number; w: number; h: number }> = {};
+  document.querySelectorAll<HTMLElement>(".aero-notification-close").forEach((element) => {
+    const id = element.dataset.notificationId;
+    if (id) notificationCloseRects[id] = rect(element);
   });
   const toggle = document.querySelector<HTMLElement>(".aero-launcher-toggle");
   const search = document.querySelector<HTMLElement>(".aero-launcher-search");
@@ -138,7 +150,48 @@ function publishPanelState(
       toggleRect: toggle ? rect(toggle) : null,
       searchRect: search ? rect(search) : null,
     },
+    notifications: notifications.map((notification) => ({
+      id: notification.id,
+      title: notification.title,
+      body: notification.body,
+      icon: notification.icon,
+      iconSource: notification.icon || "dialog-information",
+      timeout_ms: notification.timeout_ms,
+    })),
+    notificationRects: notificationCloseRects,
   });
+}
+
+function NotificationToast({ notification }: { notification: Notification }) {
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void aero.dismissNotification(notification.id);
+    }, notification.timeout_ms);
+    return () => window.clearTimeout(timer);
+  }, [notification.id, notification.timeout_ms]);
+
+  return (
+    <div className="aero-notification" role="alert" data-notification-id={notification.id}>
+      <img
+        className="aero-notification-icon"
+        alt=""
+        src={`aero://icon/${encodeURIComponent(notification.icon || "dialog-information")}`}
+      />
+      <div className="aero-notification-content">
+        <strong className="aero-notification-title">{notification.title}</strong>
+        <span className="aero-notification-body">{notification.body}</span>
+      </div>
+      <button
+        type="button"
+        className="aero-notification-close"
+        data-notification-id={notification.id}
+        aria-label={`fechar notificação ${notification.title}`}
+        onClick={() => void aero.dismissNotification(notification.id)}
+      >
+        ✕
+      </button>
+    </div>
+  );
 }
 
 function WorkspaceTab({ workspace, active }: { workspace: Workspace; active: boolean }) {
@@ -185,6 +238,7 @@ function Panel() {
   const indicators = useIndicators(aero.store);
   const workspaceState = useWorkspaces(aero.store);
   const allApps = useApps(aero.store);
+  const notifications = useNotifications(aero.store);
   const [launcherOpen, setLauncherOpen] = useState(false);
   const [query, setQuery] = useState("");
   const filteredApps = launcherOpen ? aero.searchApps(query) : [];
@@ -215,11 +269,49 @@ function Panel() {
       launcherOpen,
       query,
       filteredApps,
+      notifications,
     );
-  }, [windows, indicators, workspaceState, launcherOpen, query, filteredApps, allApps]);
+  }, [
+    windows, indicators, workspaceState, launcherOpen, query, filteredApps, allApps, notifications,
+  ]);
+
+  // A layer do painel tem 48 px; com toasts ela cresce para baixo/para cima sem
+  // mudar a exclusive zone (o host apenas altera o height_request).
+  useEffect(() => {
+    const height = notifications.length === 0
+      ? 48
+      : Math.min(480, 64 + notifications.length * 88);
+    post({ type: "surface-height", height });
+  }, [notifications.length]);
+
+  // O configure da layer chega depois do commit do React: republicar na mudança
+  // de tamanho mantém os retângulos de clique alinhados com o que está na tela.
+  useEffect(() => {
+    const republish = () => publishPanelState(
+      launcherOpen ? [] : windows,
+      indicators,
+      workspaceState,
+      launcherOpen,
+      query,
+      filteredApps,
+      notifications,
+    );
+    window.addEventListener("resize", republish);
+    return () => window.removeEventListener("resize", republish);
+  }, [
+    windows, indicators, workspaceState, launcherOpen, query, filteredApps, notifications,
+  ]);
 
   return (
-    <div className="aero-panel">
+    <>
+      {notifications.length > 0 && (
+        <div className="aero-notifications" role="list" aria-label="notificações">
+          {notifications.map((notification) => (
+            <NotificationToast key={notification.id} notification={notification} />
+          ))}
+        </div>
+      )}
+      <div className="aero-panel">
       <div className="aero-workspaces">
         {workspaceState.workspaces.map((workspace) => (
           <WorkspaceTab
@@ -328,7 +420,8 @@ function Panel() {
           </span>
         </div>
       ))}
-    </div>
+      </div>
+    </>
   );
 }
 
