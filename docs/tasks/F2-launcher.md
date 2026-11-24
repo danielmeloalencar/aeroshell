@@ -52,4 +52,4 @@ Ao final: atualizar STATE.md (§3, §4, §5, §6, §7, §9), obter o veredito vi
 
 ## Veredito (2026-11-24)
 Humano operou a instância `wayland-aero-f2-launcher-visual` com apps reais e respondeu **"ok aprovado"**.
-Cartão fechado; aplicação deixada aberta para o humano.
+Cartão fechado; a instância não estava mais em `ps` no fechamento da sessão, sem encerramento pelo agente.

@@ -40,7 +40,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
        apesar do foco correto e passou na repetição (amostras preservadas, §6).
         **Veredito visual:** humano operou a instância `wayland-aero-f2-launcher-visual` (compositor PID 21982,
         painel PID 22012), viu launcher/ícones/busca/lançamento no workspace e aprovou (*"ok aprovado"*). A aplicação
-        foi deixada aberta; quem fecha é o humano. **CARTÃO FECHADO.** Não toquei snap/F7/F1.
+        não estava mais em `ps` no fechamento desta sessão, sem encerramento pelo agente. **CARTÃO FECHADO.**
+        Não toquei snap/F7/F1.
 - [x] **F2-workspaces (2026-11-24) — FECHADO PELO JUIZ VISUAL: humano respondeu *"aprovado"*.**
        Cartão `docs/tasks/F2-workspaces.md` versionado do texto aprovado. Sem XML/ADR/dependência nova.
        Compositor: `WorkspaceManager` puro (`workspaces.rs`) mantém lista ordenada, workspace ativo e
@@ -1637,7 +1638,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
 - **F2-launcher FECHADO (§3): humano aprovou o juiz visual ("ok aprovado").**
-  A instância `wayland-aero-f2-launcher-visual` foi deixada aberta; quem fecha é o humano. **PARAR.**
+  A instância `wayland-aero-f2-launcher-visual` não estava mais em `ps` no fechamento, sem encerramento pelo
+  agente. **PARAR.**
 - **F2-workspaces FECHADO (§3): humano aprovou o juiz visual ("aprovado").**
   A instância `wayland-aero-f2-workspaces-visual` foi deixada aberta; quem fecha é o humano.
   **PARAR: nenhum próximo cartão autorizado; snap/F7 segue pendente de aprovação explícita.**
