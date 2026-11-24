@@ -146,6 +146,18 @@ def main():
                 8,
             )
             after = clean(comp_log).count("FRAMEWEB: frame_cb_request window_id=0")
+            # O WebView não pode entregar um frame sem buffer: é o que deixa a
+            # moldura invisível mas ainda interativa (juiz visual 8ª rodada).
+            lines = clean(comp_log).splitlines()
+            idx = [i for i, line in enumerate(lines) if marker in line and "window_id=0" in line]
+            no_buffer = 0
+            if idx:
+                no_buffer = sum(
+                    "FRAME_BUFFER_COMMIT buffer=None" in line
+                    for line in lines[idx[-1]:]
+                )
+            checks[f"{policy} entrega buffer pintado"] = no_buffer == 0
+            print(f"=== {policy}: commits sem buffer após transição={no_buffer} ===")
             cfg_ok = wait_for(
                 lambda: clean(comp_log).count("FRAMEWEB: configure serial=") > before_cfg,
                 8,
