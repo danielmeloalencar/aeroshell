@@ -21,6 +21,20 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [~] **F2-shell-real — correção da moldura parcial ao restaurar `Server` (2026-11-24); juiz 6ª rodada pendente (§7).**
+      Juiz da 5ª rodada: com 18 GiB de RAM e **sem `--size`**, o atraso de 5–10 s e o desalinhamento de
+      clique/move/resize desapareceram; `Server→None` escondeu a decoração. Mas `None→Server` não a
+      restaurava de imediato, e após mover/redimensionar o `foot` a volta a `Server` deixava título
+      decorado **sem borda inferior e com metade das laterais**.
+      **Hipótese confirmada por medição:** `associate()` pede `wl_surface.frame()` após `set_insets`,
+      mas `hide_frame_for()`/`apply_policy_csd()` trocavam insets/slices **sem** pedir novo callback —
+      o compositor não recomputava o 9-slice e mantinha a geometria do canvas crescido no resize.
+      **Teste-first:** `tests/integration/f2_shell_real_policy_restore.py` escrito antes; baseline no
+      binário do `HEAD` `VEREDITO: FALHA` (0 `frame_cb_request` após as transições) → **3× `VEREDITO:
+      OK`** com `request_frame_recompute()` chamada nos dois sentidos (cb_request `reason=policy`
+      antes de `csd_applied`/`csd_restored`). Gates: `check.sh` EXIT=0, clippy bench 0, build 0.
+      Regressões `f2_shell_real`, `f2_hotreload_*` OK; vizinhos `f1_csd_gtk`, `frame_title`,
+      `frame_buttons`, `frame_resize_glue`, `headless_render_damage` OK. **Não toquei snap/F7/F1.**
 - [~] **F2-shell-real (2026-11-24) — código/teste/gates verdes; JUIZ VISUAL PENDENTE (§7).**
       Cartão `docs/tasks/F2-shell-real.md` escrito do TEMPLATE (não existia) e aprovado com "ok".
       **Painel de produção:** `packages/panel/src/index.tsx` + `scheme.rs` servem `aero://panel/app.js`
@@ -1608,6 +1622,17 @@ fechados, fora da fila.
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **F2-shell-real — moldura parcial ao voltar a `Server` após resize (2026-11-24).** Juiz visual:
+  título decorado, sem borda inferior e metade das laterais. Causa medida: troca de insets/slices
+  sem `wl_surface.frame()` — o compositor só recomputava o 9-slice no commit following do resize,
+  deixando a geometria antiga do canvas crescido. Corrigido em `frame_webview.rs`
+  (`request_frame_recompute`, chamado em `hide_frame_for` e `apply_policy_csd`). Baseline FALHA,
+  3× OK. **Observação de comportamento:** salvar o `.ts` com conteúdo idêntico gera
+  `POLICY_TS RELOAD` mas nenhuma nova decisão (e portanto nenhuma mudança visual) — é correto, mas o
+  humano interpretou como "mudei 3 vezes e nada"; vale logar `RELOAD` com `unchanged` no futuro.
+- **Setup do juiz — `--size` desalinhava input (2026-11-24).** `--size 1000x600` no winit mantém a
+  janela host em 1280×800 (RUNBOOK:196), então clique/move/resize caíam em posição diferente.
+  Resolvido no setup da 5ª rodada usando o comando canônico sem `--size` — não era bug de produto.
 - **F2-shell-real — medidor objetivo de redesenho, A/B (2026-11-24): NÃO reproduziu o loop em idle.**
   `tests/integration/f2_shell_real_redraw_probe.py` (90 s, nested winit, painel + 2 foot, sem
   interação nem edição) rodado no HEAD atual (`9d9ff71`) e no estável (`b532a0c`, worktree
@@ -2310,7 +2335,20 @@ fechados, fora da fila.
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- **F2-shell-real (2026-11-24): 5ª RODADA DO JUIZ ABERTA (sem `--size`).** Humano, na 4ª rodada:
+- **F2-shell-real (2026-11-24): 6ª RODADA DO JUIZ ABERTA (com correção da moldura parcial).** A 5ª
+  rodada (sem `--size`) confirmou a correção do atraso/desalinhamento e encontrou a moldura parcial
+  ao voltar a `Server` após resize; corrigida e provada por `f2_shell_real_policy_restore.py`
+  (baseline FALHA, 3× OK, §3). Instância relançada **sem `--size`**, sem bench, com o binário
+  corrigido: comp PID 16213, runtime 16232, shell 16287, gedit 16559, socket
+  `wayland-aero-f2-shell-real-visual6`, IPC `/tmp/opencode/f2-shell-real/visual6/ipc.sock`, regras
+  `/tmp/opencode/f2-shell-real/visual6/config/aeroshell/rules.ts` (`foot→Server`, `gedit→Client`).
+  3 janelas no IPC, painel com decorações corretas. **Aguardando veredito final.**
+  Rodadas 1–5 reprovadas (detalhes abaixo); juiz visual ainda NÃO aprovou o cartão.
+  Na 5ª rodada o humano disse: *"Tudo funcionou, não demorou mais os 5 segundos... ao mudar policy
+  de Server pra None funcionou... Ao colocar novamente para Server não voltou... ficou com barra de
+  título decorado, mas sem decoração na parte inferior e na metade das laterais."*
+  Instância da 5ª rodada (compositor PID
+  9130, runtime 9147, shell 9200, gedit 9469, socket `wayland-aero-f2-shell-real-visual5`). Humano, na 4ª rodada:
   janelas abrem cortadas por 5–10 s e depois completam; **clique/move/resize acontecem em posição
   diferente da janela**. Causa aparente: eu havia passado `--size 1000x600`, e o RUNBOOK:196 registra
   que o winit mantém a janela host em 1280×800 com output lógico diferente — desalinhamento de
@@ -2786,14 +2824,14 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **SESSÃO ATUAL (2026-11-24): F2-shell-real — código/teste/gates verdes, JUIZ VISUAL REPROVADO 3×
-  (§7). Medidor A/B executado (§6): IDLE nos dois commits, sem loop e sem falso reload.** Ou seja,
-  **não há regressão mensurável em repouso**; o defeito só apareceu na interação humana (mover/
-  clicar, 3 janelas), que o medidor ainda não cobre. **Próximo passo (decisão do humano):** estender
-  o medidor com fase de drag real + 3ª janela (gedit), ainda sem tocar no código de produto, para
-  reproduzir o tremor; só depois propor fix. Worktree A/B em `/home/daniel/Projetos/aeroshell-stable`
-  (b532a0c) preservado para repetir comparação. Não relançar o juiz sem ok; snap/F7/F1 intocados;
-  sem push.
+- **SESSÃO ATUAL (2026-11-24): F2-shell-real — correção da moldura parcial aplicada e provada
+  (baseline FALHA, 3× OK); JUIZ VISUAL 6ª RODADA ABERTA (§7).** O medidor A/B (§6) descartou loop em
+  repouso e falso reload; o defeito real era a falta de `wl_surface.frame()` após trocar insets.
+  Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build --workspace --examples && python3 tests/integration/f2_shell_real_policy_restore.py`
+  → `VEREDITO: OK`; baseline no `HEAD` pré-fix `VEREDITO: FALHA`. `check.sh` EXIT=0, clippy bench 0,
+  regressões e vizinhos OK. **Próximo passo imediato:** humano olhar a instância visual6 e repetir
+  resize + `Server→None→Server`; se aprovou, dar o "ok", atualizar §3/§7/§9 e fechar o cartão, e PARAR.
+  Worktree A/B em `/home/daniel/Projetos/aeroshell-stable` (b532a0c). snap/F7/F1 intocados; sem push.
   Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build --workspace --examples && cargo build -p aeroshell-shell && bun build packages/panel/src/index.tsx --target=browser --outfile=packages/panel/dist/app.js && bun run generate:types && python3 tests/integration/f2_shell_real.py`
   → `VEREDITO: OK` 3× (`finalC{1,2,3}.log`); baseline no HEAD `VEREDITO: FALHA`. Unitário 28/28,
   gate `gate-close.log` EXIT=0. **Próximo passo imediato:** humano olhar o painel da instância aberta

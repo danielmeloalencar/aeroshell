@@ -938,11 +938,36 @@ fn hide_frame_for(window_id: u32, reason: &str) {
                 }
             },
         );
+        request_frame_recompute(window_id);
         eprintln!(
             "FRAMEWEB: csd_late window_id={window_id} insets=(0,0,0,0) reason={reason} t={}",
             bench_t()
         );
     }
+}
+
+/// `set_insets`/`set_titlebar_slices` sozinhos não fazem o compositor
+/// recomputar o 9-slice: depois de um resize o canvas crescente fica com a
+/// geometria antiga e a moldura volta só com o título (juiz visual 2026-11-24).
+/// O `associate()` já pede `wl_surface.frame()`; as transições de política
+/// precisam do mesmo pedido para receber um novo configure com os insets novos.
+fn request_frame_recompute(window_id: u32) {
+    RUNTIME.with(|cell| {
+        let mut borrow = cell.borrow_mut();
+        let Some(rt) = borrow.as_mut() else {
+            return;
+        };
+        let Some(entry) = rt.state.entries.iter().find(|e| e.window_id == window_id) else {
+            return;
+        };
+        let qh = rt.queue.handle();
+        entry.wl_surface.frame(&qh, window_id);
+        let _ = rt.queue.flush();
+    });
+    eprintln!(
+        "FRAMEWEB: frame_cb_request window_id={window_id} reason=policy t={}",
+        bench_t()
+    );
 }
 
 /// Evento `Csd` da decisão de política (inclusive no hot-reload das regras TS).
@@ -984,6 +1009,7 @@ fn apply_policy_csd(window_id: u32) {
                 }
             },
         );
+        request_frame_recompute(window_id);
         eprintln!(
             "FRAMEWEB: csd_restored t={} window_id={window_id} insets=({BORDER},{TITLEBAR_H},{BORDER},{BORDER})",
             bench_t()
