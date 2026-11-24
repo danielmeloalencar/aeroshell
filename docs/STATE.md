@@ -46,8 +46,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
        Correção descoberta pelo pré-filtro: `stopPropagation()` no `<input>` da aba impedia o clique de ativar; removido.
        **Veredito visual:** humano operou a instância `wayland-aero-f2-workspaces-visual` (compositor PID 55030,
        shell 55043, `foot` 55189/55312), viu WS1 com o primeiro `foot` e WS2 com o segundo, alternou pelas abas
-       e respondeu *"aprovado"* — sem flicker/ghost frame relatados. A instância permanece aberta; quem fecha é
-       o humano. **CARTÃO FECHADO.**
+       e respondeu *"aprovado"* — sem flicker/ghost frame relatados. A instância foi deixada aberta para o humano;
+       não estava mais em `ps` no fechamento desta sessão, sem encerramento pelo agente. **CARTÃO FECHADO.**
 - [x] **F2-cursor-shape-top-edges (2026-11-24) — FECHADO PELO JUIZ VISUAL: humano respondeu *"aprovado"*.**
        Seguimento do cartão de cursor: humano aprovou quase todos os cantos da moldura SSD, mas
        relatou falta de cursor de resize no **topo central** e nos **cantos superiores**. Causa
@@ -3128,8 +3128,9 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
   `bun build packages/panel/src/index.tsx --target=browser --outfile=packages/panel/dist/app.js &&
   cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-shell &&
   python3 tests/integration/f2_workspaces.py && python3 tests/integration/f2_workspaces_panel.py`.
-  Humano aprovou a instância `wayland-aero-f2-workspaces-visual` (PIDs 55030/55043/55189/55312), deixada aberta;
-  quem fecha é ele. **Nenhum próximo passo autorizado; PARAR.** Sem push; snap/F7/F1 intocados.
+  Humano aprovou a instância `wayland-aero-f2-workspaces-visual` (PIDs 55030/55043/55189/55312), deixada aberta
+  para ele; ela não estava mais em `ps` no fechamento, sem encerramento pelo agente. **Nenhum próximo passo
+  autorizado; PARAR.** Sem push; snap/F7/F1 intocados.
 - **SESSÃO ENCERRADA (2026-11-24): F2-cursor-shape-top-edges FECHADO PELO JUIZ ("aprovado").**
   `#edge-t` + `z-index` no HTML da moldura (`frame_webview.rs`); harness com 6 pontos SSD 3× OK,
   gate final EXIT=0, clippy bench 0, `--no-default-features` 0, 3 vizinhos OK (1 flake de
