@@ -2447,6 +2447,14 @@ fechados, fora da fila.
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- **F2-shell-real (2026-11-24): 11ª RODADA REPROVADA — fallback de 1px também falhou.** Humano:
+  problema na **2ª alternância, sem resize**. Log da instância (comp 68242, runtime 68260, shell
+  68350, gedit 68585, socket `wayland-aero-f2-shell-real-visual11`): 10 reloads, 0 `reason=timeout`;
+  `csd_applied` por id = {0:2, 1:2, 2:1}, `frame_restored` = {0:2, 1:2} — os dois `foot` tiveram
+  hide+restore iguais, e 4 `repaint_nudge` + 4 `geo_nudge`. Ou seja, lógica, DOM e nudges executaram
+  e a moldura ainda falhou em uma janela. **PARE: duas abordagens (setTimeout 50ms e nudge 1px)
+  testadas e reprovadas; sem nova correção sem decisão do humano.** Instância deixada aberta; quem
+  fecha é o humano. Cartão NÃO fechado.
 - **F2-shell-real (2026-11-24): 11ª RODADA DO JUIZ ABERTA (fallback de geometria 1px).** Instância:
   comp PID 68242, runtime 68260, shell 68350, gedit 68585, socket
   `wayland-aero-f2-shell-real-visual11`, IPC `/tmp/opencode/f2-shell-real/visual11/ipc.sock`, regras
@@ -2970,10 +2978,12 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **SESSÃO ATUAL (2026-11-24): F2-shell-real — Correção 1 (setTimeout 50 ms) aplicada e reprovada
-  pelo spike (3× FALHA).** Gate `check.sh` EXIT=0, fmt aplicado, harness de hot-reload OK. **Próximo
-  passo: decisão do humano** — autorizar ou não o fallback "nudge de geometria de 1px" descrito por
-  ele; nenhum fallback aplicado.---
+- **SESSÃO ATUAL (2026-11-24): F2-shell-real — juiz 11ª rodada reprovado; PARE.** Correção 1
+  (`setTimeout 50ms`) e fallback (nudge de geometria 1px) aplicados e **ambos reprovados no juiz**.
+  Gate `check.sh` EXIT=0, clippy bench 0, harnesses `VEREDITO: OK`. Causa permanece no nível de
+  pintura/buffer do WebKitGTK (§6/§7), não na lógica de política. **Próximo passo: decisão do humano**
+  — novo diagnóstico/spike, aceitar cartão como parcial, ou outro rumo. Nenhuma correção adicional
+  sem autorização.---
 - **SESSÃO ANTERIOR (2026-11-24): F2-shell-real — SPIKE DE DIAGNÓSTICO CONCLUÍDO; SEM CORREÇÃO.**
   Causa isolada em §6: commitFrame sem buffer após `frame_restored`. Gate `check.sh` EXIT=0,
   `cargo fmt` aplicado, harnesses atuais `VEREDITO: OK`. **Próximo passo: decisão do humano** —
