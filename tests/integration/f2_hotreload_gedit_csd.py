@@ -138,11 +138,16 @@ def main():
         )
         restored = wait_for(lambda: frame_event("frame_restored"))
 
+        # O hide NÃO pode depender da janela de 5s do csd_probe_until do startup:
+        # no juiz a janela está aberta há minutos. Deixar o probe expirar antes
+        # de voltar a Client para o teste medir o caminho real do hot-reload.
+        applied_before = len(re.findall(r"FRAMEWEB: csd_applied", clog()))
+        time.sleep(6)
         write_rules(rules, "Client")
         client_ok = wait_for(
             lambda: "policy=Client" in runtime_log.read_text(errors="replace")
             and ipc(ipc_path, "csd 0").strip() == "CSD 0 1"
-            and frame_event("csd_applied")
+            and len(re.findall(r"FRAMEWEB: csd_applied", clog())) > applied_before
         )
 
         print("=== runtime (cru) ===")

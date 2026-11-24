@@ -20,7 +20,7 @@ use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::mpsc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use wayland_client::{
     protocol::{wl_callback, wl_registry},
     Dispatch, Proxy, QueueHandle, WEnum,
@@ -88,8 +88,6 @@ struct FrameEntry {
     /// Já escondemos a barra HTML deste frame por CSD (pedido explícito ou
     /// detectado depois pela window_geometry, como no gedit real).
     csd_active: bool,
-    /// Até quando vale a pena consultar `csd <id>` a cada 100 ms nesta janela.
-    csd_probe_until: Instant,
     /// Último estado de fullscreen recebido no configure do aero_frame.
     fullscreen: bool,
 }
@@ -904,77 +902,55 @@ fn refresh_titles() {
     }
 }
 
-/// Checagem rápida de CSD: o GTK4 só expõe a window_geometry depois do
-/// primeiro commit, então um poll de 1 s deixava a moldura aparecer por
-/// ~0,5 s. Aqui a sonda roda a cada 100 ms nos primeiros 5 s da janela.
-fn refresh_csd() {
-    if std::env::var_os("AERO_WINDOW_IPC_SOCK").is_none() {
-        return;
-    }
-    let targets: Vec<u32> = RUNTIME.with(|cell| {
-        cell.borrow()
-            .as_ref()
-            .map(|rt| {
-                rt.state
-                    .entries
-                    .iter()
-                    .filter(|entry| !entry.csd_active && Instant::now() < entry.csd_probe_until)
-                    .map(|entry| entry.window_id)
-                    .collect()
-            })
-            .unwrap_or_default()
-    });
-    for window_id in targets {
-        // O gedit não pede ClientSide: a sombra aparece na window_geometry
-        // só depois do primeiro commit. Por isso CSD também é consultado no
-        // polling (como título e ícone), não apenas no frame_requested.
-        let detected = ipc_csd(window_id);
-        if detected {
-            let state_change = RUNTIME.with(|cell| {
-                let mut borrow = cell.borrow_mut();
-                let rt = borrow.as_mut()?;
-                let entry = rt
-                    .state
-                    .entries
-                    .iter_mut()
-                    .find(|entry| entry.window_id == window_id)?;
-                if entry.csd_active {
-                    return None;
-                }
-                entry.csd_active = true;
-                entry.insets = (0, 0, 0, 0);
-                Some((entry.frame.clone(), entry.webview.clone()))
-            });
-            if let Some((frame, view)) = state_change {
-                frame.set_insets(0, 0, 0, 0);
-                frame.set_titlebar_slices(0, 0);
-                view.evaluate_javascript(
-                    "window.aeroHideFrame && window.aeroHideFrame();",
-                    None,
-                    None,
-                    None::<&webkit6::gio::Cancellable>,
-                    |result| {
-                        if let Err(err) = result {
-                            eprintln!("FRAMEWEB: aeroHideFrame falhou: {err}");
-                        }
-                    },
-                );
-                eprintln!(
-                "FRAMEWEB: csd_late window_id={window_id} insets=(0,0,0,0) reason=geometry t={}",
-                bench_t()
-            );
-            }
+/// Esconde barra/borda e zera insets para um window_id. É chamado pelo evento
+/// `Csd` (stream PUSH) e não por polling: no hot-reload a janela pode estar
+/// aberta há minutos, e uma versão anterior só escondia nos 5 s do startup —
+/// o juiz viu a moldura do compositor continuar visível ao voltar a `Client`.
+fn hide_frame_for(window_id: u32, reason: &str) {
+    let state_change = RUNTIME.with(|cell| {
+        let mut borrow = cell.borrow_mut();
+        let rt = borrow.as_mut()?;
+        let entry = rt
+            .state
+            .entries
+            .iter_mut()
+            .find(|entry| entry.window_id == window_id)?;
+        if entry.csd_active {
+            return None;
         }
+        entry.csd_active = true;
+        entry.insets = (0, 0, 0, 0);
+        let pair = (entry.frame.clone(), entry.webview.clone());
+        let _ = rt.queue.flush();
+        Some(pair)
+    });
+    if let Some((frame, view)) = state_change {
+        frame.set_insets(0, 0, 0, 0);
+        frame.set_titlebar_slices(0, 0);
+        view.evaluate_javascript(
+            "window.aeroHideFrame && window.aeroHideFrame();",
+            None,
+            None,
+            None::<&webkit6::gio::Cancellable>,
+            |result| {
+                if let Err(err) = result {
+                    eprintln!("FRAMEWEB: aeroHideFrame falhou: {err}");
+                }
+            },
+        );
+        eprintln!(
+            "FRAMEWEB: csd_late window_id={window_id} insets=(0,0,0,0) reason={reason} t={}",
+            bench_t()
+        );
     }
 }
 
 /// Evento `Csd` da decisão de política (inclusive no hot-reload das regras TS).
-/// O `refresh_csd` do polling só esconde a barra; sem o ramo inverso, trocar
-/// `Client`→`Server` numa janela já escondida mudava o mapa de decisões mas
-/// NÃO trazia a moldura de volta (juiz visual 2026-11-24).
+/// Cobre os dois sentidos: esconde no CSD e restaura a moldura quando a
+/// política volta a `Server` (juiz visual 2026-11-24).
 fn apply_policy_csd(window_id: u32) {
     if ipc_csd(window_id) {
-        refresh_csd(); // caminho existente: esconde barra/borda e zera insets
+        hide_frame_for(window_id, "policy"); // sem depender do csd_probe_until
         return;
     }
     let restored = RUNTIME.with(|cell| {
@@ -1234,7 +1210,6 @@ fn associate_frame(
             last_title: None,
             last_icon: None,
             csd_active: client_frame,
-            csd_probe_until: Instant::now() + Duration::from_secs(5),
             fullscreen: false,
         });
         eprintln!("FRAMEWEB: associate(window_id={window_id}) + set_insets({left},{top},{right},{bottom}) \
