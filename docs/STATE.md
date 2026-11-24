@@ -1441,13 +1441,13 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
-- **F2-decoration-policy-hotreload: código/testes/gates verdes; JUIZ VISUAL PENDENTE (§7).** Instância nested deixada
-  aberta: compositor PID 139168, socket `wayland-aero-f2-hotreload-visual2`, IPC
-  `/tmp/opencode/f2-hotreload/visual2/ipc.sock`, runtime Bun PID 139195, `gedit` PID 139178 (window_id 0,
-  `csd=1`, decisão `Client` em `POLICY_TS DECISION`). Regras em
-  `/tmp/opencode/f2-hotreload/visual2/rules.ts` (`gedit→Client`, `foot→Server`, default `Server`). Humano deve
-  conferir a moldura do compositor aparecendo ao editar `gedit→Server`, desaparecendo ao voltar a `Client`, e
-  nenhuma mudança com erro de sintaxe. **PARAR no veredito; quem fecha é o humano.**
+- **F2-decoration-policy-hotreload: JUIZ VISUAL REPROVADO NA 1ª RODADA, corrigido, REPETINDO (§6/§7).** Humano
+  respondeu *"Não vi nada acontecer, permaneceu igual"*; o relato prevaleceu sobre o log. Causa: `frame_webview`
+  escondia a barra no CSD (`csd_applied`) mas nunca a restaurava quando a política voltava a `Server`. Corrigido em
+  `3d360b1` (`Csd` → `apply_policy_csd`, restaura insets/slices + `aeroShowFrame`), com medição do DOM no harness.
+  Nova instância aberta: compositor PID 144220, runtime PID 144242, `gedit` PID 144228, socket
+  `wayland-aero-f2-hotreload-visual3`, IPC `/tmp/opencode/f2-hotreload/visual3/ipc.sock`, regras
+  `/tmp/opencode/f2-hotreload/visual3/rules.ts` (`gedit→Client`). **PARAR no novo veredito; quem fecha é o humano.**
 - **F2-decoration-policy-ts FECHADO (§3): humano aprovou o juiz visual ("sim. aprovado").** Próximo cartão F2
   (hot-reload das regras TS) só com autorização explícita; instância final (PID 116497) permanece aberta, quem fecha
   é o humano.
@@ -1579,6 +1579,14 @@ intercalar com F2. cursor-shape e primary-selection já fechados, fora da fila.
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **Hot-reload — juiz visual reprovou; o teste media a coisa errada (2026-11-24).** O harness provava `POLICY …
+  decision=server` no compositor e `suppressed` cessando na cena, mas o humano viu o `gedit` **inalterado**. Causa
+  lida em `frame_webview.rs:910` (`refresh_csd`): só tratava `detected == true`, escondendo barra/borda e zerando
+  insets; `Client→Server` emitia `Csd{false}` e nada restaurava a moldura (`csd_restored`/`frame_restored`
+  ausentes). Corrigido: `Csd` → `apply_policy_csd` restaura insets/slices e chama `aeroShowFrame`. Instrumento
+  corrigido: `f2_hotreload_decoration_policy.py` agora exige `FRAMEWEB: frame_restored` no DOM; baseline com a
+  checagem nova deu `FALHA hotreload/shell restaurou a barra no DOM`, depois 3× OK. Amostras:
+  `/tmp/opencode/f2-hotreload/dom-baseline.log`, `dom-after.log`, `final-dom{1,2,3}.log`.
 - **Bun 1.4.4 (2026-11-24, medido nesta sessão): cache de módulo local e `//!`.** `import(url?query=N)` NÃO invalida o
   cache de arquivos `.ts` locais (edição repetida devolve o primeiro conteúdo). `Bun.Transpiler` + `data:` URL resolve;
   mas se o código transpilado **começa com `//!`**, o `default` exportado é a própria URL string (4 variantes sondadas:
@@ -2217,11 +2225,12 @@ intercalar com F2. cursor-shape e primary-selection já fechados, fora da fila.
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- **F2-decoration-policy-hotreload (2026-11-24): JUIZ VISUAL PENDENTE.** Instância nested aberta (§4) com `gedit` no
+- **F2-decoration-policy-hotreload (2026-11-24): JUIZ VISUAL PENDENTE (2ª rodada).** 1ª rodada reprovada pelo humano
+  (§6): decisão mudava no log, tela não mudava. Instância reiniciada com o shell corrigido (§4), com `gedit` no
   estado `Client`. Humano deve confirmar, com o agente editando o `.ts` ao vivo: `gedit→Server` faz a moldura do
-  compositor aparecer na mesma janela; voltar a `Client` a remove sem barra dupla; erro de sintaxe não altera a tela
-  (últimas boas mantidas). Agente NÃO encerrou a instância; sem "ok" nesta sessão o item NÃO está concluído.
-  Não medido: GPU real/DRM (VM sem 3D), latência do reload em sessão real, reload com múltiplas janelas no juiz.
+  compositor aparecer na mesma janela; voltar a `Client` a remove sem barra dupla; erro de sintaxe não altera a tela.
+  Agente NÃO encerrou a instância; sem "ok" nesta sessão o item NÃO está concluído. Não medido: GPU real/DRM (VM sem
+  3D), latência do reload em sessão real, reload com múltiplas janelas no juiz.
 - **F2-decoration-policy-ts (2026-11-24): JUIZ VISUAL APROVADO ("sim. aprovado").** Instância nested (compositor PID
   116497, socket `wayland-aero-f2-ts-visual3`, runtime Bun PID 116895, clientes PIDs 116532/116915) deixada aberta;
   humano conferiu `foot` decorado, `gedit` sem barra dupla/flash, `aero-no-deco` e `aero-ts-visual` sem moldura (esta
@@ -2667,10 +2676,11 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
   Reproduzir (bench por último): `cargo build --workspace --examples && cargo build -p aeroshell-compositor --features bench && bun run generate:types && python3 tests/integration/f2_hotreload_decoration_policy.py`
   → `VEREDITO: OK` (3× em `/tmp/opencode/f2-hotreload/final-run{1,2,3}.log`); baseline `VEREDITO: FALHA`. Unitário
   `bun test packages/runtime/src/policy-reload.test.ts` 5/5, `bun test` 20/20; gate `gate-clean.log` EXIT=0.
-  Instância do juiz: compositor PID 139168, runtime PID 139195, gedit PID 139178, socket
-  `wayland-aero-f2-hotreload-visual2`, IPC `/tmp/opencode/f2-hotreload/visual2/ipc.sock`, regras
-  `/tmp/opencode/f2-hotreload/visual2/rules.ts`. **Próximo passo imediato:** pedir ao humano que olhe o gedit; editar
-  a regra para `Server`, depois `Client`, depois sintaxe inválida; obter o "ok"; atualizar §3/§7/§9, commitar e PARAR.
+  Instância do juiz (2ª rodada, shell corrigido): compositor PID 144220, runtime PID 144242, gedit PID 144228,
+  socket `wayland-aero-f2-hotreload-visual3`, IPC `/tmp/opencode/f2-hotreload/visual3/ipc.sock`, regras
+  `/tmp/opencode/f2-hotreload/visual3/rules.ts`. **Próximo passo imediato:** humano olhar o gedit e dizer "pode mudar";
+  editar para `Server`, `Client`, sintaxe inválida; obter o "ok"; atualizar §3/§7/§9, commitar e PARAR. §6 tem a
+  correção do shell (`3d360b1`) e a lacuna de medição que o juiz revelou.
   Não tocar no snap/F7. Nenhum push.
 - **SESSÃO ENCERRADA (2026-11-24): F2-decoration-policy-ts FECHADA PELO JUIZ VISUAL ("sim. aprovado").**
   Reproduzir (bench por último):
