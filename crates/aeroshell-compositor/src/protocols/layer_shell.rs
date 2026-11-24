@@ -7,13 +7,19 @@ use smithay::{
     delegate_layer_shell,
     desktop::{layer_map_for_output, LayerSurface},
     reexports::wayland_server::protocol::wl_output::WlOutput,
-    wayland::shell::wlr_layer::{Layer, WlrLayerShellHandler, WlrLayerShellState},
+    wayland::{
+        compositor::with_states,
+        shell::wlr_layer::{
+            Layer, LayerSurfaceCachedState, WlrLayerShellHandler, WlrLayerShellState,
+        },
+    },
 };
 
 use crate::state::AeroState;
 
 impl AeroState {
-    /// Sugere ao cliente a largura do output e a altura do painel do spike.
+    /// Painéis ancorados só na borda inferior mantêm 48 px; desktop/overlay
+    /// ancorados nas duas bordas verticais recebem a altura cheia do output.
     pub fn configure_layer_surface(&self, layer: &LayerSurface) {
         let Some(output) = self.outputs.first() else {
             return;
@@ -21,7 +27,16 @@ impl AeroState {
         let Some(mode) = output.current_mode() else {
             return;
         };
-        let desired = (mode.size.w, 48).into();
+        let anchored_vertically = with_states(layer.wl_surface(), |states| {
+            states
+                .cached_state
+                .get::<LayerSurfaceCachedState>()
+                .current()
+                .anchor
+                .anchored_vertically()
+        });
+        let height = if anchored_vertically { mode.size.h } else { 48 };
+        let desired = (mode.size.w, height).into();
         let protocol = layer.layer_surface();
         if protocol.current_state().size != Some(desired) {
             protocol.with_pending_state(|state| state.size = Some(desired));

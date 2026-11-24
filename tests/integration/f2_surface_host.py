@@ -36,7 +36,8 @@ ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 DESKTOP_HTML = (
     "<!doctype html><html><head><style>html,body{width:100%;height:100%;margin:0;"
-    "background:#e00000}</style></head><body></body></html>"
+    "background:#e00000}</style></head><body>"
+    "<div style='position:absolute;inset:0;background:#e00000'></div></body></html>"
 )
 OVERLAY_HTML = (
     "<!doctype html><html><head><style>html,body{width:100%;height:100%;margin:0;"
@@ -160,6 +161,7 @@ def pixel_counts():
     if not path.exists():
         return None
     data = path.read_bytes()
+    (PIXELS / "full_snapshot.bgra").write_bytes(data)
     red = green = 0
     for i in range(0, len(data) - 3, 4):
         b, g, r, a = data[i:i + 4]
@@ -170,6 +172,11 @@ def pixel_counts():
         if g > 130 and r < 90 and b < 90:
             green += 1
     return red, green
+
+
+def surface_id(pattern):
+    found = re.findall(pattern, clean())
+    return found[-1] if found else None
 
 
 def click(x, y):
@@ -223,19 +230,50 @@ def main():
         )
 
         desktop = {"id": "desk", "kind": "desktop", "html": DESKTOP_HTML}
+        # A região de input é a BORDA OPACA; o centro transparente não captura
+        # clique e deve repassá-lo ao cliente (prévia do hit-test por alfa).
         overlay = {
             "id": "over", "kind": "overlay", "html": OVERLAY_HTML,
-            "input_region": [{"x": 180, "y": 140, "w": 280, "h": 200}],
+            "input_region": [
+                {"x": 0, "y": 0, "width": OUTPUT[0], "height": 60},
+                {"x": 0, "y": 420, "width": OUTPUT[0], "height": 60},
+                {"x": 0, "y": 60, "width": 60, "height": 360},
+                {"x": 580, "y": 60, "width": 60, "height": 360},
+            ],
         }
+        # 1) desktop sozinho: medir o fundo sem nada por cima.
         raw_desktop = create_surface(surface_spec(**desktop))
         print(f"=== surface-create desktop (cru): {raw_desktop} ===")
+        checks["surface-create desktop responde OK"] = raw_desktop == "OK"
+        checks["SurfaceCreated do desktop no stream"] = wait_for(
+            lambda: events.has("SurfaceCreated", "desk")
+        )
+        checks["host cria o desktop"] = wait_for(
+            lambda: "SURFACE_HOST criado id=desk kind=desktop" in clean()
+        )
+
+        early = None
+        deadline = time.time() + 8
+        while time.time() < deadline:
+            early = pixel_counts()
+            if early and early[0] > 200:
+                break
+            time.sleep(0.2)
+        (PIXELS / "full_before_foot.bgra").write_bytes(
+            (PIXELS / "full_snapshot.bgra").read_bytes()
+        )
+        print(f"=== pixels desktop isolado: {early} ===")
+        checks["desktop vermelho aparece nos pixels"] = bool(early and early[0] > 200)
+
+        # 2) overlay com borda opaca e região de input só na borda.
         raw_overlay = create_surface(surface_spec(**overlay))
         print(f"=== surface-create overlay (cru): {raw_overlay} ===")
-        checks["surface-create responde OK"] = raw_desktop == "OK" and raw_overlay == "OK"
-        checks["SurfaceCreated no stream"] = events.has("SurfaceCreated", "desk") and events.has("SurfaceCreated", "over")
-        checks["host cria as duas superfícies"] = wait_for(
-            lambda: "SURFACE_HOST criado id=desk kind=desktop" in clean()
-            and "SURFACE_HOST criado id=over kind=overlay" in clean()
+        checks["surface-create overlay responde OK"] = raw_overlay == "OK"
+        checks["SurfaceCreated do overlay no stream"] = wait_for(
+            lambda: events.has("SurfaceCreated", "over")
+        )
+        checks["host cria o overlay"] = wait_for(
+            lambda: "SURFACE_HOST criado id=over kind=overlay" in clean()
         )
 
         foot_env = {**env, "WAYLAND_DISPLAY": SOCKET}
@@ -243,7 +281,12 @@ def main():
             ["foot", "-w", "300x220"], cwd=ROOT, env=foot_env,
             stdout=handle, stderr=subprocess.STDOUT, start_new_session=True,
         )
-        checks["cliente foot mapeado"] = wait_for(lambda: "W 0 " in clean() or re.search(r"W \d+ ", clean()) is not None)
+        checks["cliente foot mapeado"] = wait_for(lambda: any(
+            len(line.split()) >= 6 and line.split()[4].isdigit() and int(line.split()[4]) > 0
+            for line in command("list").splitlines() if line.startswith("W ")
+        ))
+        print("=== IPC list cru ===")
+        print(command("list"))
 
         deadline = time.time() + 10
         counts = None
@@ -253,18 +296,20 @@ def main():
                 break
             time.sleep(0.2)
         print(f"=== pixels vermelho/verde: {counts} ===")
-        checks["desktop vermelho e borda verde aparecem nos pixels"] = bool(
-            counts and counts[0] > 200 and counts[1] > 200
-        )
+        checks["borda verde do overlay aparece nos pixels"] = bool(counts and counts[1] > 200)
         checks["z-order desktop < cliente < overlay medido"] = wait_for(
             lambda: re.search(r"SURFACE_Z .*desktop.*cliente.*overlay", clean()) is not None
         )
 
-        before = len(re.findall(r"BOTAO serial=\d+ window_id=", clean()))
-        click(320, 240)
-        checks["clique na região transparente chega ao cliente"] = wait_for(
-            lambda: len(re.findall(r"BOTAO serial=\d+ window_id=", clean())) > before
+        target = (OUTPUT[0] // 2, OUTPUT[1] // 2)
+        wait_for(lambda: surface_id(r"CLIENT_ELEMENT_PROBE [^\n]*surface=ObjectId\([^,]+, (\d+)\)") is not None)
+        foot_surface = surface_id(r"CLIENT_ELEMENT_PROBE [^\n]*surface=ObjectId\([^,]+, (\d+)\)")
+        print(f"=== alvo do clique: {target}, superfície do foot: {foot_surface} ===")
+        click(*target)
+        checks["clique na região transparente chega ao cliente"] = bool(foot_surface) and wait_for(
+            lambda: surface_id(r"BUTTON_FOCUS .*focus=Some\(ObjectId\([^,]+, (\d+)\)") == foot_surface
         )
+        print(f"=== foco após clique: {surface_id(r'BUTTON_FOCUS .*focus=Some\(ObjectId\([^,]+, (\d+)\)')} ===")
 
         raw_update = command("surface-update " + json.dumps({
             "id": "over", "kind": "overlay", "html": OVERLAY_HTML,

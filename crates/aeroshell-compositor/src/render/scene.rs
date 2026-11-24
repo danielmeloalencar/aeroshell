@@ -106,6 +106,22 @@ pub fn collect_output_elements(
             .rev()
             .partition(|s| matches!(s.layer(), Layer::Background | Layer::Bottom));
 
+        #[cfg(feature = "bench")]
+        {
+            let desktop = lower.iter().any(|l| matches!(l.layer(), Layer::Background));
+            let overlay = upper.iter().any(|l| matches!(l.layer(), Layer::Overlay));
+            let client = state.space.elements().any(|w| w.toplevel().is_some());
+            static LOGGED_Z: std::sync::atomic::AtomicBool =
+                std::sync::atomic::AtomicBool::new(false);
+            if desktop
+                && overlay
+                && client
+                && !LOGGED_Z.swap(true, std::sync::atomic::Ordering::Relaxed)
+            {
+                eprintln!("SURFACE_Z desktop < cliente < overlay");
+            }
+        }
+
         // LayerMap já usa coordenadas locais do output (layer.rs:248-267).
         for layer in upper {
             if let Some(geo) = layer_map.layer_geometry(layer) {

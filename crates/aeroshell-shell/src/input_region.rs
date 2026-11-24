@@ -46,8 +46,10 @@ pub fn apply(window: &gtk4::ApplicationWindow, rects: &InteractiveRects) {
         return;
     };
     if rects.rects.is_empty() {
-        // Nada interativo: região vazia => clique passa para a janela atrás.
-        surface.set_input_region(None);
+        // `None` em wl_surface.set_input_region significa "superfície inteira",
+        // não "vazia". Uma Region vazia é o que deixa o clique passar adiante.
+        let empty = Region::create();
+        surface.set_input_region(Some(&empty));
         return;
     }
     let areas: Vec<RectangleInt> = rects

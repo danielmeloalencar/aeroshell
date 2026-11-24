@@ -7,6 +7,7 @@ mod input_region;
 #[cfg(feature = "probe-registry")]
 mod registry_probe;
 mod scheme;
+mod surfaces;
 
 use gtk4::prelude::*;
 use webkit6::prelude::*;
@@ -48,6 +49,12 @@ fn main() {
     let app = gtk4::Application::builder().application_id(app_id).build();
 
     app.connect_activate(move |app| {
+        // F2-surface-host: modo autônomo dirigido pelo stream PUSH; o painel
+        // padrão continua intacto quando a variável não está definida.
+        if std::env::var_os("AERO_SURFACE_HOST").is_some() {
+            surfaces::run(app);
+            return;
+        }
         if std::env::var_os("AERO_TEST_BACKDROP").is_some() {
             let window = gtk4::ApplicationWindow::builder()
                 .application(app)

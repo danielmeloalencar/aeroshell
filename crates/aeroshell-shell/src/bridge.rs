@@ -172,6 +172,51 @@ fn reply(webview: &WebView, seq: u64, lines: &[String]) {
     );
 }
 
+/// Bridge padrão das superfícies genéricas: input region por alfa/retângulos e
+/// o mesmo comando IPC do painel, sem o gate de eventos (cada host já assina
+/// o stream e entrega os eventos ao WebView por `window.__aeroEvent`).
+pub fn install_surface(window: &gtk4::ApplicationWindow, webview: &WebView) -> UserContentManager {
+    let weak_window = window.downgrade();
+    let weak_webview = webview.downgrade();
+    let manager = webview
+        .user_content_manager()
+        .expect("WebView sem UserContentManager");
+    manager.register_script_message_handler("aero", None);
+    manager.connect_script_message_received(Some("aero"), move |_, value| {
+        let json = value.to_json(0).unwrap_or_default().to_string();
+        let Ok(message) = serde_json::from_str::<serde_json::Value>(&json) else {
+            return;
+        };
+        let message = message
+            .as_str()
+            .and_then(|s| serde_json::from_str(s).ok())
+            .unwrap_or(message);
+        match message.get("type").and_then(|v| v.as_str()) {
+            Some("ipc") => {
+                let (Some(webview), Some(command), Some(seq)) = (
+                    weak_webview.upgrade(),
+                    message.get("command").and_then(|v| v.as_str()),
+                    message.get("seq").and_then(|v| v.as_u64()),
+                ) else {
+                    return;
+                };
+                let lines = forward(command);
+                tracing::info!(command, ?lines, "PONTE IPC superfície");
+                reply(&webview, seq, &lines);
+            }
+            _ => {
+                let Some(window) = weak_window.upgrade() else {
+                    return;
+                };
+                if let Some(rects) = crate::input_region::parse(&json) {
+                    crate::input_region::apply(&window, &rects);
+                }
+            }
+        }
+    });
+    manager
+}
+
 /// Registra o handler `aero`, conecta input regions e encaminha comandos IPC.
 pub fn install(window: &gtk4::ApplicationWindow, webview: &WebView) -> UserContentManager {
     let weak_window = window.downgrade();
