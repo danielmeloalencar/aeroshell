@@ -2674,13 +2674,17 @@ fechados, fora da fila.
   `/tmp/opencode/f2-surface-host-s3-input.log`. Próximo passo exige decisão: continuar a migração do
   frame como etapa 3 ou abrir cartão separado.
 ## 7. Não medido / não validado (não trate como fato)
-- **F2-surface-host (2026-11-24): JUIZ VISUAL PENDENTE NA INSTÂNCIA ABERTA.** Pré-filtro headless
-  mediu pixels, z-order e passagem de clique. Instância canônica aberta para o humano (sem `--size`):
-  socket `wayland-aero-f2-surface-visual`, IPC `/tmp/opencode/f2-surface-host-visual/ipc.sock`,
-  compositor PID 70666, host PID 70684, `foot A/B` PIDs 70829/70830, log
-  `/tmp/opencode/f2-surface-host-visual/compositor.log`. Desktop vermelho, overlay verde com borda
-  opaca de 60 px e 2 `foot` no stream. Não escrever "validado visualmente" sem o ok. Não medido:
-  GPU real/udev (VM sem 3D) e o kind `frame` (não migrado).
+- **F2-surface-host (2026-11-24): JUIZ VISUAL NEGOU a 1ª instância; correção aplicada, reteste
+  bloqueado pelo ambiente.** Humano: *"vejo uma borda verde e dentro branco. nada mais."* O
+  pré-filtro headless media o desktop só ANTES do overlay; lacuna registrada e corrigida com checagem
+  do pixel central depois do overlay (`center_pixel()` em `f2_surface_host.py`). Causa provável: o
+  host genérico não instalava o CSS transparente do GTK; commit `1705272` passou a chamar
+  `host::install_transparent_css()`. Harness com a nova checagem: 1× `VEREDITO: OK` após a correção
+  (`/tmp/opencode/f2-surface-host-transparent-harness.log`, pixel central `(224,0,0,255)`); tentativas
+  de repetir e reabrir falharam com o compositor travando na inicialização winit/headless (portal
+  D-Bus/`GL ... LLVM`), amostras preservadas em `-transparent-final{a,b,c}.log` e
+  `/tmp/opencode/f2-surface-host-visual4/compositor.log`. Aplicada a regra das duas tentativas: PARAR.
+  Não escrever "validado visualmente". Não medido: GPU real/udev e o kind `frame` (não migrado).
 - **F2-notifications (2026-11-24): JUIZ VISUAL PENDENTE NA INSTÂNCIA CORRETA.** Código/testes/gates
   verdes, 3× harness `VEREDITO: OK`. A 1ª instância (com `--size`) foi fechada pelo humano por uma
   janela transparente do tamanho do output que repintava (§6); sem `--size` o `foot` ficou normal.
