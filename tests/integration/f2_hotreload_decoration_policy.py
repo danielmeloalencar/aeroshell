@@ -84,6 +84,7 @@ def main():
              "--shell", str(ROOT / "target/debug/examples/frame_webview"),
              "--shell-env", "LD_PRELOAD=libgtk4-layer-shell.so.0"],
             cwd=ROOT, stdout=comp_log.open("wb"), stderr=subprocess.STDOUT, env=env,
+            start_new_session=True,
         )
         wait_for(lambda: (RUNTIME / sock).exists(), 15)
         wait_for(lambda: pathlib.Path(ipc).exists(), 10)
