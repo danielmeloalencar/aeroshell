@@ -1074,12 +1074,13 @@ const TITLEBAR_HTML: &str = r#"<!doctype html>
         bar: getComputedStyle(bar).display,
         border: getComputedStyle(border).display
       });
-      // O host precisa redesenhar o WebView DEPOIS de o estilo virar commit
-      // de layout. Sem o rAF, queue_draw() chega antes do reflow e o dano
-      // gerado é 0x0 — a moldura fica invisível mas interativa (juiz visual).
-      requestAnimationFrame(() => {
+      // O host precisa redesenhar o WebView DEPOIS de o WebKit alocar o novo
+      // buffer do reflow. Com requestAnimationFrame o queue_draw chegava antes
+      // da alocação e o GTK fazia attach(NULL) — commit sem buffer (spike).
+      // 50 ms dão tempo ao WebKitGTK 6.0 nesta VM sem 3D.
+      setTimeout(() => {
         window.webkit.messageHandlers.aero.postMessage({ action: 'frame_needs_repaint' });
-      });
+      }, 50);
     };
     window.aeroSetTitle = (title) => {
       const el = document.getElementById('title');

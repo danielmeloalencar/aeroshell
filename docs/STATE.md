@@ -1659,6 +1659,12 @@ fechados, fora da fila.
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **Correção 1 (setTimeout 50 ms) TESTADA e FALHADA (2026-11-24).** Trocar `requestAnimationFrame`
+  por `setTimeout(..., 50)` em `aeroShowFrame` não evitou o `attach(NULL)`: spike 3×
+  `VEREDITO_SPIKE: FALHA` (`SPIKE_BUFFER: frame commitou SEM buffer (0x0)`), enquanto
+  `f2_shell_real_policy_restore.py` segue `VEREDITO: OK`. Ou seja, 50 ms não bastam para o
+  WebKitGTK alocar o buffer nesta VM. **Não pular para o fallback sem decisão do humano** (ele
+  pediu parada para ok visual após a Correção 1); nenhum nudge de geometria 1px foi aplicado.
 - **SPIKE DE PINTURA (2026-11-24) — dado conclusivo, sem correção.** Usando o
   `frame_pixel_probe.rs` existente (bench + gatilho por arquivo) logo após `FRAMEWEB: frame_restored`:
   `SPIKE_BUFFER: frame commitou SEM buffer (0x0)` e
@@ -2940,7 +2946,11 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **SESSÃO ATUAL (2026-11-24): F2-shell-real — SPIKE DE DIAGNÓSTICO CONCLUÍDO; SEM CORREÇÃO.**
+- **SESSÃO ATUAL (2026-11-24): F2-shell-real — Correção 1 (setTimeout 50 ms) aplicada e reprovada
+  pelo spike (3× FALHA).** Gate `check.sh` EXIT=0, fmt aplicado, harness de hot-reload OK. **Próximo
+  passo: decisão do humano** — autorizar ou não o fallback "nudge de geometria de 1px" descrito por
+  ele; nenhum fallback aplicado.---
+- **SESSÃO ANTERIOR (2026-11-24): F2-shell-real — SPIKE DE DIAGNÓSTICO CONCLUÍDO; SEM CORREÇÃO.**
   Causa isolada em §6: commitFrame sem buffer após `frame_restored`. Gate `check.sh` EXIT=0,
   `cargo fmt` aplicado, harnesses atuais `VEREDITO: OK`. **Próximo passo: decisão do humano** —
   autorizar (ou não) uma correção no caminho buffer/commit do shell/WebKit, com o mesmo spike como

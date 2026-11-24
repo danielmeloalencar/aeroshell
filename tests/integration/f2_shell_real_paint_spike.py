@@ -168,9 +168,11 @@ def main():
         print("=== SPIKE_DADO (cru) ===")
         for line in spike + restored + commits:
             print(line[:240])
+        buffer_ok = any("SPIKE_BUFFER: buffer=Some" in line for line in spike)
+        print("VEREDITO_SPIKE: " + ("OK" if buffer_ok else "FALHA"))
         print(f"artefatos: {OUT}")
-        print("SPIKE: diagnóstico concluído; nenhuma correção aplicada.")
-        return 0
+        print("SPIKE: diagnóstico concluído; nenhuma correção de paint aplicada neste harness.")
+        return 0 if buffer_ok else 1
     finally:
         for proc in [*feet, runtime, shell]:
             stop(proc)
