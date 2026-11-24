@@ -624,6 +624,16 @@ enum IconSource {
 }
 
 /// Pergunta ao IPC se este window_id pediu client-side decorations.
+/// Tamanho alocado atual da janela do frame (para o nudge de 1px).
+fn window_size(window: &gtk4::ApplicationWindow) -> (i32, i32) {
+    let allocated = (window.width(), window.height());
+    if allocated.0 > 0 && allocated.1 > 0 {
+        allocated
+    } else {
+        window.default_size()
+    }
+}
+
 fn ipc_csd(window_id: u32) -> bool {
     let Some(path) = std::env::var_os("AERO_WINDOW_IPC_SOCK") else {
         return false;
@@ -1425,8 +1435,9 @@ fn prewarm_frame() {
                 );
             }
             Some("frame_needs_repaint") => {
-                // Chega num requestAnimationFrame posterior ao `display:flex`,
-                // então o reflow já aconteceu: o queue_draw agora gera dano real.
+                // O WebViewGTK ainda pode responder ao queue_draw com attach(NULL)
+                // (spike: commit sem buffer). Forçar uma realocação de 1px faz o
+                // GTK pedir um buffer novo; devolvemos o tamanho logo depois.
                 if let Some(view) = repaint_window
                     .child()
                     .and_then(|child| child.downcast::<WebView>().ok())
@@ -1438,6 +1449,22 @@ fn prewarm_frame() {
                         bench_t()
                     );
                 }
+                let wid = callback_window_id.get();
+                let (base_w, base_h) = window_size(&repaint_window);
+                repaint_window.set_default_size(base_w + 1, base_h);
+                repaint_window.queue_resize();
+                let weak = repaint_window.downgrade();
+                gtk4::glib::timeout_add_local(std::time::Duration::from_millis(60), move || {
+                    if let Some(window) = weak.upgrade() {
+                        window.set_default_size(base_w, base_h);
+                        window.queue_resize();
+                        eprintln!(
+                            "FRAMEWEB: geo_nudge window_id={wid:?} {base_w}x{base_h} t={}",
+                            bench_t()
+                        );
+                    }
+                    gtk4::glib::ControlFlow::Break
+                });
             }
             Some("frame_restored") => {
                 let bar = parsed.get("bar").and_then(|v| v.as_str()).unwrap_or("");

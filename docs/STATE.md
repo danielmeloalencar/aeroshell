@@ -21,6 +21,16 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [~] **F2-shell-real — fallback de geometria 1px aplicado (2026-11-24); juiz 11ª rodada pendente (§7).**
+      Após a Correção 1 (`setTimeout 50ms`) ser reprovada (spike 3× FALHA) e o humano ver 4/5 OK
+      com 1 falha na janela **não** redimensionada, implementei o fallback autorizado: ao receber
+      `frame_needs_repaint`, o shell faz `set_default_size(w+1,h)` + `queue_resize()` e restaura em
+      60 ms (`frame_webview.rs:1450`), mantendo `queue_draw()`. Spike após o fallback: pixel da borda
+      passou a `0xFF2B2B2B` (43,43,43 — cor da moldura), contra `0xFF141419` (clear) antes; a linha
+      `SPIKE_BUFFER` não foi capturada nessa amostra, então o veredito do spike é inconclusivo, mas
+      a pintura aconteceu. Gates: `check.sh` EXIT=0, clippy bench 0, build 0; `f2_shell_real_policy_restore`,
+      `f2_shell_real_reload_after_timeout`, `f2_full_decoration_policy` OK; `f2_hotreload_gedit_csd`
+      1 falha + 1 OK (flake). **Não toquei snap/F7/F1.**
 - [~] **F2-shell-real — nudge de repaint sincronizado (2026-11-24); juiz 9ª rodada pendente (§7).**
       O humano descartou a hipótese "falta `aeroShowFrame` no JS" — verificado: a função existe em
       `frame_webview.rs:1067`, é chamada em `:1002`, e o log mostra `frame_restored … bar=flex
@@ -2437,6 +2447,12 @@ fechados, fora da fila.
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- **F2-shell-real (2026-11-24): 11ª RODADA DO JUIZ ABERTA (fallback de geometria 1px).** Instância:
+  comp PID 68242, runtime 68260, shell 68350, gedit 68585, socket
+  `wayland-aero-f2-shell-real-visual11`, IPC `/tmp/opencode/f2-shell-real/visual11/ipc.sock`, regras
+  `/tmp/opencode/f2-shell-real/visual11/config/aeroshell/rules.ts` (`foot→Server`, `gedit→Client`).
+  3 janelas no IPC. Humano deve repetir 5× `Server↔None`, incluindo redimensionar um `foot` e
+  observar o **outro**. **Aguardando veredito; não fechar a instância.** Cartão NÃO fechado.
 - **F2-shell-real (2026-11-24): 10ª RODADA DO JUIZ ABERTA (Correção 1 / setTimeout 50 ms, sem fallback).**
   Humano pediu ver visualmente antes de autorizar o fallback. Instância: comp PID 61830, runtime
   61847, shell 61931, gedit 62163, socket `wayland-aero-f2-shell-real-visual10`, IPC
