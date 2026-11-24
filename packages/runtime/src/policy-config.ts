@@ -54,8 +54,11 @@ export function validateConfig(value: unknown): DecorationPolicyConfig {
 export async function loadRules(path: string): Promise<LoadResult> {
   try {
     const source = await readFile(path, "utf8");
+    // Bun 1.4.4: um módulo `data:` cujo código começa com `//!` devolve a URL
+    // como `default` (medido nesta sessão). Os `//!` são só documentação neste
+    // repositório; removê-los não altera as regras.
     const transpiler = new Bun.Transpiler({ loader: "ts" });
-    const javascript = transpiler.transformSync(source);
+    const javascript = transpiler.transformSync(source.replace(/^\/\/!.*$/gm, ""));
     const module = (await import(
       `data:text/javascript;charset=utf-8,${encodeURIComponent(javascript)}`
     )) as { default?: unknown };

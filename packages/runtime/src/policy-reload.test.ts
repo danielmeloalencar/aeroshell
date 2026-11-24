@@ -58,6 +58,15 @@ test("loadRules recarrega arquivo editado (sem cache de módulo)", async () => {
   if (second.ok) expect(second.config.rules[0]?.policy).toBe("None");
 });
 
+test("loadRules aceita o rules.ts padrão (comentários //! no início)", async () => {
+  const result = await loadRules(new URL("./rules.ts", import.meta.url).pathname);
+  expect(result.ok).toBe(true);
+  if (result.ok) {
+    expect(result.config.default).toBe("Server");
+    expect(result.config.rules.length).toBe(3);
+  }
+});
+
 test("erro de sintaxe mantém as últimas regras boas no RuleSource", async () => {
   const dir = mkdtempSync(join(tmpdir(), "aero-hotreload-"));
   const file = join(dir, "rules.ts");

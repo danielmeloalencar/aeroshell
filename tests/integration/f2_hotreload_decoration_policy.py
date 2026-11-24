@@ -133,6 +133,23 @@ def main():
                 r"POLICY_RENDER t=\d+ window_id=(\d+) suppressed=policy_none", clog()
             )
 
+        def applied_with_ts():
+            return [
+                (int(ts), wid, decision)
+                for ts, wid, decision, _, _ in re.findall(
+                    r"POLICY t=(\d+) window_id=(\d+) decision=(\w+) fallback=(\w+) reason=(\w+)",
+                    clog(),
+                )
+            ]
+
+        def suppressed_ts():
+            return [
+                int(ts)
+                for ts, _ in re.findall(
+                    r"POLICY_RENDER t=(\d+) window_id=(\d+) suppressed=policy_none", clog()
+                )
+            ]
+
         initial_ok = wait_for(
             lambda: any(d[2].lower() == "server" and d[3] == "rule" for d in decisions())
             and any(a[1] == "server" and a[2] == "false" for a in applied())
@@ -146,7 +163,6 @@ def main():
             and any(a[1] == "none" and a[2] == "false" for a in applied())
             and bool(suppressed())
         )
-        suppressed_before_bad = len(suppressed())
 
         # 2) Sintaxe inválida: última boa preservada, nenhuma decisão nova.
         decisions_before_bad = len(decisions())
@@ -156,7 +172,6 @@ def main():
         last_good_kept = (
             len(decisions()) == decisions_before_bad
             and applied()[-1][1] == "none"
-            and len(suppressed()) == suppressed_before_bad
             and runtime.poll() is None
         )
 
@@ -167,7 +182,10 @@ def main():
             and any(a[1] == "server" and a[2] == "false" for a in applied())
         )
         time.sleep(1.0)
-        suppressed_after_repair = len(suppressed()) == suppressed_before_bad
+        # `suppressed` é emitido a cada frame; o que importa é que nenhuma linha
+        # nova apareça DEPOIS do timestamp da última decisão `server`.
+        last_server_ts = [a[0] for a in applied_with_ts() if a[2] == "server"][-1]
+        suppressed_after_repair = all(ts < last_server_ts for ts in suppressed_ts())
 
         print("=== runtime TS (cru) ===")
         print(rlog(), end="")
