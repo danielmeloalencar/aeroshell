@@ -2674,10 +2674,13 @@ fechados, fora da fila.
   `/tmp/opencode/f2-surface-host-s3-input.log`. Próximo passo exige decisão: continuar a migração do
   frame como etapa 3 ou abrir cartão separado.
 ## 7. Não medido / não validado (não trate como fato)
-- **F2-surface-host (2026-11-24): JUIZ VISUAL NÃO OBTIDO.** Pré-filtro headless mediu pixels,
-  z-order e passagem de clique, mas nenhuma instância foi deixada aberta para o humano julgar o
-  desktop + overlay + 2 `foot`. Não escrever "validado visualmente". Não medido: GPU real/udev
-  (VM sem 3D) e o kind `frame` (não migrado).
+- **F2-surface-host (2026-11-24): JUIZ VISUAL PENDENTE NA INSTÂNCIA ABERTA.** Pré-filtro headless
+  mediu pixels, z-order e passagem de clique. Instância canônica aberta para o humano (sem `--size`):
+  socket `wayland-aero-f2-surface-visual`, IPC `/tmp/opencode/f2-surface-host-visual/ipc.sock`,
+  compositor PID 70666, host PID 70684, `foot A/B` PIDs 70829/70830, log
+  `/tmp/opencode/f2-surface-host-visual/compositor.log`. Desktop vermelho, overlay verde com borda
+  opaca de 60 px e 2 `foot` no stream. Não escrever "validado visualmente" sem o ok. Não medido:
+  GPU real/udev (VM sem 3D) e o kind `frame` (não migrado).
 - **F2-notifications (2026-11-24): JUIZ VISUAL PENDENTE NA INSTÂNCIA CORRETA.** Código/testes/gates
   verdes, 3× harness `VEREDITO: OK`. A 1ª instância (com `--size`) foi fechada pelo humano por uma
   janela transparente do tamanho do output que repintava (§6); sem `--size` o `foot` ficou normal.
