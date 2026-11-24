@@ -2694,7 +2694,8 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
 - **SESSÃO ENCERRADA (2026-11-24): F2-decoration-policy-hotreload FECHADA PELO JUIZ VISUAL ("ocorreu tudo ok").**
   Reproduzir (bench por último):
   `cargo build --workspace --examples && cargo build -p aeroshell-compositor --features bench && bun run generate:types && python3 tests/integration/f2_hotreload_decoration_policy.py && python3 tests/integration/f2_hotreload_gedit_csd.py`
-  → ambos `VEREDITO: OK` (3× em `final-dom{1,2,3}.log` e `probe-final{1,2,3}.log`); baselines FALHA. Unitário
+  → ambos `VEREDITO: OK`: reload 3× em `final-dom{1,2,3}.log` (antes da 3ª correção) + 1× em
+  `reload-after-probe.log` (depois); gedit-csd 3× em `probe-final{1,2,3}.log` (depois). Baselines FALHA. Unitário
   `bun test packages/runtime/src/policy-reload.test.ts` 5/5, `bun test` 20/20; gate `gate-close.log` EXIT=0,
   clippy bench 0. Instância do juiz deixada aberta: compositor PID 160313, runtime PID 160333, gedit PID 160321,
   socket `wayland-aero-f2-hotreload-visual5`, IPC `/tmp/opencode/f2-hotreload/visual5/ipc.sock`. §6 tem as três
