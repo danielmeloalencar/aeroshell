@@ -739,7 +739,7 @@ fn install_event_stream() {
                 // Os pedidos ao IPC abaixo são feitos SOMENTE em resposta ao
                 // evento (não há mais polling periódico).
                 "Title" | "Icon" | "Geometry" | "Snapshot" => refresh_titles(),
-                "Csd" => refresh_csd(),
+                "Csd" => apply_policy_csd(id as u32),
                 _ => {}
             }
         }
@@ -965,6 +965,58 @@ fn refresh_csd() {
             );
             }
         }
+    }
+}
+
+/// Evento `Csd` da decisão de política (inclusive no hot-reload das regras TS).
+/// O `refresh_csd` do polling só esconde a barra; sem o ramo inverso, trocar
+/// `Client`→`Server` numa janela já escondida mudava o mapa de decisões mas
+/// NÃO trazia a moldura de volta (juiz visual 2026-11-24).
+fn apply_policy_csd(window_id: u32) {
+    if ipc_csd(window_id) {
+        refresh_csd(); // caminho existente: esconde barra/borda e zera insets
+        return;
+    }
+    let restored = RUNTIME.with(|cell| {
+        let mut borrow = cell.borrow_mut();
+        let Some(rt) = borrow.as_mut() else {
+            return None;
+        };
+        let Some(entry) = rt
+            .state
+            .entries
+            .iter_mut()
+            .find(|entry| entry.window_id == window_id)
+        else {
+            return None;
+        };
+        if !entry.csd_active || entry.fullscreen {
+            return None;
+        }
+        entry.csd_active = false;
+        entry.insets = (BORDER, TITLEBAR_H, BORDER, BORDER);
+        let pair = (entry.frame.clone(), entry.webview.clone());
+        let _ = rt.queue.flush();
+        Some(pair)
+    });
+    if let Some((frame, view)) = restored {
+        frame.set_insets(BORDER, TITLEBAR_H, BORDER, BORDER);
+        frame.set_titlebar_slices(TITLE_TEXT_W, RIGHT_CONTROLS);
+        view.evaluate_javascript(
+            "window.aeroShowFrame && window.aeroShowFrame();",
+            None,
+            None,
+            None::<&webkit6::gio::Cancellable>,
+            |result| {
+                if let Err(err) = result {
+                    eprintln!("FRAMEWEB: aeroShowFrame falhou: {err}");
+                }
+            },
+        );
+        eprintln!(
+            "FRAMEWEB: csd_restored t={} window_id={window_id} insets=({BORDER},{TITLEBAR_H},{BORDER},{BORDER})",
+            bench_t()
+        );
     }
 }
 

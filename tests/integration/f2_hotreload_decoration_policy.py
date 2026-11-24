@@ -151,6 +151,13 @@ def main():
                 )
             ]
 
+        def frameweb_event(action):
+            """Barra do frame no DOM: o que o olho vê, além do mapa de decisões."""
+            return [
+                int(wid)
+                for wid in re.findall(rf"FRAMEWEB: {action}[^\n]*window_id=(\d+)", clog())
+            ]
+
         initial_ok = wait_for(
             lambda: any(d[2].lower() == "server" and d[3] == "rule" for d in decisions())
             and any(a[1] == "server" and a[2] == "false" for a in applied())
@@ -163,6 +170,7 @@ def main():
             and any(d[2].lower() == "none" for d in decisions())
             and any(a[1] == "none" and a[2] == "false" for a in applied())
             and bool(suppressed())
+            and bool(frameweb_event("csd_applied"))
         )
 
         # 2) Sintaxe inválida: última boa preservada, nenhuma decisão nova.
@@ -187,6 +195,9 @@ def main():
         # nova apareça DEPOIS do timestamp da última decisão `server`.
         last_server_ts = [a[0] for a in applied_with_ts() if a[2] == "server"][-1]
         suppressed_after_repair = all(ts < last_server_ts for ts in suppressed_ts())
+        # O log do compositor provava a decisão, mas o juiz viu a barra não voltar:
+        # o shell esconde no CSD e nunca restaurava. Medir o DOM agora.
+        frame_restored_ok = bool(frameweb_event("frame_restored"))
 
         print("=== runtime TS (cru) ===")
         print(rlog(), end="")
@@ -203,6 +214,7 @@ def main():
             "últimas boas mantidas no erro": last_good_kept,
             "correção reaplica server": repaired_ok,
             "frame voltou (sem suppressed novo)": suppressed_after_repair,
+            "shell restaurou a barra no DOM": frame_restored_ok,
             "mesmo PID do compositor": comp.pid == comp_pid and comp.poll() is None,
             "mesmo PID do runtime": runtime.pid == runtime_pid and runtime.poll() is None,
             "nenhum timeout": "reason=timeout" not in clog(),
