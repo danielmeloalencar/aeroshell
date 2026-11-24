@@ -1,7 +1,12 @@
-# Tarefa F2-cursor-shape-top-edges — RASCUNHO (aguarda "ok" do humano)
+# Tarefa F2-cursor-shape-top-edges — FECHADO PELO JUIZ VISUAL (2026-11-24: "aprovado")
 
 > Cartão de correção de seguimento de `F2-compositor-cursor-shape` (fechado, mas o juiz encontrou
 > um sintoma residual). Uma tarefa por sessão; se o objetivo mudar, PARE e pergunte.
+
+> **Veredito (2026-11-24):** humano operou a instância `wayland-aero-f2-cursor-top` (foot SSD e
+> gedit CSD, topo/cantos superiores e titlebar) e respondeu *"aprovado"*. Cartão fechado; gate final
+> `bash scripts/check.sh` EXIT=0, harness `f2_compositor_cursor_shape.py` 3× OK com 6 pontos SSD.
+> A instância foi fechada pelo humano, não pelo agente.
 
 ## Objetivo (uma frase, verificável)
 Na moldura SSD, a faixa superior de 6 px e os dois cantos superiores mostram, respectivamente,

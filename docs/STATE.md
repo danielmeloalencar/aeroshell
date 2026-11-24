@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-24 · **F2-compositor-cursor-shape FECHADO PELO JUIZ VISUAL ("ok. aprovado")** · **F1 FECHADA — base de compositor completa para F2 (protocolos provados; snap é cartão NOSSO de sessão/compat `F7-compat-snap`, Nautilus/Mutter e Ozone seguem como estavam)** · **F1-presentation-time FECHADO (juiz visual N/A)** · **F1-xdg-toplevel-states FECHADO PELO JUIZ VISUAL ("aprovado")** · **F1-subsurfaces FECHADO PELO JUIZ VISUAL (2026-11-23: "Funcionou tudo")** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · **F1i+ FECHADA PELO JUIZ VISUAL (digitação normal; só aviso de toplevel-icon, fora de escopo)** · **título real na titlebar FECHADO PELO JUIZ VISUAL ("ok")** · **F1-toplevel-icon FECHADO PELO JUIZ VISUAL ("vi o icone perfeitamente")** · **F1-csd-gtk-move-resize FECHADO PELO JUIZ VISUAL ("ok": gedit, gnome-disks e Calculadora OK)** · **F1-csd-sem-flash FECHADO PELO JUIZ VISUAL ("aprovado")** · cursor invisível no udev segue em cartão separado · 02q REABERTA E FECHADA PELO JUIZ em 2026-11-22 (sem adiamento, spike 12×36 eliminado; harness de 300 ms segue como limitação de VM registrada) · **02r FECHADA PELO JUIZ (nested + tty3) e 02s FECHADA PELO JUIZ (duas instâncias no mesmo D-Bus, "ok aprovado")**
+Última atualização: 2026-11-24 · **F2-cursor-shape-top-edges FECHADO PELO JUIZ VISUAL ("aprovado")** · **F2-compositor-cursor-shape FECHADO PELO JUIZ VISUAL ("ok. aprovado")** · **F1 FECHADA — base de compositor completa para F2 (protocolos provados; snap é cartão NOSSO de sessão/compat `F7-compat-snap`, Nautilus/Mutter e Ozone seguem como estavam)** · **F1-presentation-time FECHADO (juiz visual N/A)** · **F1-xdg-toplevel-states FECHADO PELO JUIZ VISUAL ("aprovado")** · **F1-subsurfaces FECHADO PELO JUIZ VISUAL (2026-11-23: "Funcionou tudo")** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · **F1i+ FECHADA PELO JUIZ VISUAL (digitação normal; só aviso de toplevel-icon, fora de escopo)** · **título real na titlebar FECHADO PELO JUIZ VISUAL ("ok")** · **F1-toplevel-icon FECHADO PELO JUIZ VISUAL ("vi o icone perfeitamente")** · **F1-csd-gtk-move-resize FECHADO PELO JUIZ VISUAL ("ok": gedit, gnome-disks e Calculadora OK)** · **F1-csd-sem-flash FECHADO PELO JUIZ VISUAL ("aprovado")** · cursor invisível no udev segue em cartão separado · 02q REABERTA E FECHADA PELO JUIZ em 2026-11-22 (sem adiamento, spike 12×36 eliminado; harness de 300 ms segue como limitação de VM registrada) · **02r FECHADA PELO JUIZ (nested + tty3) e 02s FECHADA PELO JUIZ (duas instâncias no mesmo D-Bus, "ok aprovado")**
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -21,7 +21,7 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
-- [~] **F2-cursor-shape-top-edges (2026-11-24) — código/teste/gates verdes; JUIZ VISUAL PENDENTE (§7).**
+- [x] **F2-cursor-shape-top-edges (2026-11-24) — FECHADO PELO JUIZ VISUAL: humano respondeu *"aprovado"*.**
        Seguimento do cartão de cursor: humano aprovou quase todos os cantos da moldura SSD, mas
        relatou falta de cursor de resize no **topo central** e nos **cantos superiores**. Causa
        confirmada no HTML (`frame_webview.rs:1024-1044`): não existia `#edge-t` e `#edge-tl/tr`
@@ -38,6 +38,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
        `check.sh` EXIT=0, clippy bench 0, `--no-default-features` 0, vizinhos `frame_buttons`,
        `f1_csd_gtk`, `frame_title` OK; `frame_resize_edges` falhou 1× (Bottom/BottomRight sem
        detecção) e passou 2× com o mesmo binário (§6).
+       **Veredito visual:** humano operou a instância `wayland-aero-f2-cursor-top` (foot SSD e
+       gedit CSD) e aprovou o topo/cantos superiores. A instância foi fechada pelo humano,
+       não pelo agente. Gate final de fechamento `check.sh` EXIT=0. **CARTÃO FECHADO.**
 - [x] **F2-compositor-cursor-shape (2026-11-24) — FECHADO PELO JUIZ VISUAL: humano respondeu *"ok. aprovado"*.**
        Cartão criado do TEMPLATE e aprovado para execução nesta sessão. Causa confirmada: o global
        `wp_cursor_shape_v1` e o `SeatHandler::cursor_image` já existiam (`state.rs:255-268`,
@@ -1586,9 +1589,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
-- **F2-cursor-shape-top-edges: PARADO no juiz visual (§7).** Harness 3× OK com os 6 pontos da
-  moldura; próximo passo: humano testar topo/cantos superiores na instância aberta e dar o "ok".
-  Sem ok, cartão NÃO fecha. Compositor/CSD não foram alterados.
+- **F2-cursor-shape-top-edges FECHADO (§3): humano aprovou o juiz visual ("aprovado").**
+  A instância `wayland-aero-f2-cursor-top` foi fechada pelo humano, não pelo agente.
+  **PARAR: nenhum próximo cartão autorizado.** snap/F7 segue pendente de aprovação explícita.
 - **F2-compositor-cursor-shape FECHADO (§3): humano aprovou o juiz visual ("ok. aprovado").**
   A instância `wayland-aero-f2-cursor-visual` foi fechada pelo humano, não pelo agente.
   **PARAR: nenhum próximo cartão autorizado; snap/F7 segue pendente de aprovação explícita.**
@@ -2530,11 +2533,9 @@ fechados, fora da fila.
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- **F2-cursor-shape-top-edges (2026-11-24): JUIZ VISUAL PENDENTE.** O harness mede sondas de
-  protocolo, não o cursor na tela. O humano deve conferir, na instância nested aberta: a faixa
-  superior de 6 px da moldura SSD → seta dupla vertical (`ns-resize`); canto superior esquerdo →
-  diagonal `nwse-resize`; canto superior direito → diagonal `nesw-resize`; o resto da titlebar
-  continua `move` e o gedit (CSD) inalterado. Sem o "ok" o cartão não fecha.
+- **F2-cursor-shape-top-edges (2026-11-24): partes NÃO medidas (cartão fechado pelo juiz).**
+  O harness mede sondas de protocolo, não o cursor na tela; a sentença foi o *"aprovado"* do humano
+  na instância nested. Não medido: udev/tty3, GPU real, tempos de transição do cursor.
 - **F2-compositor-cursor-shape (2026-11-24): partes NÃO medidas (cartão fechado pelo juiz).**
   O `CURSOR_APPLY` do harness media a sonda no redraw, não o cursor na tela; a sentença foi o
   *"ok. aprovado"* do humano na instância nested. Não medido: udev/tty3 (cursor já tem
@@ -3076,14 +3077,13 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **SESSÃO ATUAL (2026-11-24): F2-cursor-shape-top-edges — PARADO no juiz visual.** O que fazia:
+- **SESSÃO ENCERRADA (2026-11-24): F2-cursor-shape-top-edges FECHADO PELO JUIZ ("aprovado").**
   `#edge-t` + `z-index` no HTML da moldura (`frame_webview.rs`); harness com 6 pontos SSD 3× OK,
   gate final EXIT=0, clippy bench 0, `--no-default-features` 0, 3 vizinhos OK (1 flake de
-  `frame_resize_edges` registrado em §6). Estado exato: instância nested a abrir com socket
-  `wayland-aero-f2-cursor-top` e IPC `/tmp/opencode/f2-cursor-top/ipc.sock`, gedit + foot.
-  Reproduzir: `cargo build -p aeroshell-compositor --features bench && python3 tests/integration/f2_compositor_cursor_shape.py`
-  → `VEREDITO: OK`. Próximo passo imediato: humano testar topo/cantos superiores e dar o "ok".
-  Nenhum outro cartão autorizado; sem push.
+  `frame_resize_edges` registrado em §6). Reproduzir (o `check.sh` sobrescreve o binário sem
+  bench): `cargo build -p aeroshell-compositor --features bench && python3 tests/integration/f2_compositor_cursor_shape.py`
+  → `VEREDITO: OK`. **Nenhum próximo passo autorizado; PARAR.** Instância fechada pelo humano;
+  snap/F7/F1 intocados, sem push.
 - **SESSÃO ENCERRADA (2026-11-24): F2-compositor-cursor-shape FECHADO PELO JUIZ ("ok. aprovado").**
   Compositor (`backend/winit.rs::apply_host_cursor`) e moldura SSD (CSS `.edge`) aplicam a forma
   pedida; harness `f2_compositor_cursor_shape.py` 3× OK, gate final EXIT=0, 6 vizinhos OK, clippy
