@@ -7,6 +7,9 @@
 //!   maximize <id>   -> OK (alterna maximizado)
 //!   icon <id>       -> ICON <id> <w> <h> <scale> <formato> <base64-dos-pixels> | NONE
 //!   csd <id>        -> CSD <id> 1|0  (1 = cliente pediu client-side decorations)
+//!   policy-ready    -> OK (uso interno: runtime Bun conectado)
+//!   policy <id> ... -> OK (uso interno: decisão de decoração)
+//!   policy-reload   -> OK (uso interno: reemite DecorationRequest às janelas decididas)
 //! Cada request é despachado no event loop (canal calloop) e respondido por um
 //! oneshot mpsc, para que `list` veja o estado atual do space sem snapshot obsoleto.
 
@@ -363,6 +366,28 @@ impl AeroState {
             "policy-ready" => {
                 self.policy_runtime = true;
                 tracing::info!("POLICY runtime conectado no IPC");
+                "OK".to_owned()
+            }
+            // F2-decoration-policy-hotreload: as regras TS mudaram. Reemitimos
+            // `DecorationRequest` para as janelas já decididas; o runtime
+            // responde com o MESMO `policy <id>` de sempre (sem nova rota).
+            "policy-reload" => {
+                if !self.policy_runtime {
+                    return "ERR runtime de política não conectado".to_owned();
+                }
+                let mut ids: Vec<u32> = self.decorations.keys().copied().collect();
+                for id in self.pending_policies.keys().copied() {
+                    if !ids.contains(&id) {
+                        ids.push(id);
+                    }
+                }
+                ids.sort_unstable();
+                for id in &ids {
+                    self.decorations.remove(id);
+                    self.pending_policies.remove(id);
+                    self.request_decoration_policy(*id);
+                }
+                tracing::info!(count = ids.len(), "POLICY reload: janelas reconsultadas");
                 "OK".to_owned()
             }
             "policy" => {
