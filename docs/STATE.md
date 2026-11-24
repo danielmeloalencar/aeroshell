@@ -21,7 +21,12 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
-- [~] **F2-decoration-policy-ts (2026-11-24) — código/teste/gates verdes, 3× harness OK; JUIZ VISUAL PENDENTE (§7).**
+- [x] **F2-decoration-policy-ts (2026-11-24) — FECHADO PELO JUIZ VISUAL: humano respondeu *"sim. aprovado"*.**
+      Aprovação após reinício limpo (o humano primeiro viu só `foot`/`gedit` porque os clientes sintéticos tinham
+      deadline de 15 s; §6). Veredito cobriu as 4 janelas: `foot` decorado, `gedit` sem barra dupla/flash,
+      `aero-no-deco` sem moldura, `aero-ts-visual` sem moldura por regra `.ts` editada sem recompilar Rust, e botões do
+      frame. Código `fcc07ef`, ajuste do example `84dd125`. Instância deixada aberta, quem fecha é o humano.
+      Cartão `docs/tasks/F2-decoration-policy-ts.md` aprovado com "Abra e EXECUTE".
       Cartão `docs/tasks/F2-decoration-policy-ts.md` aberto e executado com aprovação explícita do humano ("Abra e
       EXECUTE"). Política completa agora em TS: `DecorationRule`/`DecorationPolicyConfig` adicionados a
       `aeroshell-ipc` como fonte ts-rs (bindings `packages/sdk/src/generated/{DecorationPolicyConfig,DecorationRule}.ts`),
@@ -1417,10 +1422,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
-- **F2-decoration-policy-ts (§3): código/teste/gates verdes, 3× harness OK; JUIZ VISUAL PENDENTE (§7).** Instância
-  nested aberta (PID 114460, socket `wayland-aero-f2-ts-visual`) com `foot` decorado, `gedit` CSD flash-less,
-  `aero-no-deco` sem moldura e `aero-ts-visual` sem moldura por regra editada em TS (runtime reiniciado, Rust
-  inalterado). **PARAR no veredito.**
+- **F2-decoration-policy-ts FECHADO (§3): humano aprovou o juiz visual ("sim. aprovado").** Próximo cartão F2
+  (hot-reload das regras TS) só com autorização explícita; instância final (PID 116497) permanece aberta, quem fecha
+  é o humano.
 - **F2-decoration-policy FECHADO (§3): humano validou o juiz visual ("ok validado").** Instância do juiz permanece
   aberta, quem fecha é o humano.
 - **F2-event-stream FECHADO (§3): humano aprovou o juiz visual (título ao vivo por evento).**
@@ -2166,16 +2170,11 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- **F2-decoration-policy-ts (2026-11-24): JUIZ VISUAL PENDENTE (reiniciado após relato do humano).** Instância nested
-  aberta: compositor PID 116497, socket `wayland-aero-f2-ts-visual3`, IPC
-  `/tmp/opencode/f2-fullpolicy/visual3/ipc.sock`, runtime Bun PID 116895
-  (`/tmp/opencode/f2-fullpolicy/visual3/runtime-edited.log`, regras `rules-edited.ts`), clientes sintéticos PIDs
-  116532 (`aero-no-deco`) e 116915 (`aero-ts-visual`), ambos com `AERO_POLICY_CLIENT_SECS=3600`. IPC lista 4 janelas
-  (`W 0 aero-no-deco`, `W 1 foot`, `W 2 gedit`, `W 3 aero-ts-visual`); decisões `none/server/client/none` com
-  `POLICY_RENDER suppressed=policy_none` 378× no id 0 e 250× no id 3. Humano deve conferir: `foot` decorado, `gedit`
-  sem barra dupla/flash, `aero-no-deco` e `aero-ts-visual` sem moldura (esta última por regra `.ts` editada sem
-  recompilar Rust), controlos do frame. Agente não encerrou esta instância; quem fecha é o humano. Não medido: GPU
-  real/DRM (VM sem 3D), latência da decisão TS em sessão real, hot-reload (fora de escopo).
+- **F2-decoration-policy-ts (2026-11-24): JUIZ VISUAL APROVADO ("sim. aprovado").** Instância nested (compositor PID
+  116497, socket `wayland-aero-f2-ts-visual3`, runtime Bun PID 116895, clientes PIDs 116532/116915) deixada aberta;
+  humano conferiu `foot` decorado, `gedit` sem barra dupla/flash, `aero-no-deco` e `aero-ts-visual` sem moldura (esta
+  por regra `.ts` editada sem recompilar Rust) e controlos do frame. Não medido: GPU real/DRM (VM sem 3D), latência
+  da decisão TS em sessão real, hot-reload (fora de escopo).
 - **F2-decoration-policy (2026-11-24): JUIZ VISUAL APROVADO ("ok validado").** Instância nested (PID 103538,
   `wayland-aero-f2-policy-visual2`) deixada aberta; humano conferiu `foot` decorado, `gedit` sem barra dupla/flash,
   `aero-no-deco` sem moldura e controlos do frame. Não medido: GPU real/DRM (VM sem 3D) e desempenho da consulta de
@@ -2612,7 +2611,7 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **SESSÃO ATUAL (2026-11-24): F2-decoration-policy-ts — 3× harness OK, gates verdes; JUIZ VISUAL PENDENTE.**
+- **SESSÃO ENCERRADA (2026-11-24): F2-decoration-policy-ts FECHADA PELO JUIZ VISUAL ("sim. aprovado").**
   Reproduzir (bench por último):
   `cargo build --workspace --examples && cargo build -p aeroshell-compositor --features bench && bun run generate:types && python3 tests/integration/f2_full_decoration_policy.py`
   → `VEREDITO: OK`; baseline sem runtime TS dava FALHA. Unitário `bun test packages/runtime/src/decoration-policy.test.ts`
