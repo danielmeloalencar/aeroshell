@@ -21,7 +21,10 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
-- [~] **F2-decoration-policy (2026-11-24) — código/teste/gates verdes, 3× harness OK; JUIZ VISUAL PENDENTE (§7).**
+- [x] **F2-decoration-policy (2026-11-24) — FECHADO PELO JUIZ VISUAL: humano respondeu *"ok validado"*.**
+      Veredito cobriu `foot` decorado, `gedit` sem barra dupla/flash, janela `aero-no-deco` sem moldura e botões do
+      frame funcionando na instância nested (PID 103538). Commit `40e36b6`. Juiz visual aprovado; instância deixada
+      aberta, quem fecha é o humano. Cartão S4/S5 do mecanismo; política completa em TS fica para o próximo F2.
       Cartão `docs/tasks/F2-decoration-policy.md` aprovado com 2 salvaguardas. Mecanismo: `DecorationPolicy` +
       `AeroEvent::DecorationRequest/DecorationApplied` em `aeroshell-ipc` (bindings gerados por `ts-rs`), consulta
       por IPC (`policy-ready`, `policy <id> server|client|none`) no MESMO socket, sem protocolo Wayland novo e sem
@@ -1388,9 +1391,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
-- **F2-decoration-policy (§3): código/teste/gates verdes, 3× harness OK; JUIZ VISUAL PENDENTE (§7).**
-  Instância nested aberta (PID 103538, socket `wayland-aero-f2-policy-visual2`) com `foot` decorado, `gedit` CSD
-  flash-less e a janela `aero-no-deco` sem moldura (`POLICY_RENDER suppressed=policy_none`). **PARAR no veredito.**
+- **F2-decoration-policy FECHADO (§3): humano validou o juiz visual ("ok validado").** Próximo cartão F2 (política
+  completa em TS) só com autorização explícita; instância do juiz permanece aberta, quem fecha é o humano.
 - **F2-event-stream FECHADO (§3): humano aprovou o juiz visual (título ao vivo por evento).**
   Gate de sessão F2 entregue, mas **inconclusivo** (§6): `~/u --socket wayland-0` falhou com `Error: AlreadyInUse`
   antes de o compositor subir; a tentativa seguinte usou `wayland-aero-tty3` (nome custom). `F7-compat-snap`
@@ -2119,11 +2121,10 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- **F2-decoration-policy (2026-11-24): JUIZ VISUAL PENDENTE.** Instância nested deixada aberta: compositor PID
-  103538, socket `wayland-aero-f2-policy-visual2`, IPC `/tmp/opencode/f2-policy/visual2/ipc.sock`, mock
-  `/tmp/opencode/f2-policy/visual2/mock.log`. Humano deve conferir: `foot` decorado, `gedit` sem barra dupla/flash,
-  `aero-no-deco` sem moldura e controlos do frame funcionando. Agente não encerrou processos; quem fecha é o humano.
-  Não medido: GPU real/DRM (VM sem 3D) e desempenho da consulta de política em sessão real.
+- **F2-decoration-policy (2026-11-24): JUIZ VISUAL APROVADO ("ok validado").** Instância nested (PID 103538,
+  `wayland-aero-f2-policy-visual2`) deixada aberta; humano conferiu `foot` decorado, `gedit` sem barra dupla/flash,
+  `aero-no-deco` sem moldura e controlos do frame. Não medido: GPU real/DRM (VM sem 3D) e desempenho da consulta de
+  política em sessão real.
 - **F2-event-stream (2026-11-23): JUIZ VISUAL APROVADO; gate de sessão do snap entregue, mas inconclusivo (§6).**
   Humano confirmou `printf '\033]0;TITULO_AO_VIVO\007'` mudando a titlebar ao vivo, com ícone/foco. Não medido:
   desempenho em GPU real (VM sem 3D) e DRM/tty3 deste cartão. A instância nested do juiz (PID 81595) não foi
@@ -2556,13 +2557,13 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **SESSÃO ATUAL (2026-11-24): F2-decoration-policy — 3× harness OK, gates verdes; JUIZ VISUAL PENDENTE.**
+- **SESSÃO ENCERRADA (2026-11-24): F2-decoration-policy FECHADA PELO JUIZ VISUAL ("ok validado").**
   Reproduzir (bench POR ÚLTIMO):
   `cargo build --workspace --examples && cargo build -p aeroshell-compositor --features bench && python3 tests/integration/f2_decoration_policy.py`
   → `VEREDITO: OK`; baseline sem mecanismo dava FALHA. Salvaguardas medidas: `fallback_ms=0.0` sem runtime;
   `reason=timeout` só com runtime lento; precedência explícita > CSD > default. `check.sh` 0, clippy bench 0,
   no-default 0, `bun run generate:types`/`bun test` verdes, sonda `POLICY` 0 no binário normal. Vizinhos e
-  amostras em §6. Instância para o juiz: PID 103538, socket `wayland-aero-f2-policy-visual2` (§7).
+  amostras em §6. Instância do juiz (PID 103538) deixada aberta; quem fecha é o humano.
   **Próximo: só com "ok" — cartão da política completa em TS; NÃO tocar no snap.** Sem push.
 - **SESSÃO ENCERRADA (2026-11-23): F2-event-stream FECHADO PELO JUIZ VISUAL (título ao vivo por evento).**
   Reproduzir (bench POR ÚLTIMO):
