@@ -148,21 +148,38 @@ try:
         # WebKit traduz `cursor:all-scroll` do CSS para o shape `move` do protocolo.
         # Cada ponto é medido com janela de 3 s e motion repetido: sem redraw o
         # CURSOR_APPLY não é emitido (mesma lacuna da parte do cliente).
+        # A moldura começa em (x-6, y-30): topo local 0..6 => comp y-30..y-24.
+        # Formas CONSECUTIVAS devem ser diferentes: o GDK só envia set_shape
+        # quando a forma muda, então dois ns-resize seguidos não geram sonda.
         for shape, point in (
             ("move", (x + w // 2, y - 15)),
+            ("nwse-resize", (x - 3, y - 27)),
+            ("nesw-resize", (x + w + 3, y - 27)),
+            ("ns-resize", (x + w // 2, y - 27)),
+            ("ew-resize", (x - 3, y + h // 2)),
             ("ns-resize", (x + w // 2, y + h + 3)),
         ):
-            asked = False
             applied = False
+            asked_at = None
+            # Cada ponto é medido só nas linhas NOVAS: `ns-resize` aparece na
+            # borda inferior e no topo, e um global não distinguiria os dois.
+            # `aplicado` só conta se vier DEPOIS do pedido deste ponto.
+            start = len(log())
             deadline = time.time() + 3.0
             while time.time() < deadline:
                 send(f"motion {point[0]} {point[1]}")
                 time.sleep(0.2)
-                text = log()
-                asked |= bool(re.search(rf"CURSOR_SHAPE t=\d+ source=named shape={shape}\b", text))
-                if re.search(rf"CURSOR_APPLY t=\d+ shape={shape}\b", text):
+                text = log()[start:]
+                if asked_at is None:
+                    found = re.search(rf"CURSOR_SHAPE t=\d+ source=named shape={shape}\b", text)
+                    if found:
+                        asked_at = start + found.start()
+                if asked_at is not None and re.search(
+                    rf"CURSOR_APPLY t=\d+ shape={shape}\b", log()[asked_at:]
+                ):
                     applied = True
                     break
+            asked = asked_at is not None
             print(f"ssd shape={shape} pedido_pelo_shell={asked} aplicado={applied}")
             if not asked:
                 failures.append(f"shell não pediu {shape} na moldura")

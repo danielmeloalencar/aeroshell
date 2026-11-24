@@ -1027,8 +1027,9 @@ const TITLEBAR_HTML: &str = r#"<!doctype html>
    wp_cursor_shape_v1 para o compositor. As zonas abaixo cobrem exatamente
    as bordas de 6px usadas pelo handler de resize em Rust. */
 #bar{position:absolute;top:0;left:0;right:0;height:30px;display:flex;
-    align-items:center;background:#2b2b2b;color:#eee;cursor:all-scroll;}
-.edge{position:absolute;pointer-events:auto;}
+    align-items:center;background:#2b2b2b;color:#eee;cursor:all-scroll;z-index:1;}
+.edge{position:absolute;pointer-events:auto;z-index:2;}
+#edge-t{left:6px;right:6px;top:0;height:6px;cursor:ns-resize;}
 #edge-l{left:0;top:30px;bottom:6px;width:6px;cursor:ew-resize;}
 #edge-r{right:0;top:30px;bottom:6px;width:6px;cursor:ew-resize;}
 #edge-b{left:6px;right:6px;bottom:0;height:6px;cursor:ns-resize;}
@@ -1052,6 +1053,7 @@ const TITLEBAR_HTML: &str = r#"<!doctype html>
 </style></head>
 <body>
   <div id="border"></div>
+  <div class="edge" id="edge-t"></div>
   <div class="edge" id="edge-l"></div><div class="edge" id="edge-r"></div>
   <div class="edge" id="edge-b"></div>
   <div class="edge" id="edge-tl"></div><div class="edge" id="edge-tr"></div>

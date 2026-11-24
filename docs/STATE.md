@@ -21,6 +21,23 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [~] **F2-cursor-shape-top-edges (2026-11-24) — código/teste/gates verdes; JUIZ VISUAL PENDENTE (§7).**
+       Seguimento do cartão de cursor: humano aprovou quase todos os cantos da moldura SSD, mas
+       relatou falta de cursor de resize no **topo central** e nos **cantos superiores**. Causa
+       confirmada no HTML (`frame_webview.rs:1024-1044`): não existia `#edge-t` e `#edge-tl/tr`
+       vinham antes de `#bar` no DOM, que tem `top:0;height:30px` — o WebKit via `move` na faixa.
+       Correção mínima: `#edge-t{left:6px;right:6px;top:0;height:6px;cursor:ns-resize}`,
+       `z-index:2` nas `.edge` e `z-index:1` no `#bar` (clique continua igual: o handler de `button`
+       já detecta `Top`/`TopLeft`/`TopRight` por `BORDER=6`). Compositor/CSD intocados.
+       **Teste-first:** harness ganhou 3 pontos novos (topo, TL, TR) → baseline `VEREDITO: FALHA`;
+       depois **3× `VEREDITO: OK`** com 6 pontos SSD (`move`, `nwse`, `nesw`, `ns` no topo,
+       `ew` na esquerda, `ns` na borda inferior) + `wait`/`text` do cliente.
+       Descoberta de instrumento: o GDK **só envia `set_shape` quando a forma muda**, então pontos
+       consecutivos com a mesma forma (`ns-resize` inferior → superior) não geravam sonda; os
+       pontos foram reordenados para formas alternadas.
+       `check.sh` EXIT=0, clippy bench 0, `--no-default-features` 0, vizinhos `frame_buttons`,
+       `f1_csd_gtk`, `frame_title` OK; `frame_resize_edges` falhou 1× (Bottom/BottomRight sem
+       detecção) e passou 2× com o mesmo binário (§6).
 - [x] **F2-compositor-cursor-shape (2026-11-24) — FECHADO PELO JUIZ VISUAL: humano respondeu *"ok. aprovado"*.**
        Cartão criado do TEMPLATE e aprovado para execução nesta sessão. Causa confirmada: o global
        `wp_cursor_shape_v1` e o `SeatHandler::cursor_image` já existiam (`state.rs:255-268`,
@@ -1569,6 +1586,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
+- **F2-cursor-shape-top-edges: PARADO no juiz visual (§7).** Harness 3× OK com os 6 pontos da
+  moldura; próximo passo: humano testar topo/cantos superiores na instância aberta e dar o "ok".
+  Sem ok, cartão NÃO fecha. Compositor/CSD não foram alterados.
 - **F2-compositor-cursor-shape FECHADO (§3): humano aprovou o juiz visual ("ok. aprovado").**
   A instância `wayland-aero-f2-cursor-visual` foi fechada pelo humano, não pelo agente.
   **PARAR: nenhum próximo cartão autorizado; snap/F7 segue pendente de aprovação explícita.**
@@ -1708,6 +1728,14 @@ fechados, fora da fila.
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **F2-cursor-shape-top-edges — amostra falha preservada (2026-11-24):** `frame_resize_edges.py`
+  falhou 1× em `Bottom`/`BottomRight` (`detectado=None`, `grab=None`, `VEREDITO: FALHA`,
+  `/tmp/opencode/cursor-top-neigh-frame_resize_edges.log`) e passou 2× em seguida com o mesmo
+  binário (`cursor-top-neigh-frame-resize-{1,2}.log`). Flake pré-existente de detecção de press,
+  sem relação com a mudança de CSS do cursor (que não altera hit-test). Não descartada.
+- **F2-cursor-shape-top-edges — lacuna do instrumento:** o GDK/WebKit só emite `set_shape` quando
+  a forma **muda**; dois pontos seguidos com `ns-resize` não geravam `CURSOR_SHAPE`, Parecia que
+  o topo não pedia cursor quando ele já estava correto. Harness reordenado para formas alternadas.
 - **F2-compositor-cursor-shape — lacunas do instrumento (2026-11-24, não são defeitos de produto):**
   (1) `CURSOR_APPLY` só é emitido em redraw do winit; um pedido sem atividade depois não gera redraw
   e o próximo pedido o substitui — o harness agora força um `motion` e mede em 3 s (amostra FALHA
@@ -2502,6 +2530,11 @@ fechados, fora da fila.
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- **F2-cursor-shape-top-edges (2026-11-24): JUIZ VISUAL PENDENTE.** O harness mede sondas de
+  protocolo, não o cursor na tela. O humano deve conferir, na instância nested aberta: a faixa
+  superior de 6 px da moldura SSD → seta dupla vertical (`ns-resize`); canto superior esquerdo →
+  diagonal `nwse-resize`; canto superior direito → diagonal `nesw-resize`; o resto da titlebar
+  continua `move` e o gedit (CSD) inalterado. Sem o "ok" o cartão não fecha.
 - **F2-compositor-cursor-shape (2026-11-24): partes NÃO medidas (cartão fechado pelo juiz).**
   O `CURSOR_APPLY` do harness media a sonda no redraw, não o cursor na tela; a sentença foi o
   *"ok. aprovado"* do humano na instância nested. Não medido: udev/tty3 (cursor já tem
@@ -3043,6 +3076,14 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
+- **SESSÃO ATUAL (2026-11-24): F2-cursor-shape-top-edges — PARADO no juiz visual.** O que fazia:
+  `#edge-t` + `z-index` no HTML da moldura (`frame_webview.rs`); harness com 6 pontos SSD 3× OK,
+  gate final EXIT=0, clippy bench 0, `--no-default-features` 0, 3 vizinhos OK (1 flake de
+  `frame_resize_edges` registrado em §6). Estado exato: instância nested a abrir com socket
+  `wayland-aero-f2-cursor-top` e IPC `/tmp/opencode/f2-cursor-top/ipc.sock`, gedit + foot.
+  Reproduzir: `cargo build -p aeroshell-compositor --features bench && python3 tests/integration/f2_compositor_cursor_shape.py`
+  → `VEREDITO: OK`. Próximo passo imediato: humano testar topo/cantos superiores e dar o "ok".
+  Nenhum outro cartão autorizado; sem push.
 - **SESSÃO ENCERRADA (2026-11-24): F2-compositor-cursor-shape FECHADO PELO JUIZ ("ok. aprovado").**
   Compositor (`backend/winit.rs::apply_host_cursor`) e moldura SSD (CSS `.edge`) aplicam a forma
   pedida; harness `f2_compositor_cursor_shape.py` 3× OK, gate final EXIT=0, 6 vizinhos OK, clippy
