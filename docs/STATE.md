@@ -2656,7 +2656,28 @@ fechados, fora da fila.
   é registrado só no barramento privado do nested, escolhe dependência Rust (ex.: zbus, sujeita a
   aprovação) e testes de segurança/isolamento. **NÃO implementar D-Bus sem cartão e aprovação
   explícitos.** Aguardando decisão: manter F2 interna + novo cartão F4, ou reescopo deste cartão.
+- **F2-surface-host (2026-11-24): PARCIAL, 2 etapas commitadas; migração do kind `frame` e juiz visual
+  pendentes.** `21bcee1` (contrato ts-rs, comandos `surface-create/update/destroy`, eventos
+  `SurfaceCreated/Updated/Destroyed`, replay e API SDK com JSDoc) e `1772fed` (host em
+  `crates/aeroshell-shell/src/surfaces/`: layer por spec, bridge, input region, z-order `SURFACE_Z`).
+  Harness `tests/integration/f2_surface_host.py` baseline FALHA → 3× `VEREDITO: OK` (desktop vermelho
+  307.200 px isolado, borda verde 120.000 px, z-order, clique no transparente focando o foot, update,
+  destroy e 0 erros). Correções de instrumento/hospedeiro pelo caminho: altura da layer (antes fixa 48)
+  passou a respeitar âncoras verticalmente; `input_region::apply` agora usa `Region::create()` vazia
+  (`None` em Wayland significa superfície inteira); destruir layer no GTK 4.22 gera commit 0x0
+  inválido, então a janela vai para `retired` até o host sair (mesmo padrão do frame). **Não feito:**
+  migrar o `frame_webview.rs` para o kind `frame` do host (`src/lib.rs`/manifesto precisam ser
+  reestruturados; não iniciado sem risco de quebrar os 5 harnesses de caminho fixo); `surface-create`
+  com `kind: "frame"` hoje cai no caminho genérico de layer e NÃO deve ser considerado correto.
+  Juiz visual NÃO obtido: cartão NÃO fechado. `s3_input.sh` falha com regex defasada
+  (`under = Some` com espaços) **também no HEAD** — pré-existente, amostra preservada em
+  `/tmp/opencode/f2-surface-host-s3-input.log`. Próximo passo exige decisão: continuar a migração do
+  frame como etapa 3 ou abrir cartão separado.
 ## 7. Não medido / não validado (não trate como fato)
+- **F2-surface-host (2026-11-24): JUIZ VISUAL NÃO OBTIDO.** Pré-filtro headless mediu pixels,
+  z-order e passagem de clique, mas nenhuma instância foi deixada aberta para o humano julgar o
+  desktop + overlay + 2 `foot`. Não escrever "validado visualmente". Não medido: GPU real/udev
+  (VM sem 3D) e o kind `frame` (não migrado).
 - **F2-notifications (2026-11-24): JUIZ VISUAL PENDENTE NA INSTÂNCIA CORRETA.** Código/testes/gates
   verdes, 3× harness `VEREDITO: OK`. A 1ª instância (com `--size`) foi fechada pelo humano por uma
   janela transparente do tamanho do output que repintava (§6); sem `--size` o `foot` ficou normal.
