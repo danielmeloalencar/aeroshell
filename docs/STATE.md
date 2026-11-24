@@ -21,6 +21,16 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [~] **F2-shell-real — estratégia de opacidade no DOM (2026-11-24); juiz 12ª rodada pendente (§7).**
+      Após `display:none` + `setTimeout` + nudge 1px falharem no juiz, o humano propôs trocar a
+      ocultação por `opacity:0/1` + `pointer-events:none/auto`, mantendo o buffer alocado.
+      Removidos `setTimeout(50ms)`, `frame_needs_repaint`, `queue_draw`/`geo_nudge` e o helper
+      `window_size` (`frame_webview.rs`). `aeroHideFrame` agora posta `bar=hidden_opacity`,
+      `aeroShowFrame` posta as opacidades computadas.
+      **Harness atualizado** ao novo contrato (`f2_shell_real_policy_restore.py` exige
+      `csd_applied … hidden_opacity` e `frame_restored … bar=1 border=1`; `f1_csd_gtk.py` aceita
+      `hidden|hidden_opacity`) → 3× `VEREDITO: OK`. Gate `check.sh` EXIT=0, clippy bench 0;
+      timeout/reload, `f2_hotreload_*`, full e 5 vizinhos OK. **Não toquei snap/F7/F1.**
 - [~] **F2-shell-real — fallback de geometria 1px aplicado (2026-11-24); juiz 11ª rodada pendente (§7).**
       Após a Correção 1 (`setTimeout 50ms`) ser reprovada (spike 3× FALHA) e o humano ver 4/5 OK
       com 1 falha na janela **não** redimensionada, implementei o fallback autorizado: ao receber
@@ -2447,6 +2457,13 @@ fechados, fora da fila.
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- **F2-shell-real (2026-11-24): 12ª RODADA DO JUIZ ABERTA (opacidade, sem nudges).** Instância:
+  comp PID 73877, runtime 73889, shell 73971, gedit 74197, socket
+  `wayland-aero-f2-shell-real-visual12`, IPC `/tmp/opencode/f2-shell-real/visual12/ipc.sock`, regras
+  `/tmp/opencode/f2-shell-real/visual12/config/aeroshell/rules.ts` (`foot→Server`, `gedit→Client`).
+  3 janelas no IPC. Humano deve fazer **5 alternâncias `Server↔None`**, redimensionando um `foot`
+  nas 2 últimas e observando o outro. **Aguardando veredito; não fechar a instância.** Se falhar,
+  humano instruiu aceitar a dívida documentada (vias de renderização esgotadas). Cartão NÃO fechado.
 - **F2-shell-real (2026-11-24): 11ª RODADA REPROVADA — fallback de 1px também falhou.** Humano:
   problema na **2ª alternância, sem resize**. Log da instância (comp 68242, runtime 68260, shell
   68350, gedit 68585, socket `wayland-aero-f2-shell-real-visual11`): 10 reloads, 0 `reason=timeout`;

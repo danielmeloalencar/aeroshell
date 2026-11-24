@@ -624,16 +624,6 @@ enum IconSource {
 }
 
 /// Pergunta ao IPC se este window_id pediu client-side decorations.
-/// Tamanho alocado atual da janela do frame (para o nudge de 1px).
-fn window_size(window: &gtk4::ApplicationWindow) -> (i32, i32) {
-    let allocated = (window.width(), window.height());
-    if allocated.0 > 0 && allocated.1 > 0 {
-        allocated
-    } else {
-        window.default_size()
-    }
-}
-
 fn ipc_csd(window_id: u32) -> bool {
     let Some(path) = std::env::var_os("AERO_WINDOW_IPC_SOCK") else {
         return false;
@@ -1065,32 +1055,30 @@ const TITLEBAR_HTML: &str = r#"<!doctype html>
     window.aeroHideFrame = () => {
       const bar = document.getElementById('bar');
       const border = document.getElementById('border');
-      bar.style.display = 'none';
-      border.style.display = 'none';
+      // Opacidade mantém o buffer alocado: `display:none` fazia o WebKitGTK
+      // responder ao repaint com attach(NULL) de forma intermitente.
+      bar.style.opacity = '0';
+      bar.style.pointerEvents = 'none';
+      border.style.opacity = '0';
+      border.style.pointerEvents = 'none';
       window.webkit.messageHandlers.aero.postMessage({
         action: 'csd_applied', client_frame: true,
-        bar: getComputedStyle(bar).display,
-        border: getComputedStyle(border).display
+        bar: 'hidden_opacity', border: 'hidden_opacity'
       });
     };
     // F1-xdg-toplevel-states: restaura a moldura ao sair do fullscreen.
     window.aeroShowFrame = () => {
       const bar = document.getElementById('bar');
       const border = document.getElementById('border');
-      bar.style.display = 'flex';
-      border.style.display = 'block';
+      bar.style.opacity = '1';
+      bar.style.pointerEvents = 'auto';
+      border.style.opacity = '1';
+      border.style.pointerEvents = 'auto';
       window.webkit.messageHandlers.aero.postMessage({
-        action: 'frame_restored',
-        bar: getComputedStyle(bar).display,
-        border: getComputedStyle(border).display
+        action: 'frame_restored', client_frame: false,
+        bar: getComputedStyle(bar).opacity,
+        border: getComputedStyle(border).opacity
       });
-      // O host precisa redesenhar o WebView DEPOIS de o WebKit alocar o novo
-      // buffer do reflow. Com requestAnimationFrame o queue_draw chegava antes
-      // da alocação e o GTK fazia attach(NULL) — commit sem buffer (spike).
-      // 50 ms dão tempo ao WebKitGTK 6.0 nesta VM sem 3D.
-      setTimeout(() => {
-        window.webkit.messageHandlers.aero.postMessage({ action: 'frame_needs_repaint' });
-      }, 50);
     };
     window.aeroSetTitle = (title) => {
       const el = document.getElementById('title');
@@ -1399,7 +1387,6 @@ fn prewarm_frame() {
 
     let window_id = Rc::new(Cell::new(None));
     let callback_window_id = Rc::clone(&window_id);
-    let repaint_window = window.clone();
     let manager = UserContentManager::new();
     manager.register_script_message_handler("aero", None);
     manager.connect_script_message_received(Some("aero"), move |_, value| {
@@ -1433,38 +1420,6 @@ fn prewarm_frame() {
                     if bar == "none" { "hidden" } else { bar },
                     if border == "none" { "hidden" } else { border }
                 );
-            }
-            Some("frame_needs_repaint") => {
-                // O WebViewGTK ainda pode responder ao queue_draw com attach(NULL)
-                // (spike: commit sem buffer). Forçar uma realocação de 1px faz o
-                // GTK pedir um buffer novo; devolvemos o tamanho logo depois.
-                if let Some(view) = repaint_window
-                    .child()
-                    .and_then(|child| child.downcast::<WebView>().ok())
-                {
-                    view.queue_draw();
-                    eprintln!(
-                        "FRAMEWEB: repaint_nudge window_id={:?} t={}",
-                        callback_window_id.get(),
-                        bench_t()
-                    );
-                }
-                let wid = callback_window_id.get();
-                let (base_w, base_h) = window_size(&repaint_window);
-                repaint_window.set_default_size(base_w + 1, base_h);
-                repaint_window.queue_resize();
-                let weak = repaint_window.downgrade();
-                gtk4::glib::timeout_add_local(std::time::Duration::from_millis(60), move || {
-                    if let Some(window) = weak.upgrade() {
-                        window.set_default_size(base_w, base_h);
-                        window.queue_resize();
-                        eprintln!(
-                            "FRAMEWEB: geo_nudge window_id={wid:?} {base_w}x{base_h} t={}",
-                            bench_t()
-                        );
-                    }
-                    gtk4::glib::ControlFlow::Break
-                });
             }
             Some("frame_restored") => {
                 let bar = parsed.get("bar").and_then(|v| v.as_str()).unwrap_or("");

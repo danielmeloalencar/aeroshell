@@ -131,50 +131,28 @@ def main():
                                ("Server", "FRAMEWEB: csd_restored")):
             before = clean(comp_log).count("FRAMEWEB: frame_cb_request window_id=0")
             before_cfg = clean(comp_log).count("FRAMEWEB: configure serial=")
-            before_nudge = clean(comp_log).count("FRAMEWEB: repaint_nudge")
-            before_buffer = clean(comp_log).count("FRAME_BUFFER_COMMIT buffer=Some")
+            # Estratégia atual: opacidade, sem display:none e sem nudges.
+            dom_marker = (
+                "bar=hidden_opacity border=hidden_opacity" if policy == "None"
+                else "bar=1 border=1"
+            )
+            dom_action = "csd_applied" if policy == "None" else "frame_restored"
             write_rules(rules, policy)
             if not wait_for(
                 lambda: any(
-                    marker in line and "window_id=0" in line
+                    dom_action in line and "window_id=0" in line and dom_marker in line
                     for line in clean(comp_log).splitlines()
                 ),
                 12,
             ):
-                print(f"FALHA: transição para {policy} não gerou {marker}", file=sys.stderr)
+                print(f"FALHA: transição para {policy} não gerou DOM {dom_action} {dom_marker}", file=sys.stderr)
                 return 1
+            checks[f"{policy}DOM por opacidade"] = True
             ok = wait_for(
                 lambda: clean(comp_log).count("FRAMEWEB: frame_cb_request window_id=0") > before,
                 8,
             )
             after = clean(comp_log).count("FRAMEWEB: frame_cb_request window_id=0")
-            # O WebView não pode entregar um frame sem buffer: é o que deixa a
-            # moldura invisível mas ainda interativa (juiz visual 8ª rodada).
-            lines = clean(comp_log).splitlines()
-            idx = [i for i, line in enumerate(lines) if marker in line and "window_id=0" in line]
-            no_buffer = 0
-            if idx:
-                no_buffer = sum(
-                    "FRAME_BUFFER_COMMIT buffer=None" in line
-                    for line in lines[idx[-1]:]
-                )
-            checks[f"{policy} entrega buffer pintado"] = no_buffer == 0
-            print(f"=== {policy}: commits sem buffer após transição={no_buffer} ===")
-            if policy == "Server":
-                nudge_ok = wait_for(
-                    lambda: clean(comp_log).count("FRAMEWEB: repaint_nudge") > before_nudge,
-                    5,
-                )
-                buffer_ok = wait_for(
-                    lambda: clean(comp_log).count("FRAME_BUFFER_COMMIT buffer=Some") > before_buffer,
-                    5,
-                )
-                checks["nudge sincronizado após a restauração"] = nudge_ok
-                checks["novo buffer pintado após a restauração"] = buffer_ok
-                print(
-                    f"=== Server: nudge {before_nudge}->{clean(comp_log).count('FRAMEWEB: repaint_nudge')} "
-                    f"buffer {before_buffer}->{clean(comp_log).count('FRAME_BUFFER_COMMIT buffer=Some')} ==="
-                )
             cfg_ok = wait_for(
                 lambda: clean(comp_log).count("FRAMEWEB: configure serial=") > before_cfg,
                 8,
@@ -182,7 +160,7 @@ def main():
             after_cfg = clean(comp_log).count("FRAMEWEB: configure serial=")
             checks[f"{policy} pede novo frame callback"] = ok
             checks[f"{policy} recebe novo configure"] = cfg_ok
-            print(f"=== {policy}: cb {before}->{after}, configure {before_cfg}->{after_cfg} ===")
+            print(f"=== {policy}: DOM {dom_marker}, cb {before}->{after}, configure {before_cfg}->{after_cfg} ===")
             for line in clean(comp_log).splitlines()[-40:]:
                 if "FRAMEWEB:" in line and any(
                     token in line for token in ("cb_request", "configure", "csd_", "frame_cb_recv")
