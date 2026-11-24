@@ -1635,6 +1635,17 @@ fechados, fora da fila.
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **F2-shell-real — 7ª rodada: ainda há moldura parcial no 2º ciclo (2026-11-24).** Humano: 1º
+  ciclo `Server→None→Server` OK; 2º ciclo uma janela (a que NÃO foi redimensionada) ficou com
+  decoração até a metade. Log da instância: DOM correto (`FRAMEWEB: frame_restored … bar=flex
+  border=block` nos dois), `configure` e `frame_painted` presentes nas duas transições — mas
+  **17× `FRAME_BUFFER_COMMIT buffer=None … ok=false`**, inclusive às linhas 447/448 (logo após o
+  `None` do 2º ciclo) e 493/494 (logo após o `Server` do 2º ciclo). Hipótese: o WebView faz commit
+  sem buffer durante as transições e a composição fica com áreas vazias até um buffer novo.
+  **Não corrigir no escuro:** usuário autorizou instalar `scrot` para medir pixels; `sudo` exigiu
+  senha interativa, então aguardando instalação pelo humano. Próxima ação é medidor de pixels,
+  não nova mudança de produto. Regra das duas tentativas: `wl_surface.frame()` e `configure`
+  já foram tentadas e melhoraram, mas não bastaram.
 - **F2-shell-real — `set_insets` sem `configure` deixava a moldura aleatória (2026-11-24).** O
   `wl_surface.frame()` pedido pelo shell não basta: o WebView só repinta ao receber
   `aero_frame.configure`. Só a 1ª transição tinha configure (por commit casual do cliente);
