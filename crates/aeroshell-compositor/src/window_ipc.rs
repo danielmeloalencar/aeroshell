@@ -11,6 +11,9 @@
 //!   policy <id> ... -> OK (uso interno: decisão de decoração)
 //!   policy-reload   -> OK (uso interno: reemite DecorationRequest às janelas decididas)
 //!   launch <app_id> [workspace_id] -> OK (lança ou foca uma instância existente)
+//!   surface-create <json> -> OK (declara superfície web e publica SurfaceCreated)
+//!   surface-update <json> -> OK (mescla campos e publica SurfaceUpdated)
+//!   surface-destroy <id>  -> OK (publica SurfaceDestroyed)
 //!   notify <titulo-json> <corpo-json> [icone-json] [timeout-ms] [id-json]
 //!                       -> OK (forma pública: notify <titulo> <corpo>)
 //!   dismiss-notification <id-json> -> OK
@@ -29,7 +32,9 @@ use std::{
 };
 
 use aeroshell_ipc::types::{
-    AeroEvent, App, DecorationPolicy, Notification, Snapshot, WindowInfo, Workspace,
+    AeroEvent, App, DecorationPolicy, Notification, Snapshot, SurfaceAnchors, SurfaceInputRegion,
+    SurfaceKeyboardMode, SurfaceKind, SurfaceLayer, SurfaceMargins, SurfaceSpec, WindowInfo,
+    Workspace,
 };
 use calloop::channel;
 use serde_json::{json, Value};
@@ -253,6 +258,15 @@ fn event_json(event: &AeroEvent) -> Value {
             let apps: Vec<Value> = apps.iter().map(app_json).collect();
             json!({ "AppListUpdated": { "apps": apps } })
         }
+        AeroEvent::SurfaceCreated { surface } => json!({
+            "SurfaceCreated": { "surface": surface_json(surface) }
+        }),
+        AeroEvent::SurfaceUpdated { surface } => json!({
+            "SurfaceUpdated": { "surface": surface_json(surface) }
+        }),
+        AeroEvent::SurfaceDestroyed { id } => json!({
+            "SurfaceDestroyed": { "id": id }
+        }),
         AeroEvent::NotificationShown { notification } => json!({
             "NotificationShown": { "notification": notification_json(notification) }
         }),
@@ -292,6 +306,210 @@ fn app_json(app: &App) -> Value {
         "icon": app.icon,
         "exec": app.exec,
         "categories": app.categories,
+    })
+}
+
+fn surface_json(surface: &SurfaceSpec) -> Value {
+    let region: Option<Vec<Value>> = surface.input_region.as_ref().map(|rects| {
+        rects
+            .iter()
+            .map(|r| json!({ "x": r.x, "y": r.y, "width": r.width, "height": r.height }))
+            .collect()
+    });
+    json!({
+        "id": surface.id,
+        "kind": surface_kind_name(surface.kind),
+        "output": surface.output,
+        "anchors": {
+            "left": surface.anchors.left, "right": surface.anchors.right,
+            "top": surface.anchors.top, "bottom": surface.anchors.bottom,
+        },
+        "margins": [
+            surface.margins.left, surface.margins.right,
+            surface.margins.top, surface.margins.bottom,
+        ],
+        "exclusive_zone": surface.exclusive_zone,
+        "layer": surface_layer_name(surface.layer),
+        "keyboard_mode": surface_keyboard_name(surface.keyboard_mode),
+        "input_region": region,
+        "html": surface.html,
+        "url": surface.url,
+    })
+}
+
+fn surface_kind_name(kind: SurfaceKind) -> &'static str {
+    match kind {
+        SurfaceKind::Desktop => "desktop",
+        SurfaceKind::Panel => "panel",
+        SurfaceKind::Overlay => "overlay",
+        SurfaceKind::Frame => "frame",
+    }
+}
+
+fn surface_layer_name(layer: SurfaceLayer) -> &'static str {
+    match layer {
+        SurfaceLayer::Background => "background",
+        SurfaceLayer::Bottom => "bottom",
+        SurfaceLayer::Top => "top",
+        SurfaceLayer::Overlay => "overlay",
+    }
+}
+
+fn surface_keyboard_name(mode: SurfaceKeyboardMode) -> &'static str {
+    match mode {
+        SurfaceKeyboardMode::None => "none",
+        SurfaceKeyboardMode::OnDemand => "ondemand",
+        SurfaceKeyboardMode::Exclusive => "exclusive",
+    }
+}
+
+fn field_string(value: &Value, field: &str) -> Result<String, String> {
+    value
+        .get(field)
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+        .ok_or_else(|| format!("campo {field} ausente ou não-string"))
+}
+
+fn field_bool(value: &Value, field: &str, default: bool) -> bool {
+    value.get(field).and_then(Value::as_bool).unwrap_or(default)
+}
+
+fn field_i32(value: &Value, field: &str, default: i32) -> Result<i32, String> {
+    match value.get(field) {
+        None => Ok(default),
+        Some(Value::Number(number)) => number
+            .as_i64()
+            .and_then(|v| i32::try_from(v).ok())
+            .ok_or_else(|| format!("campo {field} fora da faixa i32")),
+        Some(_) => Err(format!("campo {field} deveria ser número")),
+    }
+}
+
+fn field_u32(value: &Value, field: &str, default: u32) -> Result<u32, String> {
+    match value.get(field) {
+        None => Ok(default),
+        Some(Value::Number(number)) => number
+            .as_u64()
+            .and_then(|v| u32::try_from(v).ok())
+            .ok_or_else(|| format!("campo {field} fora da faixa u32")),
+        Some(_) => Err(format!("campo {field} deveria ser número")),
+    }
+}
+
+/// Converte o JSON de `surface-create/update` no tipo gerado por ts-rs.
+/// Nenhum serde é adicionado à crate de IPC: a wire continua montada à mão.
+fn parse_surface_spec(value: &Value) -> Result<SurfaceSpec, String> {
+    let id = field_string(value, "id")?;
+    if id.is_empty() || id.len() > 128 {
+        return Err("id de superfície inválido".to_owned());
+    }
+    let kind = match field_string(value, "kind")?.as_str() {
+        "desktop" => SurfaceKind::Desktop,
+        "panel" => SurfaceKind::Panel,
+        "overlay" => SurfaceKind::Overlay,
+        "frame" => SurfaceKind::Frame,
+        other => return Err(format!("kind desconhecido: {other}")),
+    };
+    let layer = match value
+        .get("layer")
+        .and_then(Value::as_str)
+        .unwrap_or("background")
+    {
+        "background" => SurfaceLayer::Background,
+        "bottom" => SurfaceLayer::Bottom,
+        "top" => SurfaceLayer::Top,
+        "overlay" => SurfaceLayer::Overlay,
+        other => return Err(format!("layer desconhecido: {other}")),
+    };
+    let keyboard_mode = match value
+        .get("keyboard_mode")
+        .and_then(Value::as_str)
+        .unwrap_or("none")
+    {
+        "none" => SurfaceKeyboardMode::None,
+        "ondemand" => SurfaceKeyboardMode::OnDemand,
+        "exclusive" => SurfaceKeyboardMode::Exclusive,
+        other => return Err(format!("keyboard_mode desconhecido: {other}")),
+    };
+    let anchors = value.get("anchors");
+    let margin_values = value
+        .get("margins")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
+    let margin_at = |index: usize| -> Result<i32, String> {
+        margin_values
+            .get(index)
+            .and_then(Value::as_i64)
+            .and_then(|v| i32::try_from(v).ok())
+            .ok_or_else(|| "margins deveria ter 4 inteiros".to_owned())
+    };
+    let margins = SurfaceMargins {
+        left: margin_at(0)?,
+        right: margin_at(1)?,
+        top: margin_at(2)?,
+        bottom: margin_at(3)?,
+    };
+    let input_region = match value.get("input_region") {
+        None | Some(Value::Null) => None,
+        Some(Value::Array(items)) => {
+            let mut rects = Vec::with_capacity(items.len());
+            for item in items {
+                rects.push(SurfaceInputRegion {
+                    x: field_i32(item, "x", 0)?,
+                    y: field_i32(item, "y", 0)?,
+                    width: field_u32(item, "width", 0)?,
+                    height: field_u32(item, "height", 0)?,
+                });
+            }
+            Some(rects)
+        }
+        Some(_) => return Err("input_region deveria ser lista".to_owned()),
+    };
+    let html = value.get("html").and_then(Value::as_str).map(str::to_owned);
+    let url = value.get("url").and_then(Value::as_str).map(str::to_owned);
+    if html.is_some() && url.is_some() {
+        return Err("html e url são mutuamente exclusivos".to_owned());
+    }
+    if let Some(address) = url.as_deref() {
+        if !address.starts_with("aero://") {
+            return Err("url externa não é permitida".to_owned());
+        }
+    }
+    Ok(SurfaceSpec {
+        id,
+        kind,
+        output: match value.get("output") {
+            None | Some(Value::Null) => None,
+            Some(Value::Number(n)) => Some(
+                n.as_u64()
+                    .and_then(|v| u32::try_from(v).ok())
+                    .ok_or_else(|| "output inválido".to_owned())?,
+            ),
+            Some(_) => return Err("output deveria ser número".to_owned()),
+        },
+        anchors: SurfaceAnchors {
+            left: anchors
+                .map(|a| field_bool(a, "left", false))
+                .unwrap_or(false),
+            right: anchors
+                .map(|a| field_bool(a, "right", false))
+                .unwrap_or(false),
+            top: anchors
+                .map(|a| field_bool(a, "top", false))
+                .unwrap_or(false),
+            bottom: anchors
+                .map(|a| field_bool(a, "bottom", false))
+                .unwrap_or(false),
+        },
+        margins,
+        exclusive_zone: field_u32(value, "exclusive_zone", 0)?,
+        layer,
+        keyboard_mode,
+        input_region,
+        html,
+        url,
     })
 }
 
@@ -428,6 +646,9 @@ fn event_name(event: &AeroEvent) -> &'static str {
         AeroEvent::WorkspaceDestroyed { .. } => "workspace_destroyed",
         AeroEvent::WindowMovedToWorkspace { .. } => "window_moved_to_workspace",
         AeroEvent::AppListUpdated { .. } => "app_list_updated",
+        AeroEvent::SurfaceCreated { .. } => "surface_created",
+        AeroEvent::SurfaceUpdated { .. } => "surface_updated",
+        AeroEvent::SurfaceDestroyed { .. } => "surface_destroyed",
         AeroEvent::NotificationShown { .. } => "notification_shown",
         AeroEvent::NotificationDismissed { .. } => "notification_dismissed",
         AeroEvent::DecorationRequest { .. } => "decoration_request",
@@ -559,6 +780,13 @@ impl AeroState {
                         .map(|app| app.info.clone())
                         .collect(),
                 });
+                // Quem subscribe depois (host/painel) precisa reconstruir as
+                // superfícies já declaradas, mesmo padrão do replay de decoração.
+                for surface in self.surfaces.values() {
+                    emit_event(AeroEvent::SurfaceCreated {
+                        surface: surface.clone(),
+                    });
+                }
                 for (&id, &decision) in self.decorations.iter() {
                     emit_event(AeroEvent::DecorationApplied {
                         id,
@@ -806,6 +1034,67 @@ impl AeroState {
                     Err(err) => format!("ERR falha ao lançar {}: {err}", app.info.id),
                 }
             }
+            // F2-surface-host: o runtime declara superfícies por JSON numa linha;
+            // o host de superfícies consome os eventos no stream PUSH existente.
+            "surface-create" => {
+                let raw = cmd.strip_prefix("surface-create").unwrap_or("").trim();
+                let value: Value = match serde_json::from_str(raw) {
+                    Ok(value) => value,
+                    Err(err) => return format!("ERR surface-create: {err}"),
+                };
+                let spec = match parse_surface_spec(&value) {
+                    Ok(spec) => spec,
+                    Err(err) => return format!("ERR surface-create: {err}"),
+                };
+                if self.surfaces.contains_key(&spec.id) {
+                    return format!("ERR superfície já existe: {}", spec.id);
+                }
+                self.surfaces.insert(spec.id.clone(), spec.clone());
+                emit_event(AeroEvent::SurfaceCreated { surface: spec });
+                "OK".to_owned()
+            }
+            "surface-update" => {
+                let raw = cmd.strip_prefix("surface-update").unwrap_or("").trim();
+                let value: Value = match serde_json::from_str(raw) {
+                    Ok(value) => value,
+                    Err(err) => return format!("ERR surface-update: {err}"),
+                };
+                let Some(id) = value.get("id").and_then(Value::as_str) else {
+                    return "ERR surface-update: falta id".to_owned();
+                };
+                let Some(existing) = self.surfaces.get(id).cloned() else {
+                    return format!("ERR superfície inexistente: {id}");
+                };
+                let Some(incoming) = value.as_object() else {
+                    return "ERR surface-update: esperado objeto JSON".to_owned();
+                };
+                let mut merged = match surface_json(&existing).as_object().cloned() {
+                    Some(map) => map,
+                    None => return "ERR falha ao mesclar superfície".to_owned(),
+                };
+                for (key, field) in incoming {
+                    merged.insert(key.clone(), field.clone());
+                }
+                let spec = match parse_surface_spec(&Value::Object(merged)) {
+                    Ok(spec) => spec,
+                    Err(err) => return format!("ERR surface-update: {err}"),
+                };
+                self.surfaces.insert(id.to_owned(), spec.clone());
+                emit_event(AeroEvent::SurfaceUpdated { surface: spec });
+                "OK".to_owned()
+            }
+            "surface-destroy" => {
+                let id = cmd
+                    .strip_prefix("surface-destroy")
+                    .unwrap_or("")
+                    .trim()
+                    .trim_matches('"');
+                if self.surfaces.remove(id).is_none() {
+                    return format!("ERR superfície inexistente: {id}");
+                }
+                emit_event(AeroEvent::SurfaceDestroyed { id: id.to_owned() });
+                "OK".to_owned()
+            }
             // F2-notifications: o compositor é apenas o mecanismo. O estado ativo
             // vive no SDK/painel; aqui só publicamos shown/dismiss no stream.
             "notify" => {
@@ -1009,7 +1298,35 @@ impl AeroState {
 
 #[cfg(test)]
 mod tests {
-    use super::base64_encode;
+    use super::{base64_encode, parse_surface_spec};
+
+    #[test]
+    fn parse_surface_spec_valida_kind_e_rejeita_url_externa() {
+        let value: serde_json::Value = serde_json::from_str(
+            r#"{"id":"desk","kind":"desktop","html":"<body></body>",
+                "margins":[0,0,0,0],"anchors":{"left":true,"right":true,"top":true,"bottom":true}}"#,
+        )
+        .unwrap();
+        let spec = parse_surface_spec(&value).unwrap();
+        assert_eq!(spec.id, "desk");
+        assert_eq!(surface_kind_name_local(spec.kind), "desktop");
+        assert_eq!(spec.margins.left, 0);
+
+        let external: serde_json::Value =
+            serde_json::from_str(r#"{"id":"x","kind":"overlay","url":"https://example.com"}"#)
+                .unwrap();
+        assert!(parse_surface_spec(&external).is_err());
+    }
+
+    fn surface_kind_name_local(kind: aeroshell_ipc::types::SurfaceKind) -> &'static str {
+        use aeroshell_ipc::types::SurfaceKind;
+        match kind {
+            SurfaceKind::Desktop => "desktop",
+            SurfaceKind::Panel => "panel",
+            SurfaceKind::Overlay => "overlay",
+            SurfaceKind::Frame => "frame",
+        }
+    }
 
     #[test]
     fn base64_sem_dependencia() {

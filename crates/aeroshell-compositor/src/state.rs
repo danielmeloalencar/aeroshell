@@ -48,7 +48,7 @@ use smithay::{
 use crate::protocols::toplevel_icon::IconManager;
 use smithay::reexports::wayland_protocols_misc::server_decoration::server::org_kde_kwin_server_decoration_manager::Mode as DefaultMode;
 
-use aeroshell_ipc::types::{AeroEvent, DecorationPolicy};
+use aeroshell_ipc::types::{AeroEvent, DecorationPolicy, SurfaceSpec};
 
 use crate::{
     cli::Options,
@@ -240,6 +240,8 @@ pub struct AeroState {
     pub event_revision: u32,
     /// F2-workspaces: membership canônica; janelas inativas seguem no Space.
     pub workspaces: WorkspaceManager,
+    /// F2-surface-host: especificações ativas declaradas pelo runtime.
+    pub surfaces: HashMap<String, SurfaceSpec>,
     /// F2-launcher: aplicativos descobertos nos diretórios `.desktop` no startup.
     pub installed_apps: Vec<crate::apps::InstalledApp>,
     /// F2-decoration-policy: runtime conectado? decisões e pedidos pendentes.
@@ -731,6 +733,7 @@ impl AeroState {
             presentation_seq: HashMap::new(),
             event_revision: 0,
             workspaces: WorkspaceManager::default(),
+            surfaces: HashMap::new(),
             installed_apps: crate::apps::load_apps(),
             policy_runtime: false,
             decorations: HashMap::new(),

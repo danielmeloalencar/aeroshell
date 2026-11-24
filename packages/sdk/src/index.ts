@@ -5,6 +5,7 @@ import type { AeroEvent } from "./generated/AeroEvent";
 import type { App } from "./generated/App";
 import type { Notification } from "./generated/Notification";
 import type { Snapshot } from "./generated/Snapshot";
+import type { SurfaceSpec } from "./generated/SurfaceSpec";
 import type { WindowInfo } from "./generated/WindowInfo";
 import type { Workspace } from "./generated/Workspace";
 import { WindowStore } from "./store";
@@ -49,6 +50,7 @@ const EVENT_KEYS = [
   "Snapshot", "Title", "Icon", "Focus", "Geometry", "Csd",
   "FramePainted", "WorkspaceCreated", "WorkspaceActivated", "WorkspaceRenamed",
   "WorkspaceDestroyed", "WindowMovedToWorkspace", "AppListUpdated",
+  "SurfaceCreated", "SurfaceUpdated", "SurfaceDestroyed",
   "NotificationShown", "NotificationDismissed", "DecorationRequest", "DecorationApplied",
 ] as const;
 
@@ -175,6 +177,40 @@ export function createAero(transport: Transport) {
     });
   }
 
+  /**
+   * Declara uma superfície web (`desktop|panel|overlay|frame`) no host.
+   * O conteúdo só pode vir de `aero://` ou de HTML inline confiável.
+   *
+   * @example
+   * aero.createSurface({
+   *   id: "fundo", kind: "desktop", output: 0,
+   *   anchors: { left: true, right: true, top: true, bottom: true },
+   *   margins: { left: 0, right: 0, top: 0, bottom: 0 },
+   *   exclusive_zone: 0, layer: "Background", keyboard_mode: "None",
+   *   input_region: null, html: "<body style='background:#e00000'></body>", url: null,
+   * });
+   */
+  function createSurface(spec: SurfaceSpec): void {
+    void transport(`surface-create ${JSON.stringify(spec)}`).then(expectOk).catch(
+      (error: unknown) => console.error(`falha ao criar superfície ${spec.id}:`, error),
+    );
+  }
+
+  /** Atualiza somente os campos informados de uma superfície existente. */
+  function updateSurface(id: string, patch: Partial<SurfaceSpec>): void {
+    const spec = { ...patch, id };
+    void transport(`surface-update ${JSON.stringify(spec)}`).then(expectOk).catch(
+      (error: unknown) => console.error(`falha ao atualizar superfície ${id}:`, error),
+    );
+  }
+
+  /** Destrói uma superfície e libera a WebView associada no host. */
+  function destroySurface(id: string): void {
+    void transport(`surface-destroy ${id}`).then(expectOk).catch((error: unknown) => {
+      console.error(`falha ao destruir superfície ${id}:`, error);
+    });
+  }
+
   function showNotification(
     title: string,
     body: string,
@@ -241,6 +277,9 @@ export function createAero(transport: Transport) {
     listApps,
     searchApps,
     launchApp,
+    createSurface,
+    updateSurface,
+    destroySurface,
     showNotification,
     dismissNotification,
     onNotification,

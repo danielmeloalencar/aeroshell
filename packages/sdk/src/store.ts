@@ -4,6 +4,7 @@ import type { DecorationPolicy } from "./generated/DecorationPolicy";
 import type { Notification } from "./generated/Notification";
 import type { Patch } from "./generated/Patch";
 import type { Snapshot } from "./generated/Snapshot";
+import type { SurfaceSpec } from "./generated/SurfaceSpec";
 import type { WindowInfo } from "./generated/WindowInfo";
 import type { Workspace } from "./generated/Workspace";
 
@@ -38,6 +39,8 @@ export class WindowStore {
   private readonly workspaceListeners = new Set<Listener>();
   private appsState: App[] = [];
   private readonly appListeners = new Set<Listener>();
+  private surfacesState: SurfaceSpec[] = [];
+  private readonly surfaceListeners = new Set<Listener>();
   private notificationsState: Notification[] = [];
   private readonly notificationListeners = new Set<Listener>();
   private readonly notificationCallbacks = new Set<(notification: Notification) => void>();
@@ -93,6 +96,22 @@ export class WindowStore {
   private setApps(apps: App[]): void {
     this.appsState = apps;
     for (const listener of this.appListeners) listener();
+  }
+
+  getSurfaces(): SurfaceSpec[] {
+    return this.surfacesState;
+  }
+
+  subscribeSurfaces(listener: Listener): () => void {
+    this.surfaceListeners.add(listener);
+    return () => {
+      this.surfaceListeners.delete(listener);
+    };
+  }
+
+  private setSurfaces(surfaces: SurfaceSpec[]): void {
+    this.surfacesState = surfaces;
+    for (const listener of this.surfaceListeners) listener();
   }
 
   getNotifications(): Notification[] {
@@ -174,6 +193,24 @@ export class WindowStore {
     }
     if ("AppListUpdated" in event) {
       this.setApps(event.AppListUpdated.apps);
+      return;
+    }
+    if ("SurfaceCreated" in event || "SurfaceUpdated" in event) {
+      const surface = "SurfaceCreated" in event
+        ? event.SurfaceCreated.surface
+        : event.SurfaceUpdated.surface;
+      const index = this.surfacesState.findIndex((item) => item.id === surface.id);
+      if (index !== -1 && this.surfacesState[index] === surface) return;
+      const surfaces = index === -1
+        ? [...this.surfacesState, surface]
+        : this.surfacesState.map((item, at) => (at === index ? surface : item));
+      this.setSurfaces(surfaces);
+      return;
+    }
+    if ("SurfaceDestroyed" in event) {
+      const id = event.SurfaceDestroyed.id;
+      if (!this.surfacesState.some((item) => item.id === id)) return;
+      this.setSurfaces(this.surfacesState.filter((item) => item.id !== id));
       return;
     }
     if ("NotificationShown" in event) {

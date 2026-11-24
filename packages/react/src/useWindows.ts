@@ -5,6 +5,7 @@ import { useSyncExternalStore } from "react";
 
 import type { App } from "../../sdk/src/generated/App";
 import type { Notification } from "../../sdk/src/generated/Notification";
+import type { SurfaceSpec } from "../../sdk/src/generated/SurfaceSpec";
 import type { WindowInfo } from "../../sdk/src/generated/WindowInfo";
 import type { PanelIndicators, WindowStore, WorkspacesState } from "../../sdk/src/store";
 
@@ -31,6 +32,14 @@ export function useApps(store: WindowStore): App[] {
     (listener) => store.subscribeApps(listener),
     () => store.getApps(),
     () => store.getApps(),
+  );
+}
+
+export function useSurfaces(store: WindowStore): SurfaceSpec[] {
+  return useSyncExternalStore(
+    (listener) => store.subscribeSurfaces(listener),
+    () => store.getSurfaces(),
+    () => store.getSurfaces(),
   );
 }
 

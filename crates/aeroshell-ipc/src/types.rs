@@ -118,6 +118,90 @@ pub struct Notification {
     pub timeout_ms: u64,
 }
 
+/// Tipo de superfície web declarada pelo runtime (contrato `aero.surfaces`).
+#[cfg_attr(feature = "export-bindings", derive(TS))]
+#[cfg_attr(feature = "export-bindings", ts(export))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SurfaceKind {
+    Desktop,
+    Panel,
+    Overlay,
+    Frame,
+}
+
+/// Camada do protocolo `zwlr_layer_shell_v1` usada pela superfície.
+#[cfg_attr(feature = "export-bindings", derive(TS))]
+#[cfg_attr(feature = "export-bindings", ts(export))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SurfaceLayer {
+    Background,
+    Bottom,
+    Top,
+    Overlay,
+}
+
+/// Política de foco de teclado da superfície de camada.
+#[cfg_attr(feature = "export-bindings", derive(TS))]
+#[cfg_attr(feature = "export-bindings", ts(export))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SurfaceKeyboardMode {
+    None,
+    OnDemand,
+    Exclusive,
+}
+
+/// Âncoras de uma superfície de camada (bordas do output).
+#[cfg_attr(feature = "export-bindings", derive(TS))]
+#[cfg_attr(feature = "export-bindings", ts(export))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SurfaceAnchors {
+    pub left: bool,
+    pub right: bool,
+    pub top: bool,
+    pub bottom: bool,
+}
+
+/// Margens lógicas nos lados esquerdo, direito, superior e inferior.
+#[cfg_attr(feature = "export-bindings", derive(TS))]
+#[cfg_attr(feature = "export-bindings", ts(export))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SurfaceMargins {
+    pub left: i32,
+    pub right: i32,
+    pub top: i32,
+    pub bottom: i32,
+}
+
+/// Retângulo de input em coordenadas locais da superfície.
+#[cfg_attr(feature = "export-bindings", derive(TS))]
+#[cfg_attr(feature = "export-bindings", ts(export))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SurfaceInputRegion {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Especificação completa de uma superfície web enviada pelo runtime.
+/// `html` e `url` são mutuamente exclusivos; URLs só podem usar `aero://`.
+#[cfg_attr(feature = "export-bindings", derive(TS))]
+#[cfg_attr(feature = "export-bindings", ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SurfaceSpec {
+    pub id: String,
+    pub kind: SurfaceKind,
+    pub output: Option<u32>,
+    pub anchors: SurfaceAnchors,
+    pub margins: SurfaceMargins,
+    pub exclusive_zone: u32,
+    pub layer: SurfaceLayer,
+    pub keyboard_mode: SurfaceKeyboardMode,
+    pub input_region: Option<Vec<SurfaceInputRegion>>,
+    pub html: Option<String>,
+    pub url: Option<String>,
+}
+
 /// Evento PUSH do compositor para shell/SDK (substitui o polling do S4).
 /// A serialização na wire é o enum em forma de tagged object do ts-rs, ex.:
 /// `{"Title":{"id":0,"title":"foot"}}`.
@@ -173,6 +257,16 @@ pub enum AeroEvent {
     },
     AppListUpdated {
         apps: Vec<App>,
+    },
+    /// Pedido/estado de uma superfície web; o host consome pelo stream PUSH.
+    SurfaceCreated {
+        surface: SurfaceSpec,
+    },
+    SurfaceUpdated {
+        surface: SurfaceSpec,
+    },
+    SurfaceDestroyed {
+        id: String,
     },
     NotificationShown {
         notification: Notification,
