@@ -1,4 +1,4 @@
-# Tarefa F2-shell-real — painel React de produção + regras persistentes no config dir (EM EXECUÇÃO — juiz visual pendente)
+# Tarefa F2-shell-real — painel React de produção + regras persistentes no config dir (PARCIAL — dívida de pintura aceita pelo humano)
 
 > Próximo cartão da F2, após `F2-decoration-policy-hotreload` FECHADO (`b532a0c`, juiz: "ocorreu tudo ok").
 > O painel já existe (`packages/panel/src/index.tsx`, servido em `aero://panel/app.js` via

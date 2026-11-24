@@ -21,7 +21,11 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
-- [~] **F2-shell-real — estratégia de opacidade no DOM (2026-11-24); juiz 12ª rodada pendente (§7).**
+- [~] **F2-shell-real — PARCIAL, DÍVIDA ACEITA (2026-11-24).** Estratégia de opacidade no DOM; juiz
+      12ª rodada **reprovada** (1 falha em >5 alternâncias, incluso sem resize). Humano autorizou
+      aceitar a dívida: vias de renderização do WebKitGTK esgotadas, sem nova correção. Cartão
+      **NÃO fechado**; segue como pendência conhecida em §6/§7.
+      Detalhe da implementação (mantida, com prova automatizada):
       Após `display:none` + `setTimeout` + nudge 1px falharem no juiz, o humano propôs trocar a
       ocultação por `opacity:0/1` + `pointer-events:none/auto`, mantendo o buffer alocado.
       Removidos `setTimeout(50ms)`, `frame_needs_repaint`, `queue_draw`/`geo_nudge` e o helper
@@ -1679,6 +1683,15 @@ fechados, fora da fila.
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **DÍVIDA ACEITA — F2-shell-real: moldura intermitente ao voltar a `Server` (2026-11-24).**
+  Humano testou >5 alternâncias com `opacity:0/1` e uma falhou. Log da 12ª rodada: 28 reloads,
+  0 `reason=timeout`, `csd_applied` {foot0:7, foot1:7, gedit:1}, `frame_restored` {foot0:7, foot1:7}
+  — lógica/DOM/comandos sempre executaram. Causa não isolada no pipeline WebKitGTK → buffer
+  (intermitente, não reproduzível pelos harnesses). **Vias tentadas e reprovadas no juiz:**
+  `display:none` + `wl_surface.frame`, `send_frame_configure` ao trocar insets, `policy-reload` em
+  todas as janelas, `requestAnimationFrame`→`setTimeout(50ms)` + `queue_draw`, nudge de geometria
+  1px, `opacity` + `pointer-events`. **Humano decidiu: aceitar a dívida documentada e parar.**
+  Não aplicar mais nada sem nova decisão explícita.
 - **Correção 1 (setTimeout 50 ms) TESTADA e FALHADA (2026-11-24).** Trocar `requestAnimationFrame`
   por `setTimeout(..., 50)` em `aeroShowFrame` não evitou o `attach(NULL)`: spike 3×
   `VEREDITO_SPIKE: FALHA` (`SPIKE_BUFFER: frame commitou SEM buffer (0x0)`), enquanto
@@ -2457,13 +2470,12 @@ fechados, fora da fila.
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
-- **F2-shell-real (2026-11-24): 12ª RODADA DO JUIZ ABERTA (opacidade, sem nudges).** Instância:
-  comp PID 73877, runtime 73889, shell 73971, gedit 74197, socket
-  `wayland-aero-f2-shell-real-visual12`, IPC `/tmp/opencode/f2-shell-real/visual12/ipc.sock`, regras
-  `/tmp/opencode/f2-shell-real/visual12/config/aeroshell/rules.ts` (`foot→Server`, `gedit→Client`).
-  3 janelas no IPC. Humano deve fazer **5 alternâncias `Server↔None`**, redimensionando um `foot`
-  nas 2 últimas e observando o outro. **Aguardando veredito; não fechar a instância.** Se falhar,
-  humano instruiu aceitar a dívida documentada (vias de renderização esgotadas). Cartão NÃO fechado.
+- **F2-shell-real (2026-11-24): 12ª RODADA REPROVADA; DÍVIDA ACEITA PELO HUMANO.** Humano testou
+  >5 alternâncias com opacidade e uma falhou. Log: 28 reloads, 0 timeouts, hide/restore balanceados
+  nos dois `foot` (7/7 cada) — sintoma intermitente de pintura, não de lógica. **Veredito final:
+  PARCIAL.** Não medido: reprodução determinística do defeito (os harnesses não a reproduzem);
+  GPU real/DRM (VM sem 3D); persistência no config dir do usuário real (juiz usa XDG_CONFIG_HOME
+  temporário). Instância visual12 fechada pelo humano. **Cartão NÃO fechado; dívida em §6.**
 - **F2-shell-real (2026-11-24): 11ª RODADA REPROVADA — fallback de 1px também falhou.** Humano:
   problema na **2ª alternância, sem resize**. Log da instância (comp 68242, runtime 68260, shell
   68350, gedit 68585, socket `wayland-aero-f2-shell-real-visual11`): 10 reloads, 0 `reason=timeout`;
@@ -2995,12 +3007,15 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **SESSÃO ATUAL (2026-11-24): F2-shell-real — juiz 11ª rodada reprovado; PARE.** Correção 1
-  (`setTimeout 50ms`) e fallback (nudge de geometria 1px) aplicados e **ambos reprovados no juiz**.
-  Gate `check.sh` EXIT=0, clippy bench 0, harnesses `VEREDITO: OK`. Causa permanece no nível de
-  pintura/buffer do WebKitGTK (§6/§7), não na lógica de política. **Próximo passo: decisão do humano**
-  — novo diagnóstico/spike, aceitar cartão como parcial, ou outro rumo. Nenhuma correção adicional
-  sem autorização.---
+- **SESSÃO ENCERRADA (2026-11-24): F2-shell-real PARCIAL — dívida de pintura aceita pelo humano.**
+  12 rodadas de juiz; 11ª e 12ª reprovadas, humano decidiu esgotar as vias de renderização e parar.
+  Última abordagem mantida: `opacity:0/1` + `pointer-events` (sem `display:none`, sem nudges).
+  Gate `check.sh` EXIT=0, clippy bench 0, `bun test` 28/28; harnesses `f2_shell_real_policy_restore`
+  3× OK, timeout/reload OK, `f2_hotreload_*` e `f2_full_decoration_policy` OK, vizinhos OK.
+  **Handoff:** cartão `docs/tasks/F2-shell-real.md` segue EM EXECUÇÃO/parcial;pendência em §6.
+  Para reproduzir o estado automatizado:
+  `cargo build -p aeroshell-compositor --features bench && cargo build --workspace --examples && python3 tests/integration/f2_shell_real_policy_restore.py`
+  → `VEREDITO: OK`. **Nenhum próximo passo autorizado; PARAR.** snap/F7/F1 intocados, sem push.---
 - **SESSÃO ANTERIOR (2026-11-24): F2-shell-real — SPIKE DE DIAGNÓSTICO CONCLUÍDO; SEM CORREÇÃO.**
   Causa isolada em §6: commitFrame sem buffer após `frame_restored`. Gate `check.sh` EXIT=0,
   `cargo fmt` aplicado, harnesses atuais `VEREDITO: OK`. **Próximo passo: decisão do humano** —
