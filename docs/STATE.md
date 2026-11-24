@@ -21,6 +21,30 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [~] **F2-shell-real (2026-11-24) — código/teste/gates verdes; JUIZ VISUAL PENDENTE (§7).**
+      Cartão `docs/tasks/F2-shell-real.md` escrito do TEMPLATE (não existia) e aprovado com "ok".
+      **Painel de produção:** `packages/panel/src/index.tsx` + `scheme.rs` servem `aero://panel/app.js`
+      via `include_bytes!`; lista ao vivo por `AeroEvent` (sem `setInterval` no bundle), ✕ na borda da
+      linha, foco por clique e indicadores de foco/decoração. SDK estendido: `WindowStore.getIndicators/
+      subscribeIndicators` + `useIndicators`; `parseEvent` aceita tanto a string do socket Bun quanto o
+      **objeto JS** que `bridge.rs` injeta no `evaluate_javascript` (antes, todo evento era descartado).
+      **Persistência:** `packages/runtime/src/policy-path.ts` resolve `AERO_DECORATION_RULES` >
+      `$XDG_CONFIG_HOME/aeroshell/rules.ts` (ou `~/.config/...`) > bundle; `policy.ts` reporta
+      `source=configdir` e mantém `fs.watch` no arquivo resolvido.
+      **Correções descobertas pelo teste:** `bridge.rs` guarda eventos até o painel postar `ready`;
+      `__subscribe__` reenvia `DecorationApplied` das janelas já decididas; o hook de destroy do frame
+      associado após o map agora limpa `window_surfaces` e emite `Snapshot` (senão a linha fechada
+      nunca desaparecia).
+      **Teste-first:** unitário `store.test.ts` (2 novos), `index.test.ts` (1), `policy-path.test.ts`
+      (5) — baselines `subscribeIndicators is not a function`, `parseEvent(object)=null`, `Cannot find
+      module './policy-path'`. Integração `f2_shell_real.py` baseline `VEREDITO: FALHA` no HEAD
+      (via `git stash`) → **3× `VEREDITO: OK`**: configdir, 2→3→2 linhas ao vivo, foco, indicadores,
+      multi-janela, reload sem restart, erro de sintaxe sem efeito, 0 erros de protocolo. Latências do
+      reload: 155–243 ms (VM sem 3D, valor relativo).
+      Gates: `check.sh` EXIT=0 (`gate-close.log`, 28 testes), clippy bench 0, no-default 0,
+      generate:types 0, `bun test` 28/28. Regressões `f2_full_decoration_policy`,
+      `f2_hotreload_decoration_policy`, `f2_hotreload_gedit_csd` OK. Vizinhos OK exceto os dois
+      flakes documentados em §6. **Não toquei snap/F7/F1.**
 - [x] **F2-decoration-policy-hotreload (2026-11-24) — FECHADO PELO JUIZ VISUAL.** Humano, após a 4ª rodada: *"se no
       passo 4 nada deveria mudar visualmente, entao ocorreu tudo ok"* — passo 4 era só a correção do `.ts` de volta à
       regra `Client` já vigente, então não mudar era o esperado. Cobriram-se as 4 edições ao vivo no mesmo `gedit`
@@ -1584,6 +1608,28 @@ fechados, fora da fila.
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **F2-shell-real — `react_panel.py` falhou 3× no clique de foco (2026-11-24).** O log prova que o clique
+  focou a janela certa (`BRIDGE aeroEvent {"Focus":{"id":1}}`, `ordem de render` mudou); a asserção
+  quebrada é a suposição antiga `id N -> wl_surface@3[N+1]`, que não vale com os frames associados.
+  Não é regressão do painel (o cliente sintético e o juiz focam corretamente). Amostras em
+  `/tmp/opencode/f2-shell-real/neighbors/react-panel-retry{1,2,3}.log`, preserves.
+- **F2-shell-real — `frame_window_id` falha pré-existente** (`sem configure de conteúdo para
+  window_id=1`), já documentada em §6 com A/B em HEAD sem mudanças; repetida nesta sessão.
+- **F2-shell-real — bridge descartava eventos do painel (2026-11-24).** `bridge.rs` injetava
+  `window.__aeroEvent({...})` (objeto) e `parseEvent` só aceitava string: `JSON.parse` de objeto
+  virava "[object Object]" e todo `Title/Focus/DecorationApplied` era silenciosamente ignorado.
+  Corrigido no SDK (`parseEvent` aceita os dois formatos, com validação de chave).
+- **F2-shell-real — eventos antes do bundle/subscribe se perdiam (2026-11-24).** O bridge agora guarda
+  a fila até `post({type:"ready"})` do painel; o `__subscribe__` do compositor reenvia
+  `DecorationApplied` das decisões já tomadas (o replay só mandava `Snapshot`). Sem isso os
+  indicadores iniciais ficavam `default`.
+- **F2-shell-real — janela fechada nunca saía da lista (2026-11-24).** O hook de destruição do frame
+  associado **depois** do map (`aero_frame.rs:443`) não fazia `window_surfaces.retain` nem
+  `emit_snapshot`, ao contrário do hook de `bind_pending_frame_client`. Corrigido; o painel passou a
+  remover a linha por evento PUSH.
+- **Ambiente (2026-11-24): GNOME Shell/Xwayland do host morreram no meio da sessão** (vários harnesses
+  winit acumulados), com processos em estado D no EGL. Não houve intervenção no host (AGENTS §3.8);
+  após reinício do servidor o display voltou e o harness passou. Registro para não confundir com flake.
 - **Hot-reload — 3ª reprovação do juiz: hide do CSD preso ao startup (2026-11-24).** `Client→Server` voltava a
   funcionar, mas `Server→Client` deixava a moldura do compositor visível (barra dupla). O hide só acontecia em
   `refresh_csd()` com filtro `Instant::now() < csd_probe_until` (5 s do startup) — e o polling já não existia (stream
@@ -2245,6 +2291,15 @@ fechados, fora da fila.
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- **F2-shell-real (2026-11-24): JUIZ VISUAL PENDENTE.** Instância nested deixada **aberta**: compositor
+  PID 21119, runtime Bun PID 21143, `aeroshell-shell` PID 21183, `gedit` PID 21468, socket
+  `wayland-aero-f2-shell-real-visual`, IPC `/tmp/opencode/f2-shell-real/visual/ipc.sock`, regras
+  `$XDG_CONFIG_HOME=/tmp/opencode/f2-shell-real/visual/config` (`foot→Server`, `gedit→Client`).
+  Painel com 3 linhas: `foot`, `foot` (Server) e `gedit` (Client), uma com indicador de foco.
+  Humano deve confirmar: lista ao vivo ao abrir/fechar, foco por clique, indicadores, e a decoração
+  mudar ao editar `config/aeroshell/rules.ts` sem restart. **Sem "ok" nesta sessão o item NÃO está
+  concluído**; quem fecha a instância é o humano. Não medido: GPU real/DRM (VM sem 3D), persistência
+  entre sessões do usuário real (o juiz usa XDG_CONFIG_HOME temporário), latência em sessão real.
 - **F2-decoration-policy-hotreload (2026-11-24): JUIZ VISUAL APROVADO na 4ª rodada.** Humano: *"se no passo 4 nada
   deveria mudar visualmente, entao ocorreu tudo ok"*. Confirmou as edições ao vivo no mesmo `gedit`: moldura do
   compositor apareceu em `Server`, sumiu em `Client` (sem barra dupla), erro de sintaxe sem efeito. Instância final
@@ -2691,6 +2746,12 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
+- **SESSÃO ATUAL (2026-11-24): F2-shell-real — código/teste/gates verdes, JUIZ VISUAL PENDENTE (§7).**
+  Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build --workspace --examples && cargo build -p aeroshell-shell && bun build packages/panel/src/index.tsx --target=browser --outfile=packages/panel/dist/app.js && bun run generate:types && python3 tests/integration/f2_shell_real.py`
+  → `VEREDITO: OK` 3× (`finalC{1,2,3}.log`); baseline no HEAD `VEREDITO: FALHA`. Unitário 28/28,
+  gate `gate-close.log` EXIT=0. **Próximo passo imediato:** humano olhar o painel da instância aberta
+  (§7), autorizar as edições ao vivo da regra e dar o "ok"; então fechar o cartão no §3/§7, commitar e
+  PARAR. snap/F7/F1 intocados. Sem push.
 - **SESSÃO ENCERRADA (2026-11-24): F2-decoration-policy-hotreload FECHADA PELO JUIZ VISUAL ("ocorreu tudo ok").**
   Reproduzir (bench por último):
   `cargo build --workspace --examples && cargo build -p aeroshell-compositor --features bench && bun run generate:types && python3 tests/integration/f2_hotreload_decoration_policy.py && python3 tests/integration/f2_hotreload_gedit_csd.py`

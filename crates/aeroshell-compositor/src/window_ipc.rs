@@ -357,8 +357,20 @@ impl AeroState {
         match op {
             // Comando INTERNO do subscribe do stream: publica o estado atual
             // para o assinante que acabou de conectar (não é protocolo público).
+            // Além do snapshot, reenvia as decisões já tomadas: o painel é um
+            // WebView que só instala `__aeroEvent` depois de carregar o bundle,
+            // então os DecorationApplied do map das primeiras janelas chegam
+            // antes dele e se perdiam (indicador ficava "default" até editar).
             "__subscribe__" => {
                 self.emit_snapshot();
+                for (&id, &decision) in self.decorations.iter() {
+                    emit_event(AeroEvent::DecorationApplied {
+                        id,
+                        decision,
+                        fallback: false,
+                        reason: None,
+                    });
+                }
                 "OK".to_owned()
             }
             // F2-decoration-policy: runtime Bun opcional informa que está vivo e

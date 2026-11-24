@@ -24,7 +24,15 @@ const REACT_PANEL_HTML: &str = r##"
       .aero-row { display: flex; gap: 6px; align-items: center; height: 18px;
         background: #23364a; color: #e8f6ff; border: 1px solid #4a6b8a;
         border-radius: 4px; padding: 0 6px; font: inherit; cursor: pointer; }
+      .aero-row[data-focused="1"] { background: #34618a; border-color: #9fd0ff; }
+      .aero-focus { font-size: 10px; color: #9fd0ff; }
       .aero-id { opacity: 0.7; }
+      .aero-decoration { font-size: 10px; opacity: 0.8; padding: 0 3px;
+        border: 1px solid #4a6b8a; border-radius: 3px; }
+      .aero-close { display: inline-flex; align-items: center; justify-content: center;
+        margin-left: 2px; min-width: 16px; width: 16px; height: 16px; font-size: 11px;
+        border: 1px solid transparent; border-radius: 3px; flex: 0 0 16px; }
+      .aero-close:hover { border-color: #9fd0ff; color: #ffd9d9; }
     </style>
   </head>
   <body>

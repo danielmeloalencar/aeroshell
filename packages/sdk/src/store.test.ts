@@ -50,3 +50,50 @@ test("ignora patch com revisão antiga ou igual", () => {
   expect(store.getSnapshot()).toBe(before);
   expect(notifications).toBe(0);
 });
+
+test("Focus atualiza o indicador sem tocar no snapshot das janelas", () => {
+  const store = new WindowStore({ revision: 1, windows: [win(1, "A"), win(2, "B")] });
+  let indicatorNotifications = 0;
+  let snapshotNotifications = 0;
+  store.subscribeIndicators(() => indicatorNotifications++);
+  store.subscribe(() => snapshotNotifications++);
+  const before = store.getSnapshot();
+
+  store.applyEvent({ Focus: { id: 2 } });
+
+  expect(store.getIndicators().focusedId).toBe(2);
+  expect(indicatorNotifications).toBe(1);
+  expect(snapshotNotifications).toBe(0);
+  expect(store.getSnapshot()).toBe(before);
+
+  // Evento repetido é idempotente (sem re-render); null = sem foco.
+  store.applyEvent({ Focus: { id: 2 } });
+  expect(indicatorNotifications).toBe(1);
+  store.applyEvent({ Focus: { id: null } });
+  expect(store.getIndicators().focusedId).toBeNull();
+  expect(indicatorNotifications).toBe(2);
+});
+
+test("DecorationApplied guarda a decisão por janela para o indicador", () => {
+  const store = new WindowStore({ revision: 1, windows: [win(3, "gedit")] });
+  let indicatorNotifications = 0;
+  store.subscribeIndicators(() => indicatorNotifications++);
+
+  store.applyEvent({
+    DecorationApplied: { id: 3, decision: "Client", fallback: false, reason: null },
+  });
+  expect(store.getIndicators().decorations[3]).toBe("Client");
+  expect(indicatorNotifications).toBe(1);
+
+  store.applyEvent({
+    DecorationApplied: { id: 3, decision: "Client", fallback: false, reason: null },
+  });
+  expect(indicatorNotifications).toBe(1); // idempotente
+
+  store.applyEvent({
+    DecorationApplied: { id: 3, decision: "None", fallback: false, reason: null },
+  });
+  expect(store.getIndicators().decorations[3]).toBe("None");
+  expect(store.getIndicators().focusedId).toBeNull(); // foco é independente
+  expect(indicatorNotifications).toBe(2);
+});

@@ -3,6 +3,10 @@
 use std::{
     io::{BufRead, BufReader, Write},
     os::unix::net::UnixStream,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex, OnceLock,
+    },
 };
 
 use gtk4::prelude::*;
@@ -11,6 +15,44 @@ use webkit6::{UserContentManager, WebView};
 
 fn ipc_socket_path() -> Option<std::ffi::OsString> {
     std::env::var_os("AERO_WINDOW_IPC_SOCK")
+}
+
+/// Eventos publicados antes de o bundle instalar `window.__aeroEvent` eram
+/// descartados pelo `evaluate_javascript` — o painel abria com indicadores
+/// `default`/sem foco até o próximo evento. O gate guarda a ordem até a página
+/// avisar `ready` e então libera tudo (sem polling, sem novo comando IPC).
+#[derive(Clone, Default)]
+struct EventGate {
+    ready: Arc<AtomicBool>,
+    queued: Arc<Mutex<Vec<String>>>,
+}
+
+impl EventGate {
+    fn mark_ready(&self) {
+        self.ready.store(true, Ordering::SeqCst);
+    }
+
+    fn is_ready(&self) -> bool {
+        self.ready.load(Ordering::SeqCst)
+    }
+
+    fn queue(&self, event: String) {
+        if let Ok(mut queued) = self.queued.lock() {
+            queued.push(event);
+        }
+    }
+
+    fn drain(&self) -> Vec<String> {
+        self.queued
+            .lock()
+            .map(|mut queued| std::mem::take(&mut *queued))
+            .unwrap_or_default()
+    }
+}
+
+fn event_gate() -> &'static EventGate {
+    static GATE: OnceLock<EventGate> = OnceLock::new();
+    GATE.get_or_init(EventGate::default)
 }
 
 /// `<ipc>.events`: o mesmo socket derivado pelo compositor, sem env nova.
@@ -37,21 +79,34 @@ pub fn install_event_stream(webview: &WebView) {
     // consultar o compositor nem fazer polling de 100 ms/1 s).
     let (tx, rx) = std::sync::mpsc::channel::<String>();
     let view = webview.clone();
+    let gate = event_gate().clone();
+    let deliver = move |view: &WebView, event: &str| {
+        let script = format!("window.__aeroEvent && window.__aeroEvent({event});");
+        view.evaluate_javascript(
+            &script,
+            None,
+            None,
+            None::<&webkit6::gio::Cancellable>,
+            |result| {
+                if let Err(err) = result {
+                    tracing::warn!(%err, "evaluate_javascript do evento falhou");
+                }
+            },
+        );
+        tracing::info!(event = %event, "BRIDGE aeroEvent");
+    };
     gtk4::glib::timeout_add_local(std::time::Duration::from_millis(1), move || {
+        if gate.is_ready() {
+            for event in gate.drain() {
+                deliver(&view, &event);
+            }
+        }
         while let Ok(event) = rx.try_recv() {
-            let script = format!("window.__aeroEvent && window.__aeroEvent({event});");
-            view.evaluate_javascript(
-                &script,
-                None,
-                None,
-                None::<&webkit6::gio::Cancellable>,
-                |result| {
-                    if let Err(err) = result {
-                        tracing::warn!(%err, "evaluate_javascript do evento falhou");
-                    }
-                },
-            );
-            tracing::info!(event = %event, "BRIDGE aeroEvent");
+            if gate.is_ready() {
+                deliver(&view, &event);
+            } else {
+                gate.queue(event);
+            }
         }
         gtk4::glib::ControlFlow::Continue
     });
@@ -139,6 +194,7 @@ pub fn install(window: &gtk4::ApplicationWindow, webview: &WebView) -> UserConte
             .unwrap_or(message);
 
         match message.get("type").and_then(|v| v.as_str()) {
+            Some("ready") => event_gate().mark_ready(),
             Some("ipc") => {
                 let (Some(webview), Some(command), Some(seq)) = (
                     weak_webview.upgrade(),

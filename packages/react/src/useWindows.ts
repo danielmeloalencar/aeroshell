@@ -4,7 +4,7 @@
 import { useSyncExternalStore } from "react";
 
 import type { WindowInfo } from "../../sdk/src/generated/WindowInfo";
-import type { WindowStore } from "../../sdk/src/store";
+import type { PanelIndicators, WindowStore } from "../../sdk/src/store";
 
 export function useWindows(store: WindowStore): WindowInfo[] {
   const snapshot = useSyncExternalStore(
@@ -13,4 +13,13 @@ export function useWindows(store: WindowStore): WindowInfo[] {
     () => store.getSnapshot(),
   );
   return snapshot.windows;
+}
+
+/** Indicadores por janela (foco/decoração), vindos do stream PUSH. */
+export function useIndicators(store: WindowStore): PanelIndicators {
+  return useSyncExternalStore(
+    (listener) => store.subscribeIndicators(listener),
+    () => store.getIndicators(),
+    () => store.getIndicators(),
+  );
 }

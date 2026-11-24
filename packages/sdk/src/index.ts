@@ -29,11 +29,23 @@ export function parseWindows(lines: string[]): WindowInfo[] {
     });
 }
 
-/** Converte uma linha do stream PUSH no tipo gerado por ts-rs. */
-export function parseEvent(json: string): AeroEvent | null {
+const EVENT_KEYS = [
+  "Snapshot", "Title", "Icon", "Focus", "Geometry", "Csd",
+  "FramePainted", "DecorationRequest", "DecorationApplied",
+] as const;
+
+/**
+ * Converte uma linha do stream PUSH no tipo gerado por ts-rs.
+ * `bridge.rs:42` injeta o evento como **objeto JS** no `evaluate_javascript`,
+ * enquanto o runtime Bun lê uma **string** do socket — aceitar os dois evita
+ * que o painel descarte silenciosamente todos os eventos (`JSON.parse` de um
+ * objeto vira "[object Object]").
+ */
+export function parseEvent(raw: string | unknown): AeroEvent | null {
   try {
-    const value: unknown = JSON.parse(json);
+    const value: unknown = typeof raw === "string" ? JSON.parse(raw) : raw;
     if (typeof value !== "object" || value === null) return null;
+    if (!EVENT_KEYS.some((key) => key in value)) return null;
     return value as AeroEvent;
   } catch {
     return null;

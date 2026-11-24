@@ -441,6 +441,10 @@ impl Dispatch<AeroFrameManagerV1, ()> for AeroState {
                 // Quando a janela cliente morre, o frame recebe `closed` (ADR 0004).
                 if let Some(client) = client_surface {
                     add_destruction_hook::<crate::state::AeroState, _>(&client, |state, dead| {
+                        // Mesma limpeza do hook de `bind_pending_frame_client`: sem
+                        // remover do mapa e emitir Snapshot, o painel (que só consome
+                        // o stream) mantinha a linha da janela fechada para sempre.
+                        state.window_surfaces.retain(|_, cs| *cs != *dead);
                         if let Some(pos) = state
                             .associated_frames
                             .iter()
@@ -459,6 +463,7 @@ impl Dispatch<AeroFrameManagerV1, ()> for AeroState {
                                 window_id,
                                 "janela cliente destruída: closed enviado ao frame"
                             );
+                            state.emit_snapshot();
                         }
                     });
                 }

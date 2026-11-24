@@ -44,6 +44,24 @@ test("parseEvent + applyEvent atualizam título e geometria SEM chamar list", ()
   expect(parseEvent("texto inválido")).toBeNull();
 });
 
+test("parseEvent aceita o objeto que o bridge injeta no evaluate_javascript", () => {
+  // bridge.rs:42 monta `window.__aeroEvent({"Title":{...}})` — é um objeto JS,
+  // não uma string JSON. Só aceitar string fazia o painel descartar todo evento.
+  const fromBridge = parseEvent({ Title: { id: 7, title: "ao vivo" } });
+  expect(fromBridge).toEqual({ Title: { id: 7, title: "ao vivo" } });
+
+  const aero = createAero(async () => {
+    throw new Error("list não devia ser chamado");
+  });
+  aero.store.applySnapshot({
+    revision: 1,
+    windows: [{ id: 7, title: "antes", x: 0, y: 0, width: 100, height: 50 }],
+  });
+  aero.store.applyEvent(fromBridge!);
+  expect(aero.store.getSnapshot().windows[0]?.title).toBe("ao vivo");
+  expect(parseEvent({ lixo: 1 })).toBeNull();
+});
+
 test("list publica snapshot; close publica patch e remove só aquela janela", async () => {
   const commands: string[] = [];
   let listed = [

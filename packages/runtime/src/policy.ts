@@ -14,6 +14,7 @@ import { parseEvent } from "../../sdk/src/index";
 import { DECORATION_WIRE, decideDecoration } from "./decoration-policy";
 import { eventStream, ipcTransport } from "./ipc-client";
 import { RuleSource, loadRules } from "./policy-config";
+import { resolveRulesPath } from "./policy-path";
 
 const socketPath = process.env.AERO_WINDOW_IPC_SOCK;
 if (!socketPath) {
@@ -21,11 +22,13 @@ if (!socketPath) {
   process.exit(2);
 }
 
-const rulesEnv = process.env.AERO_DECORATION_RULES;
-const rulesPath = rulesEnv ?? fileURLToPath(new URL("./rules.ts", import.meta.url));
+const bundledPath = fileURLToPath(new URL("./rules.ts", import.meta.url));
+const resolved = resolveRulesPath(process.env, bundledPath);
+const rulesPath = resolved.path;
+const sourceLabel = resolved.source;
 const initial = await loadRules(rulesPath);
 if (!initial.ok) {
-  console.error(`POLICY_TS RULES ERROR source=${rulesEnv ? "edited-ts" : "default"} ${initial.error}`);
+  console.error(`POLICY_TS RULES ERROR source=${sourceLabel} ${initial.error}`);
   process.exit(2);
 }
 const source = new RuleSource(initial.config);
@@ -34,10 +37,10 @@ const noReply = process.env.AERO_POLICY_NO_REPLY !== undefined;
 const transport = ipcTransport(socketPath);
 const ready = await transport("policy-ready");
 console.log(
-  `POLICY_TS READY rules=${rulesEnv ?? "default"} no_reply=${noReply} ready_reply=${ready.join(",")}`,
+  `POLICY_TS READY rules=${rulesPath} source=${sourceLabel} no_reply=${noReply} ready_reply=${ready.join(",")}`,
 );
 console.log(
-  `POLICY_TS RULES source=${rulesEnv ? "edited-ts" : "default"} default=${source.config.default} rules=${source.config.rules.length}`,
+  `POLICY_TS RULES source=${sourceLabel} default=${source.config.default} rules=${source.config.rules.length}`,
 );
 if (noReply) console.log("POLICY_TS NO_REPLY=1");
 
@@ -48,7 +51,7 @@ async function reload(): Promise<void> {
   const current = ++generation;
   const result = await source.refresh(rulesPath);
   if (current !== generation) return; // edição mais recente vence
-  const label = `source=${rulesEnv ? "edited-ts" : "default"}`;
+  const label = `source=${sourceLabel}`;
   if (!result.ok) {
     console.log(`POLICY_TS RELOAD ERROR ${label} ${result.error}`);
     return;
