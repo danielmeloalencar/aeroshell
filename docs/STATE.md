@@ -21,6 +21,25 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [~] **F2-decoration-policy-hotreload (2026-11-24) — código/teste/gates verdes; JUIZ VISUAL PENDENTE (§7).**
+      Cartão `docs/tasks/F2-decoration-policy-hotreload.md` escrito e aprovado ("ok"), executado nesta sessão.
+      **Mecanismo:** `packages/runtime/src/policy-config.ts` lê/transpila/valida o `.ts` e guarda o último config bom
+      (`RuleSource`); `packages/runtime/src/policy.ts` usa `fs.watch` no diretório (filtro por basename, debounce 80 ms,
+      `generation` para descartar leituras obsoletas), loga `POLICY_TS RELOAD`/`RELOAD ERROR` e envia o comando IPC
+      interno `policy-reload`; `crates/aeroshell-compositor/src/window_ipc.rs:368` limpa decisão/pending e reemite
+      `DecorationRequest` para as janelas existentes, respondidas pelo `policy <id>` já existente (sem nova rota, sem
+      XML/ADR, sem app_id no Rust, sem reiniciar compositor/runtime).
+      **Teste-first:** unitário `policy-reload.test.ts` falhou com `Cannot find module './policy-config'`; integração
+      `f2_hotreload_decoration_policy.py` deu `VEREDITO: FALHA` com a decisão inicial OK e só o reload falhando.
+      Depois: unitário **5/5**, integração **VEREDITO: OK em 3+ execuções** (`Server→None→erro de sintaxe→Server` na
+      **mesma janela**, mesmo PID do comp e do Bun, `suppressed=policy_none` cessa após voltar a Server, 0
+      `ProtocolError`, 0 `reason=timeout`), harness anterior 4/4 OK. `bun test` 20/20 (64 expects).
+      Gates: `check.sh` EXIT=0 (`gate-clean.log`), clippy bench 0, no-default 0, generate:types 0, sonda `POLICY_TS`
+      0 no binário normal, nenhum app_id literal no compositor. Vizinhos: `f1_csd_gtk`, `f1_csd_gtk --geometry-only`,
+      `f1_toplevel_icon`, `frame_buttons`, `frame_resize_glue`, `headless_render_damage` OK; `frame_title` falhou 3×
+      por tmpfs cheio (§6) e passou após limpeza; `frame_window_id` segue no flake pré-existente com A/B em HEAD
+      (§6). **Não toquei no snap/F7 nem em F1.** Commits: `afb6ead` (testes), `407bf4e` (loader), `275c415`
+      (watcher/harness), `4435a60` (comando IPC), `cbb3168` (correção do vazamento de processos do harness).
 - [x] **F2-decoration-policy-ts (2026-11-24) — FECHADO PELO JUIZ VISUAL: humano respondeu *"sim. aprovado"*.**
       Aprovação após reinício limpo (o humano primeiro viu só `foot`/`gedit` porque os clientes sintéticos tinham
       deadline de 15 s; §6). Veredito cobriu as 4 janelas: `foot` decorado, `gedit` sem barra dupla/flash,
@@ -1422,6 +1441,13 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
+- **F2-decoration-policy-hotreload: código/testes/gates verdes; JUIZ VISUAL PENDENTE (§7).** Instância nested deixada
+  aberta: compositor PID 139168, socket `wayland-aero-f2-hotreload-visual2`, IPC
+  `/tmp/opencode/f2-hotreload/visual2/ipc.sock`, runtime Bun PID 139195, `gedit` PID 139178 (window_id 0,
+  `csd=1`, decisão `Client` em `POLICY_TS DECISION`). Regras em
+  `/tmp/opencode/f2-hotreload/visual2/rules.ts` (`gedit→Client`, `foot→Server`, default `Server`). Humano deve
+  conferir a moldura do compositor aparecendo ao editar `gedit→Server`, desaparecendo ao voltar a `Client`, e
+  nenhuma mudança com erro de sintaxe. **PARAR no veredito; quem fecha é o humano.**
 - **F2-decoration-policy-ts FECHADO (§3): humano aprovou o juiz visual ("sim. aprovado").** Próximo cartão F2
   (hot-reload das regras TS) só com autorização explícita; instância final (PID 116497) permanece aberta, quem fecha
   é o humano.
@@ -1502,6 +1528,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
+**Hot-reload (2026-11-24): SÓ FECHAR com o "ok" visual — não abrir próximo cartão.** Após o veredito: atualizar
+§3/§7/§9, commitar e PARAR. `F7-compat-snap.md` segue pendente de aprovação explícita; não tocar em snapd/slot nem
+intercalar com F2. cursor-shape e primary-selection já fechados, fora da fila.
 0. **SEQUÊNCIA F1-FINAL REVISADA (humano, 2026-11-23): F1-dmabuf → clipboard 2 clientes → xdg-toplevel-states →
    presentation-time. Um cartão por sessão; PARAR antes do próximo cartão e antes da F2.** F1-dmabuf FECHADO com
    ressalvas (VSCode requalificado como compatibilidade de ambiente/DX, não bloqueante); F1-clipboard-two-clients
@@ -1550,6 +1579,23 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **Bun 1.4.4 (2026-11-24, medido nesta sessão): cache de módulo local e `//!`.** `import(url?query=N)` NÃO invalida o
+  cache de arquivos `.ts` locais (edição repetida devolve o primeiro conteúdo). `Bun.Transpiler` + `data:` URL resolve;
+  mas se o código transpilado **começa com `//!`**, o `default` exportado é a própria URL string (4 variantes sondadas:
+  `original` falhou; sem `//!`, sem comentários e código mínimo funcionaram). `policy-config.ts` remove as linhas `//!`
+  antes de transpilar. Teste de regressão em `policy-reload.test.ts`.
+- **Hot-reload — vazamento de compositores no próprio harness (causa do S1, 2026-11-24).** O `stop()` usa `killpg`, mas
+  o compositor headless era iniciado sem `start_new_session=True`: `ProcessLookupError` engolido deixou **9**
+  compositores + WebViews vivos (`/tmp/opencode/f2-hotreload/gate-final.log`: `FALHA: cliente não mapeou toplevel`,
+  40,9 s, com 35,5 s de build dentro do teste). S1 isolado passou em **5,69 s**; PIDs iniciados pelo agente foram
+  encerrados explicitamente; `start_new_session=True` adicionado (`cbb3168`); gate limpo `gate-clean.log` EXIT=0.
+  Não foi "flake": foi carga induzida pelo instrumento, investigada e corrigida.
+- **Hot-reload — tmpfs cheio falseou 3 vizinhos (2026-11-24).** A/B do commit anterior em worktree bajo `/tmp` esgotou
+  a cota (tmpfs 2,9/3,6 G, `Disk quota exceeded`), removido o worktree deixou 2,2 G livres. `frame_title` falhou 3×
+  (`DOM #title = aero-title-segundo (mudanca)`) e passou após a limpeza; todas as amostras preservadas em
+  `/tmp/opencode/f2-hotreload/neighbors/frame_title{,-rep1,-rep2,-after-space}.log`. `frame_window_id` falha em HEAD
+  sem mudanças (48db918, 2×: `sem configure de conteúdo para window_id=1`) e no HEAD atual com variante
+  `frame_host tem só uma WebView`; A/B em `/home/daniel/Projetos/aeroshell-ab-head` (removido), pré-existente.
 - **F2-decoration-policy-ts (2026-11-24): juiz visual — clientes sintéticos desapareceram.** Humano relatou ver só
   `foot`/`gedit`: `policy_client.rs` tinha deadline fixo de 15 s e ambos já tinham logado `POLICY_CLIENT OK` e saído
   (IPC listava só 2 janelas). Relançar clientes na instância antiga não mapeou (clientes em `poll`, compositor em
@@ -2171,6 +2217,11 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- **F2-decoration-policy-hotreload (2026-11-24): JUIZ VISUAL PENDENTE.** Instância nested aberta (§4) com `gedit` no
+  estado `Client`. Humano deve confirmar, com o agente editando o `.ts` ao vivo: `gedit→Server` faz a moldura do
+  compositor aparecer na mesma janela; voltar a `Client` a remove sem barra dupla; erro de sintaxe não altera a tela
+  (últimas boas mantidas). Agente NÃO encerrou a instância; sem "ok" nesta sessão o item NÃO está concluído.
+  Não medido: GPU real/DRM (VM sem 3D), latência do reload em sessão real, reload com múltiplas janelas no juiz.
 - **F2-decoration-policy-ts (2026-11-24): JUIZ VISUAL APROVADO ("sim. aprovado").** Instância nested (compositor PID
   116497, socket `wayland-aero-f2-ts-visual3`, runtime Bun PID 116895, clientes PIDs 116532/116915) deixada aberta;
   humano conferiu `foot` decorado, `gedit` sem barra dupla/flash, `aero-no-deco` e `aero-ts-visual` sem moldura (esta
@@ -2612,6 +2663,15 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
+- **SESSÃO ATUAL (2026-11-24): F2-decoration-policy-hotreload — código pronto, gates verdes, JUIZ VISUAL PENDENTE.**
+  Reproduzir (bench por último): `cargo build --workspace --examples && cargo build -p aeroshell-compositor --features bench && bun run generate:types && python3 tests/integration/f2_hotreload_decoration_policy.py`
+  → `VEREDITO: OK` (3× em `/tmp/opencode/f2-hotreload/final-run{1,2,3}.log`); baseline `VEREDITO: FALHA`. Unitário
+  `bun test packages/runtime/src/policy-reload.test.ts` 5/5, `bun test` 20/20; gate `gate-clean.log` EXIT=0.
+  Instância do juiz: compositor PID 139168, runtime PID 139195, gedit PID 139178, socket
+  `wayland-aero-f2-hotreload-visual2`, IPC `/tmp/opencode/f2-hotreload/visual2/ipc.sock`, regras
+  `/tmp/opencode/f2-hotreload/visual2/rules.ts`. **Próximo passo imediato:** pedir ao humano que olhe o gedit; editar
+  a regra para `Server`, depois `Client`, depois sintaxe inválida; obter o "ok"; atualizar §3/§7/§9, commitar e PARAR.
+  Não tocar no snap/F7. Nenhum push.
 - **SESSÃO ENCERRADA (2026-11-24): F2-decoration-policy-ts FECHADA PELO JUIZ VISUAL ("sim. aprovado").**
   Reproduzir (bench por último):
   `cargo build --workspace --examples && cargo build -p aeroshell-compositor --features bench && bun run generate:types && python3 tests/integration/f2_full_decoration_policy.py`
