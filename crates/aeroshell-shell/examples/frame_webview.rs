@@ -193,10 +193,10 @@ impl Dispatch<wl_pointer::WlPointer, ()> for SpikeState {
                 surface_y,
                 ..
             } => {
+                state.last_local = (surface_x, surface_y);
                 if let Some(i) = state.entries.iter().position(|e| e.wl_surface == surface) {
                     state.active = i;
                 }
-                state.last_local = (surface_x, surface_y);
             }
             wl_pointer::Event::Motion {
                 surface_x,
@@ -1023,8 +1023,19 @@ const TITLEBAR_HTML: &str = r#"<!doctype html>
     font-family:sans-serif;user-select:none;}
   #border{position:absolute;inset:0;box-sizing:border-box;pointer-events:none;
     border:6px solid #2b2b2b;border-top:0;}
-  #bar{position:absolute;top:0;left:0;right:0;height:30px;display:flex;
-    align-items:center;background:#2b2b2b;color:#eee;}
+  /* F2-compositor-cursor-shape: o WebKitGTK traduz `cursor` de CSS em
+   wp_cursor_shape_v1 para o compositor. As zonas abaixo cobrem exatamente
+   as bordas de 6px usadas pelo handler de resize em Rust. */
+#bar{position:absolute;top:0;left:0;right:0;height:30px;display:flex;
+    align-items:center;background:#2b2b2b;color:#eee;cursor:all-scroll;}
+.edge{position:absolute;pointer-events:auto;}
+#edge-l{left:0;top:30px;bottom:6px;width:6px;cursor:ew-resize;}
+#edge-r{right:0;top:30px;bottom:6px;width:6px;cursor:ew-resize;}
+#edge-b{left:6px;right:6px;bottom:0;height:6px;cursor:ns-resize;}
+#edge-tl{left:0;top:0;width:6px;height:6px;cursor:nwse-resize;}
+#edge-tr{right:0;top:0;width:6px;height:6px;cursor:nesw-resize;}
+#edge-bl{left:0;bottom:0;width:6px;height:6px;cursor:nesw-resize;}
+#edge-br{right:0;bottom:0;width:6px;height:6px;cursor:nwse-resize;}
   /* 02l: largura FIXA do texto; o intervalo até os botões fica em branco e
      é a única parte da barra que o compositor pode esticar no resize. */
   #title{flex:1 1 auto;min-width:0;font-size:13px;
@@ -1041,6 +1052,10 @@ const TITLEBAR_HTML: &str = r#"<!doctype html>
 </style></head>
 <body>
   <div id="border"></div>
+  <div class="edge" id="edge-l"></div><div class="edge" id="edge-r"></div>
+  <div class="edge" id="edge-b"></div>
+  <div class="edge" id="edge-tl"></div><div class="edge" id="edge-tr"></div>
+  <div class="edge" id="edge-bl"></div><div class="edge" id="edge-br"></div>
   <div id="bar" data-aero-interactive>
     <div id="slot"><img id="icon" alt=""><span id="title">janela</span></div>
     <button id="max" title="maximizar">&#9633;</button>

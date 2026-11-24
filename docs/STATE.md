@@ -21,6 +21,26 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [~] **F2-compositor-cursor-shape (2026-11-24) — código/teste/gates verdes; JUIZ VISUAL PENDENTE (§7).**
+       Cartão criado do TEMPLATE e aprovado para execução nesta sessão. Causa confirmada: o global
+       `wp_cursor_shape_v1` e o `SeatHandler::cursor_image` já existiam (`state.rs:255-268`,
+       `seat.rs:49-67`), mas o backend winit escolhia o cursor da janela host só por
+       `cursor_over_interactive` (`winit.rs:435/826`), descartando `state.cursor_image`.
+       Correção: `apply_host_cursor()` em `backend/winit.rs` deriva o `winit::CursorIcon` de
+       `Named` (mesmo tipo `cursor-icon` 1.2.0 reexportado por Smithay e winit), esconde em `Hidden`
+       e mantém o fallback antigo em `Surface`. SSD: `#bar` tem `cursor:all-scroll` e zonas `.edge`
+       transparentes com `ew-resize`/`ns-resize`/cantos no HTML do frame; o WebKitGTK converte CSS
+       em `wp_cursor_shape_v1` (medido: `all-scroll` → shape `move`).
+       **Teste-first:** `examples/cursor_shape_client.rs` (GTK, pede `wait`/`text`) + harness
+       `tests/integration/f2_compositor_cursor_shape.py` escritos antes; baseline no binário do HEAD
+       → `VEREDITO: FALHA` (8 checagens: nenhum `CURSOR_APPLY`), depois **3× `VEREDITO: OK`**: cliente
+       `wait`/`text` recebidos e aplicados, moldura `move` e `ns-resize` recebidas e aplicadas,
+       0 erros de protocolo. `check.sh` EXIT=0 (`gate-close3.log`), clippy bench 0,
+       `--no-default-features` 0, sonda `CURSOR_APPLY` 0 ocorrências no binário sem `bench`
+       (`strings`). Vizinhos `frame_buttons`, `frame_resize_edges`, `f1_csd_gtk`,
+       `headless_render_damage`, `frame_title`, `f2_shell_real_policy_restore` → OK.
+       **Não toquei em F2-shell-real/snap/F7/F1.** Instância do juiz: compositor PID 87384,
+       socket `wayland-aero-f2-cursor-visual`, `gedit` PID 87402 e `foot` PID 87403 no IPC.
 - [~] **F2-shell-real — PARCIAL, DÍVIDA ACEITA (2026-11-24).** Estratégia de opacidade no DOM; juiz
       12ª rodada **reprovada** (1 falha em >5 alternâncias, incluso sem resize). Humano autorizou
       aceitar a dívida: vias de renderização do WebKitGTK esgotadas, sem nova correção. Cartão
@@ -1547,6 +1567,10 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
+- **F2-compositor-cursor-shape: PARADO no juiz visual (§7).** Compositor e shell aplicam a forma
+  pedida (3× harness OK); instância nested deixada aberta (PID 87384, gedit 87402, foot 87403,
+  socket `wayland-aero-f2-cursor-visual`). O agente NÃO encerrou nada. Próximo passo: humano
+  pairar borda/titlebar e dar o "ok"; sem ok o cartão NÃO fecha.
 - **F2-decoration-policy-hotreload FECHADO (§3): juiz visual aprovado na 4ª rodada** (*"ocorreu tudo ok"*). Instância
   final (compositor PID 160313, runtime PID 160333, `gedit` PID 160321, socket
   `wayland-aero-f2-hotreload-visual5`) permanece aberta; quem fecha é o humano. As três rodadas reprovadas e suas
@@ -1683,6 +1707,13 @@ fechados, fora da fila.
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **F2-compositor-cursor-shape — lacunas do instrumento (2026-11-24, não são defeitos de produto):**
+  (1) `CURSOR_APPLY` só é emitido em redraw do winit; um pedido sem atividade depois não gera redraw
+  e o próximo pedido o substitui — o harness agora força um `motion` e mede em 3 s (amostra FALHA
+  da 1ª rodada preservada em `/tmp/opencode/f2-cursor-shape/`); (2) o GDK só envia `set_shape` com a
+  superfície sob o ponteiro — o harness injeta motion no cliente antes de medir; (3) `check.sh`
+  reconstrói o binário sem `bench` e `cargo build --examples` não reconstrói o bin — 3 rodadas
+  falsamente FALHaram até o harness ganhar pré-checagem de `CURSOR_APPLY` no binário.
 - **DÍVIDA ACEITA — F2-shell-real: moldura intermitente ao voltar a `Server` (2026-11-24).**
   Humano testou >5 alternâncias com `opacity:0/1` e uma falhou. Log da 12ª rodada: 28 reloads,
   0 `reason=timeout`, `csd_applied` {foot0:7, foot1:7, gedit:1}, `frame_restored` {foot0:7, foot1:7}
@@ -2470,6 +2501,13 @@ fechados, fora da fila.
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- **F2-compositor-cursor-shape (2026-11-24): JUIZ VISUAL PENDENTE.** Não vale como validação visual
+  o `CURSOR_APPLY` do harness (mede a sonda no redraw, não o cursor na tela). O humano deve, na
+  instância nested aberta (socket `wayland-aero-f2-cursor-visual`): pairar a borda vertical do
+  `gedit` (CSD) → seta dupla horizontal; a borda horizontal → seta dupla vertical; a titlebar do
+  `foot` (SSD) → mão/mover; as bordas de 6 px do `foot` → setas duplas; ao sair, voltar ao padrão.
+  Sem o "ok" do humano o cartão fica aberto. Não medido: udev/tty3 (cursor já tem `cursor_element`,
+  fora do cartão), GPU real, tempos de transição do cursor.
 - **F2-shell-real (2026-11-24): 12ª RODADA REPROVADA; DÍVIDA ACEITA PELO HUMANO.** Humano testou
   >5 alternâncias com opacidade e uma falhou. Log: 28 reloads, 0 timeouts, hide/restore balanceados
   nos dois `foot` (7/7 cada) — sintoma intermitente de pintura, não de lógica. **Veredito final:
@@ -3007,6 +3045,14 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
+- **SESSÃO ATUAL (2026-11-24): F2-compositor-cursor-shape — PARADO no juiz visual.** O que fazia:
+  compositor (`backend/winit.rs::apply_host_cursor`) e moldura SSD (CSS `.edge`) aplicam a forma
+  pedida; harness `f2_compositor_cursor_shape.py` 3× OK, gate verde, vizinhos OK. Estado exato:
+  instância nested aberta, compositor PID 87384, socket `wayland-aero-f2-cursor-visual`, IPC
+  `/tmp/opencode/f2-cursor-visual/ipc.sock`, `gedit` 87402 e `foot` 87403. Reproduzir:
+  `cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-shell --examples && python3 tests/integration/f2_compositor_cursor_shape.py`
+  → `VEREDITO: OK`. Próximo passo imediato: humano pairar bordas/titlebar na instância aberta e dar
+  o "ok"; só então fechar o cartão. Nenhum outro cartão autorizado; sem push.
 - **SESSÃO ENCERRADA (2026-11-24): F2-shell-real PARCIAL — dívida de pintura aceita pelo humano.**
   12 rodadas de juiz; 11ª e 12ª reprovadas, humano decidiu esgotar as vias de renderização e parar.
   Última abordagem mantida: `opacity:0/1` + `pointer-events` (sem `display:none`, sem nudges).

@@ -26,6 +26,7 @@ use smithay::{
         },
         winit::{self, WinitEvent},
     },
+    input::pointer::CursorImageStatus,
     output::{Mode, Output, PhysicalProperties, Scale, Subpixel},
     reexports::{
         calloop::EventLoop,
@@ -42,6 +43,7 @@ use crate::{
         elements::{AeroRenderElements, FrameRenderInput, FrameRenderKind},
         scene::collect_output_elements,
     },
+    state::AeroState,
     CalloopData,
 };
 
@@ -53,6 +55,41 @@ impl super::Backend for WinitBackend {
     }
     fn seat_name(&self) -> String {
         "aeroshell-winit".to_owned()
+    }
+}
+
+/// F2-compositor-cursor-shape: a janela host mostra a forma pedida pelo cliente,
+/// não o resultado do nosso hit-test de layer surface. Smithay e winit reexportam
+/// o MESMO `cursor-icon` (1.2.0 no lockfile), então `Named` passa direto.
+/// `Surface` não tem equivalente no cursor da janela host: cai no fallback antigo
+/// até o caminho de renderização da superfície existir também no nested.
+fn apply_host_cursor(state: &AeroState, window: &smithay::reexports::winit::window::Window) {
+    let (icon, visible) = match &state.cursor_image {
+        CursorImageStatus::Hidden => (CursorIcon::Default, false),
+        CursorImageStatus::Named(icon) => (*icon, true),
+        CursorImageStatus::Surface(_) => (
+            if state.cursor_over_interactive {
+                CursorIcon::Pointer
+            } else {
+                CursorIcon::Default
+            },
+            true,
+        ),
+    };
+    window.set_cursor_visible(visible);
+    window.set_cursor(icon);
+    #[cfg(feature = "bench")]
+    {
+        let source = match &state.cursor_image {
+            CursorImageStatus::Hidden => "hidden",
+            CursorImageStatus::Named(_) => "named",
+            CursorImageStatus::Surface(_) => "surface-fallback",
+        };
+        let t = crate::frame_diagnostics::now_ns();
+        eprintln!(
+            "CURSOR_APPLY t={t} shape={} source={source} visible={visible}",
+            icon.name()
+        );
     }
 }
 
@@ -432,13 +469,7 @@ pub fn init_winit(
                         state.space.refresh();
                         state.popups.cleanup();
                         let _ = data.display_handle.flush_clients();
-                        backend
-                            .window()
-                            .set_cursor(if state.cursor_over_interactive {
-                                CursorIcon::Pointer
-                            } else {
-                                CursorIcon::Default
-                            });
+                        apply_host_cursor(state, backend.window());
                         backend.window().request_redraw();
                         return;
                     }
@@ -823,13 +854,7 @@ pub fn init_winit(
                         let _ = data.display_handle.flush_clients();
                     }
 
-                    backend
-                        .window()
-                        .set_cursor(if state.cursor_over_interactive {
-                            CursorIcon::Pointer
-                        } else {
-                            CursorIcon::Default
-                        });
+                    apply_host_cursor(state, backend.window());
                     backend.window().request_redraw();
                 }
                 WinitEvent::CloseRequested => state.loop_signal.stop(),
