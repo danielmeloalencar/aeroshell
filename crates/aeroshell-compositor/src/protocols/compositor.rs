@@ -240,6 +240,15 @@ impl CompositorHandler for AeroState {
                 }
             }
         }
+        // SPIKE de diagnóstico: amostrar o buffer do frame ANTES do take.
+        #[cfg(feature = "bench")]
+        if self
+            .associated_frames
+            .iter()
+            .any(|(s, _, _, _)| s == surface)
+        {
+            crate::frame_pixel_probe::spike_committed_buffer(surface);
+        }
         // F1f/E: `on_commit_buffer_handler` já chama
         // `viewporter::ensure_viewport_valid` e comita o `ViewportCachedState`
         // double-buffered (Smithay 0.7 viewporter/mod.rs:49-54) — não chamar

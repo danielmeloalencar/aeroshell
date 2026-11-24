@@ -30,6 +30,72 @@ static NEXT_FRAME: AtomicUsize = AtomicUsize::new(0);
 // o primeiro frame é todo clear e não serve de medição.
 /// Chamado DEPOIS de `tracker.render_output`, com o renderer e o framebuffer
 /// ainda vivos. Não altera a cena: `copy_framebuffer` é não destrutivo.
+/// SPIKE SOMENTE DE DIAGNÓSTICO: lê UM pixel do buffer **commitado pelo frame**
+/// (antes de `on_commit_buffer_handler` fazer o take). Não remove o arquivo
+/// gatilho — quem remove é o `capture()` da framebuffer de saída.
+#[cfg(feature = "bench")]
+pub fn spike_committed_buffer(
+    surface: &smithay::reexports::wayland_server::protocol::wl_surface::WlSurface,
+) {
+    use smithay::wayland::{
+        compositor::{with_states, SurfaceAttributes},
+        shm::with_buffer_contents,
+    };
+    let Some(trigger) = std::env::var_os("AERO_PIXEL_SPIKE_TRIGGER") else {
+        return;
+    };
+    let path = std::path::Path::new(&trigger);
+    let Ok(contents) = std::fs::read_to_string(path) else {
+        return;
+    };
+    let mut words = contents.split_whitespace();
+    let px = words
+        .next()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(0);
+    let py = words
+        .next()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(0);
+    with_states(surface, |states| {
+        let mut attrs = states.cached_state.get::<SurfaceAttributes>();
+        let current = attrs.current();
+        if let Some(smithay::wayland::compositor::BufferAssignment::NewBuffer(buffer)) =
+            &current.buffer
+        {
+            let dims =
+                smithay::backend::renderer::buffer_dimensions(buffer).map(|size| (size.w, size.h));
+            let _ = with_buffer_contents(buffer, |ptr, len, data| {
+                // SAFETY: `with_buffer_contents` garante que `ptr..ptr+len` é o
+                // mapeamento válido do pool enquanto o closure roda (shm/mod.rs:241).
+                let bytes = unsafe { std::slice::from_raw_parts(ptr, len) };
+                let index = data.offset as usize + py * data.stride as usize + px * 4;
+                if index + 3 < bytes.len() {
+                    let (b, g, r, a) = (
+                        bytes[index],
+                        bytes[index + 1],
+                        bytes[index + 2],
+                        bytes[index + 3],
+                    );
+                    let word = (u32::from(a) << 24)
+                        | (u32::from(r) << 16)
+                        | (u32::from(g) << 8)
+                        | u32::from(b);
+                    eprintln!(
+                        "SPIKE_BUFFER: buffer={:?} pixel({},{})=0x{word:08X} rgba=({r},{g},{b},{a}) t={}",
+                        dims, px, py, crate::frame_diagnostics::now_ns()
+                    );
+                }
+            });
+        } else {
+            eprintln!(
+                "SPIKE_BUFFER: frame commitou SEM buffer (0x0) t={}",
+                crate::frame_diagnostics::now_ns()
+            );
+        }
+    });
+}
+
 pub fn capture<R: ExportMem>(
     renderer: &mut R,
     framebuffer: &R::Framebuffer<'_>,
@@ -61,6 +127,44 @@ pub fn capture<R: ExportMem>(
             return;
         }
     };
+
+    // SPIKE SOMENTE DE DIAGNÓSTICO (bench + arquivo gatilho). O harness cria o
+    // arquivo no instante do `frame_restored`; aqui só lemos UM pixel do
+    // framebuffer já mapeado. Não muda cena, política nem pintura.
+    #[cfg(feature = "bench")]
+    if let Some(trigger) = std::env::var_os("AERO_PIXEL_SPIKE_OUTPUT_TRIGGER") {
+        let path = std::path::Path::new(&trigger);
+        if let Ok(contents) = std::fs::read_to_string(path) {
+            let _ = std::fs::remove_file(path);
+            let mut words = contents.split_whitespace();
+            let px = words
+                .next()
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(0);
+            let py = words
+                .next()
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(0);
+            let index = (py * size.w as usize + px) * 4;
+            if index + 3 < pixels.len() {
+                let (b, g, r, a) = (
+                    pixels[index],
+                    pixels[index + 1],
+                    pixels[index + 2],
+                    pixels[index + 3],
+                );
+                let word = (u32::from(a) << 24)
+                    | (u32::from(r) << 16)
+                    | (u32::from(g) << 8)
+                    | u32::from(b);
+                eprintln!(
+                    "SPIKE: framebuffer={}x{} pixel({},{})=0x{word:08X} rgba=({r},{g},{b},{a}) t={}",
+                    size.w, size.h, px, py,
+                    crate::frame_diagnostics::now_ns()
+                );
+            }
+        }
+    }
 
     let w = size.w as usize;
     let h = size.h as usize;

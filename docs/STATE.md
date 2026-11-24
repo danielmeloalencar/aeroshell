@@ -1659,6 +1659,17 @@ fechados, fora da fila.
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **SPIKE DE PINTURA (2026-11-24) — dado conclusivo, sem correção.** Usando o
+  `frame_pixel_probe.rs` existente (bench + gatilho por arquivo) logo após `FRAMEWEB: frame_restored`:
+  `SPIKE_BUFFER: frame commitou SEM buffer (0x0)` e
+  `FRAME_BUFFER_COMMIT buffer=None expected=Some((1292, 836)) ok=false` no mesmo instante; o pixel
+  da borda no framebuffer de saída é `0xFF141419` = rgba(20,20,25,255) (clear, alpha 255), não
+  transparente e não a cor da moldura. Ou seja: **o WebViewGTK entrega um commit sem buffer após a
+  mudança de `display`**, o compositor desanexa o buffer e a moldura fica invisível mas interativa.
+  Harness `tests/integration/f2_shell_real_paint_spike.py`, amostra em
+  `/tmp/opencode/f2-shell-real/spike5.log`. **USUÁRIO AUTORIZOU SOMENTE DIAGNÓSTICO: não aplicar
+  queue_draw/invalidate/nenhuma correção de paint até nova decisão.** Gate verde, harnesses atuais
+  `VEREDITO: OK`.
 - **F2-shell-real — defeito de pintura da moldura NÃO resolvido (2026-11-24, 9 rodadas).** Sintoma:
   ao voltar a `Server`, uma janela fica com a moldura invisível mas interativa (move/resize nos
   lugares onde a barra/borda deveriam estar). Descartados com evidência: falta de `aeroShowFrame`
@@ -2929,14 +2940,12 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **SESSÃO ATUAL (2026-11-24): F2-shell-real — JUIZ VISUAL 9ª RODADA REPROVADO; PARE.** Todas as
-  correções mensuráveis estão mantidas e provadas (request_frame_recompute, configure ao trocar
-  insets, policy-reload em todas as janelas, nudge via requestAnimationFrame). A 9ª rodada provou
-  que política/DOM/configure/nudge acontecem e o pixel ainda não aparece — causa não identificada
-  (§6). Gate `check.sh` EXIT=0, clippy bench 0, harnesses `VEREDITO: OK`. **Próximo passo: decisão
-  do humano** — ou spike de pintura com reprodutor objetivo, ou aceitar o cartão como parcial e
-  descrever a dívida, ou seguir outro objetivo. Nenhuma nova correção sem medição. Instância
-  visual9 deixada aberta; quem fecha é o humano. snap/F7/F1 intocados; sem push.
+- **SESSÃO ATUAL (2026-11-24): F2-shell-real — SPIKE DE DIAGNÓSTICO CONCLUÍDO; SEM CORREÇÃO.**
+  Causa isolada em §6: commitFrame sem buffer após `frame_restored`. Gate `check.sh` EXIT=0,
+  `cargo fmt` aplicado, harnesses atuais `VEREDITO: OK`. **Próximo passo: decisão do humano** —
+  autorizar (ou não) uma correção no caminho buffer/commit do shell/WebKit, com o mesmo spike como
+  prova antes/depois. Nenhuma correção aplicada nesta sessão. Instância visual9 fechada pelo
+  humano. snap/F7/F1 intocados; sem push.
   Reproduzir: `cargo build -p aeroshell-compositor --features bench && cargo build --workspace --examples && cargo build -p aeroshell-shell && bun build packages/panel/src/index.tsx --target=browser --outfile=packages/panel/dist/app.js && bun run generate:types && python3 tests/integration/f2_shell_real.py`
   → `VEREDITO: OK` 3× (`finalC{1,2,3}.log`); baseline no HEAD `VEREDITO: FALHA`. Unitário 28/28,
   gate `gate-close.log` EXIT=0. **Próximo passo imediato:** humano olhar o painel da instância aberta
