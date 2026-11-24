@@ -145,14 +145,24 @@ try:
         failures.append("sem geometria da janela no IPC (SSD)")
     else:
         x, y, w, h = geo
-        send(f"motion {x + w // 2} {y - 15}")
-        time.sleep(0.5)
-        send(f"motion {x + w // 2} {y + h + 3}")
-        time.sleep(0.5)
         # WebKit traduz `cursor:all-scroll` do CSS para o shape `move` do protocolo.
-        for shape in ("move", "ns-resize"):
-            asked = bool(re.search(rf"CURSOR_SHAPE t=\d+ source=named shape={shape}\b", log()))
-            applied = bool(re.search(rf"CURSOR_APPLY t=\d+ shape={shape}\b", log()))
+        # Cada ponto é medido com janela de 3 s e motion repetido: sem redraw o
+        # CURSOR_APPLY não é emitido (mesma lacuna da parte do cliente).
+        for shape, point in (
+            ("move", (x + w // 2, y - 15)),
+            ("ns-resize", (x + w // 2, y + h + 3)),
+        ):
+            asked = False
+            applied = False
+            deadline = time.time() + 3.0
+            while time.time() < deadline:
+                send(f"motion {point[0]} {point[1]}")
+                time.sleep(0.2)
+                text = log()
+                asked |= bool(re.search(rf"CURSOR_SHAPE t=\d+ source=named shape={shape}\b", text))
+                if re.search(rf"CURSOR_APPLY t=\d+ shape={shape}\b", text):
+                    applied = True
+                    break
             print(f"ssd shape={shape} pedido_pelo_shell={asked} aplicado={applied}")
             if not asked:
                 failures.append(f"shell não pediu {shape} na moldura")
