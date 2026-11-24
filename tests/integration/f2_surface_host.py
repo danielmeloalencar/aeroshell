@@ -179,6 +179,17 @@ def surface_id(pattern):
     return found[-1] if found else None
 
 
+def center_pixel():
+    path = PIXELS / "full_snapshot.bgra"
+    if not path.exists():
+        return None
+    data = path.read_bytes()
+    x, y = OUTPUT[0] // 2, OUTPUT[1] // 2
+    i = (y * OUTPUT[0] + x) * 4
+    b, g, r, a = data[i:i + 4]
+    return r, g, b, a
+
+
 def click(x, y):
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
         sock.connect(str(INPUT))
@@ -259,9 +270,9 @@ def main():
             if early and early[0] > 200:
                 break
             time.sleep(0.2)
-        (PIXELS / "full_before_foot.bgra").write_bytes(
-            (PIXELS / "full_snapshot.bgra").read_bytes()
-        )
+        snapshot = PIXELS / "full_snapshot.bgra"
+        if snapshot.exists():
+            (PIXELS / "full_before_foot.bgra").write_bytes(snapshot.read_bytes())
         print(f"=== pixels desktop isolado: {early} ===")
         checks["desktop vermelho aparece nos pixels"] = bool(early and early[0] > 200)
 
@@ -274,6 +285,21 @@ def main():
         )
         checks["host cria o overlay"] = wait_for(
             lambda: "SURFACE_HOST criado id=over kind=overlay" in clean()
+        )
+
+        # O humano viu só a borda verde e branco no centro: o teste antigo media
+        # o desktop antes do overlay e não media o centro depois dele.
+        center = None
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            pixel_counts()
+            center = center_pixel()
+            if center and center[0] > 150 and center[1] < 90:
+                break
+            time.sleep(0.2)
+        print(f"=== pixel central depois do overlay: {center} ===")
+        checks["centro do overlay é transparente (mostra o desktop)"] = bool(
+            center and center[0] > 150 and center[1] < 90
         )
 
         foot_env = {**env, "WAYLAND_DISPLAY": SOCKET}

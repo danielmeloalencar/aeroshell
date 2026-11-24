@@ -218,6 +218,9 @@ fn create_surface(app: &gtk4::Application, spec: &serde_json::Value) -> Option<S
 
 /// Instala o consumidor do stream PUSH e roda o host até o app sair.
 pub fn run(app: &gtk4::Application) {
+    // Sem isto o GTK pinta a janela de branco no winit, por cima do WebView
+    // transparente (o mesmo CSS provider que o painel e o frame instalam).
+    crate::host::install_transparent_css();
     let Some(path) = event_socket_path() else {
         tracing::warn!("AERO_WINDOW_IPC_SOCK ausente; host de superfícies desligado");
         return;
