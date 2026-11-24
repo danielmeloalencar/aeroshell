@@ -1,7 +1,11 @@
-# Tarefa F2-compositor-cursor-shape — RASCUNHO (aguarda "ok" do humano)
+# Tarefa F2-compositor-cursor-shape — FECHADO PELO JUIZ VISUAL (2026-11-24: "ok. aprovado")
 
 > Cartão de tarefa: um agente deve conseguir executá-la lendo só AGENTS.md, STATE.md, RUNBOOK.md
 > e este arquivo. Uma tarefa por sessão. Se o objetivo mudar no meio, PARE e pergunte.
+
+> **Veredito (2026-11-24):** humano operou a instância `wayland-aero-f2-cursor-visual` (gedit CSD
+> e foot SSD, bordas e titlebar) e respondeu *"ok. aprovado"*. Cartão fechado; gate final
+> `bash scripts/check.sh` EXIT=0, harness `f2_compositor_cursor_shape.py` 3× OK.
 
 ## Objetivo (uma frase, verificável)
 O compositor aplica a forma de cursor pedida pelo cliente (`wp_cursor_shape_v1` / `wl_pointer.set_cursor`)
