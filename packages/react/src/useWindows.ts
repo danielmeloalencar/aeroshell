@@ -3,6 +3,7 @@
 
 import { useSyncExternalStore } from "react";
 
+import type { App } from "../../sdk/src/generated/App";
 import type { WindowInfo } from "../../sdk/src/generated/WindowInfo";
 import type { PanelIndicators, WindowStore, WorkspacesState } from "../../sdk/src/store";
 
@@ -21,6 +22,14 @@ export function useIndicators(store: WindowStore): PanelIndicators {
     (listener) => store.subscribeIndicators(listener),
     () => store.getIndicators(),
     () => store.getIndicators(),
+  );
+}
+
+export function useApps(store: WindowStore): App[] {
+  return useSyncExternalStore(
+    (listener) => store.subscribeApps(listener),
+    () => store.getApps(),
+    () => store.getApps(),
   );
 }
 

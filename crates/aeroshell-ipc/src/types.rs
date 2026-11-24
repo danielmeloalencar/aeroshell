@@ -93,6 +93,19 @@ pub struct DecorationPolicyConfig {
     pub default: DecorationPolicy,
 }
 
+/// Aplicativo instalado descoberto a partir de um arquivo `.desktop`.
+#[cfg_attr(feature = "export-bindings", derive(TS))]
+#[cfg_attr(feature = "export-bindings", ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct App {
+    // O id é o nome do arquivo sem `.desktop` e a chave do comando `launch`.
+    pub id: String,
+    pub name: String,
+    pub icon: String,
+    pub exec: String,
+    pub categories: Vec<String>,
+}
+
 /// Evento PUSH do compositor para shell/SDK (substitui o polling do S4).
 /// A serialização na wire é o enum em forma de tagged object do ts-rs, ex.:
 /// `{"Title":{"id":0,"title":"foot"}}`.
@@ -145,6 +158,9 @@ pub enum AeroEvent {
     WindowMovedToWorkspace {
         window_id: u32,
         workspace_id: u32,
+    },
+    AppListUpdated {
+        apps: Vec<App>,
     },
     /// Pergunta ao runtime Bun como decorar esta janela.
     DecorationRequest {

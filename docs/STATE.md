@@ -4,14 +4,15 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-24 · **F2-workspaces FECHADO PELO JUIZ VISUAL ("aprovado")** · **F2-cursor-shape-top-edges FECHADO PELO JUIZ VISUAL ("aprovado")** · **F2-compositor-cursor-shape FECHADO PELO JUIZ VISUAL ("ok. aprovado")** · **F1 FECHADA — base de compositor completa para F2 (protocolos provados; snap é cartão NOSSO de sessão/compat `F7-compat-snap`, Nautilus/Mutter e Ozone seguem como estavam)** · **F1-presentation-time FECHADO (juiz visual N/A)** · **F1-xdg-toplevel-states FECHADO PELO JUIZ VISUAL ("aprovado")** · **F1-subsurfaces FECHADO PELO JUIZ VISUAL (2026-11-23: "Funcionou tudo")** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · **F1i+ FECHADA PELO JUIZ VISUAL (digitação normal; só aviso de toplevel-icon, fora de escopo)** · **título real na titlebar FECHADO PELO JUIZ VISUAL ("ok")** · **F1-toplevel-icon FECHADO PELO JUIZ VISUAL ("vi o icone perfeitamente")** · **F1-csd-gtk-move-resize FECHADO PELO JUIZ VISUAL ("ok": gedit, gnome-disks e Calculadora OK)** · **F1-csd-sem-flash FECHADO PELO JUIZ VISUAL ("aprovado")** · cursor invisível no udev segue em cartão separado · 02q REABERTA E FECHADA PELO JUIZ em 2026-11-22 (sem adiamento, spike 12×36 eliminado; harness de 300 ms segue como limitação de VM registrada) · **02r FECHADA PELO JUIZ (nested + tty3) e 02s FECHADA PELO JUIZ (duas instâncias no mesmo D-Bus, "ok aprovado")**
+Última atualização: 2026-11-24 · **F2-launcher FECHADO PELO JUIZ VISUAL ("ok aprovado")** · **F2-workspaces FECHADO PELO JUIZ VISUAL ("aprovado")** · **F2-cursor-shape-top-edges FECHADO PELO JUIZ VISUAL ("aprovado")** · **F2-compositor-cursor-shape FECHADO PELO JUIZ VISUAL ("ok. aprovado")** · **F1 FECHADA — base de compositor completa para F2 (protocolos provados; snap é cartão NOSSO de sessão/compat `F7-compat-snap`, Nautilus/Mutter e Ozone seguem como estavam)** · **F1-presentation-time FECHADO (juiz visual N/A)** · **F1-xdg-toplevel-states FECHADO PELO JUIZ VISUAL ("aprovado")** · **F1-subsurfaces FECHADO PELO JUIZ VISUAL (2026-11-23: "Funcionou tudo")** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · **F1i+ FECHADA PELO JUIZ VISUAL (digitação normal; só aviso de toplevel-icon, fora de escopo)** · **título real na titlebar FECHADO PELO JUIZ VISUAL ("ok")** · **F1-toplevel-icon FECHADO PELO JUIZ VISUAL ("vi o icone perfeitamente")** · **F1-csd-gtk-move-resize FECHADO PELO JUIZ VISUAL ("ok": gedit, gnome-disks e Calculadora OK)** · **F1-csd-sem-flash FECHADO PELO JUIZ VISUAL ("aprovado")** · cursor invisível no udev segue em cartão separado · 02q REABERTA E FECHADA PELO JUIZ em 2026-11-22 (sem adiamento, spike 12×36 eliminado; harness de 300 ms segue como limitação de VM registrada) · **02r FECHADA PELO JUIZ (nested + tty3) e 02s FECHADA PELO JUIZ (duas instâncias no mesmo D-Bus, "ok aprovado")**
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
 lock, login) é TSX renderizado por WebKitGTK; runtime de política em Bun. Dev em nested (winit).
  
 ## 2. Objetivo atual (F1 autorizada)
-**Fase atual: F2 ABERTA — cartão `F2-workspaces` FECHADO PELO JUIZ VISUAL** (F1 FECHADA em `585fa6f`; ver §3/§9). F0/fatia vertical FECHADA pelo humano em 2026-11-21: `foot` com
+**Fase atual: F2 ABERTA — cartão `F2-launcher` FECHADO PELO JUIZ VISUAL.**
+**F2-workspaces FECHADO PELO JUIZ VISUAL** (F1 FECHADA em `585fa6f`; ver §3/§9). F0/fatia vertical FECHADA pelo humano em 2026-11-21: `foot` com
 decoração HTML funcional e painel React/TSX; fechamento formal em `docs/f0-relatorio-go-no-go.md` (quadro
 S1–S5, ratificação registrada dos ADRs, S4→F2/F9 e S5→F5/F6 deferidos com justificativa).
 F1 em andamento por cartões pequenos: F1a, F1b e F1c FECHADAS (juiz visual OK nas três; F1c em 2026-11-21);
@@ -21,6 +22,25 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **F2-launcher (2026-11-24) — FECHADO PELO JUIZ VISUAL: humano respondeu *"ok aprovado"*.**
+       Cartão `docs/tasks/F2-launcher.md` aprovado com "ok". Sem XML/ADR/dependência nova.
+       Compositor lê `.desktop` do sistema/usuário (`apps.rs`), publica `AppListUpdated` no replay do stream e
+       aceita `launch <app_id> [workspace_id]`: valida destino, usa `spawn_public_client`, ativa o workspace e
+       foca janela existente por desktop ID/último segmento/StartupWMClass/basename do executável, sem nova instância.
+       SDK tem cache reativo, `listApps/searchApps/launchApp`; fuzzy por subsequência cobre nome/categorias.
+       Painel tem launcher inline (não fullscreen), input real, lista ícone+nome, vazio e clique; `aero://icon/`
+       resolve SVG/PNG pelo `IconTheme` já existente. Layers OnDemand/Exclusive agora recebem foco de teclado no clique.
+       **Teste-first:** Rust baseline `unresolved imports`; Bun baseline 0/2 (`parseEvent=null`, `launchApp` ausente);
+       integração baseline `VEREDITO: FALHA` (`AppListUpdated`/SDK/launch/painel). Busca digitada também foi vista
+       falhando antes da injeção XKB do instrumento (`/tmp/opencode/aero-f2-launcher-jxge32o4`).
+       Depois: 3× `VEREDITO: OK` (`fa3eajik`, `/tmp/opencode/f2-launcher-final/run{2,3}.log`): 2 apps, `ged`,
+       categoria, inexistente vazio, workspace destino/ativo, foco sem duplicar, cliques reais e foco da layer.
+       `check.sh` EXIT=0 (39 Rust + 34 Bun), clippy bench `-D warnings` 0, `--no-default-features` 0
+       (só avisos antigos de cursor). Vizinhos: 11 OK na 1ª rodada; `react_panel` falhou 1× sem nova z-order
+       apesar do foco correto e passou na repetição (amostras preservadas, §6).
+        **Veredito visual:** humano operou a instância `wayland-aero-f2-launcher-visual` (compositor PID 21982,
+        painel PID 22012), viu launcher/ícones/busca/lançamento no workspace e aprovou (*"ok aprovado"*). A aplicação
+        foi deixada aberta; quem fecha é o humano. **CARTÃO FECHADO.** Não toquei snap/F7/F1.
 - [x] **F2-workspaces (2026-11-24) — FECHADO PELO JUIZ VISUAL: humano respondeu *"aprovado"*.**
        Cartão `docs/tasks/F2-workspaces.md` versionado do texto aprovado. Sem XML/ADR/dependência nova.
        Compositor: `WorkspaceManager` puro (`workspaces.rs`) mantém lista ordenada, workspace ativo e
@@ -1616,6 +1636,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
+- **F2-launcher FECHADO (§3): humano aprovou o juiz visual ("ok aprovado").**
+  A instância `wayland-aero-f2-launcher-visual` foi deixada aberta; quem fecha é o humano. **PARAR.**
 - **F2-workspaces FECHADO (§3): humano aprovou o juiz visual ("aprovado").**
   A instância `wayland-aero-f2-workspaces-visual` foi deixada aberta; quem fecha é o humano.
   **PARAR: nenhum próximo cartão autorizado; snap/F7 segue pendente de aprovação explícita.**
@@ -1710,6 +1732,7 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
+**F2-launcher FECHADO PELO JUIZ: PARAR — nenhum próximo cartão autorizado.**
 **Hot-reload/Juiz F2-workspaces aprovado: PARAR — nenhum próximo cartão autorizado.** `F7-compat-snap.md`,
 drag-and-drop entre workspaces e tiling continuam sem autorização explícita; Snap/F7/F1 fora de escopo.
 Nenhuma próxima fase foi aberta.
@@ -1764,6 +1787,11 @@ fechados, fora da fila.
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **F2-launcher — amostra vizinha preservada (2026-11-24):** `react_panel.py` falhou 1× porque a string de
+  z-order não mudou, embora o log mostrasse foco na janela correta; passou 2/3 janelas na repetição com o mesmo
+  binário (`/tmp/opencode/f2-launcher-neighbors/react_panel{,-repeat}.log`). Flutuação já conhecida, não ocultada.
+- **F2-launcher — identidade app↔janela é heurística:** Wayland não vincula `.desktop` ao toplevel; correspondência
+  por ID/StartupWMClass/basename pode ser ambígua entre launchers do mesmo executável. Não usar PID como privilégio.
 - **F2-workspaces — `frame_window_id.py` pré-existente (2026-11-24):** falhou 2× em `hit_test=None` no ✕ da janela 1;
   A/B no HEAD sem minhas mudanças (`/tmp/opencode/aero-head-ab`, `git archive HEAD`, sem tocar no repo) falhou
   exatamente igual (`/tmp/opencode/f2-ws-ab-head-frame_window_id2.log`). Não é regressão do filtro de workspaces.
@@ -2572,6 +2600,10 @@ fechados, fora da fila.
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- **F2-launcher (2026-11-24): JUIZ VISUAL APROVADO; partes NÃO medidas.** O humano viu apps reais, ícones,
+  busca e lançamento/foco no workspace; o pré-filtro usou fixtures `foot` e mediu stream/SDK/DOM/foco/teclado.
+  Não medido: pixels dos ícones por instrumento, udev/tty3, GPU real, hot-reload de diretórios `.desktop`
+  (não implementado), aplicativos Terminal/DBusActivatable e todos os field codes possíveis.
 - **F2-workspaces (2026-11-24): juiz visual APROVADO; partes NÃO medidas.** Humano operou
   `wayland-aero-f2-workspaces-visual` com WS1/`foot 0` e WS2/`foot 1`, alternou pelas abas e respondeu
   *"aprovado"* (§3). O pré-filtro mediu estado/eventos/sondas e cliques, mas não mediu pixels nem temporização
@@ -3120,6 +3152,14 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
+- **SESSÃO ENCERRADA (2026-11-24): F2-launcher FECHADO PELO JUIZ VISUAL ("ok aprovado").**
+  `.desktop` + `AppListUpdated` + `launch` no compositor, cache/fuzzy no SDK e launcher inline React com ícones;
+  layer OnDemand recebe teclado. Baselines FALHA; harness completo 3× OK, 39 Rust/34 Bun, `check.sh` 0,
+  clippy bench 0 e no-default 0. Reproduzir (bench por último):
+  `bun build packages/panel/src/index.tsx --target=browser --outfile=packages/panel/dist/app.js && cargo build --workspace --examples && cargo build -p aeroshell-compositor --features bench && cargo build -p aeroshell-shell && python3 tests/integration/f2_launcher.py`.
+  Vizinhos OK; `react_panel` teve 1 falha + 1 OK preservadas (§6). Humano aprovou a instância
+  `wayland-aero-f2-launcher-visual` (PIDs 21982/22012), deixada aberta; agente não a encerrou. **NENHUM
+  próximo passo autorizado; PARAR.** Sem push; snap/F7/F1 intocados.
 - **SESSÃO ENCERRADA (2026-11-24): F2-workspaces FECHADO PELO JUIZ VISUAL ("aprovado").**
   Workspaces no compositor, eventos no stream, SDK Bun tipado e painel React; janelas inativas continuam no Space
   e são filtradas na cena e no hit-test. Baseline FALHA; 3× `VEREDITO: OK` nos dois harnesses, 32/32 Bun,

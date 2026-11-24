@@ -1,6 +1,7 @@
 //! aeroshell-compositor — dono do estado e do input.
 
 mod aero_frame_protocol;
+mod apps;
 mod backend;
 mod cli;
 // 02j: os testes puros precisam do módulo sem `bench`; o binário de produção
@@ -153,6 +154,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                         Some("release") => data.state.inject_button(false),
                         _ => {}
                     },
+                    Some("text") => {
+                        let text = msg.strip_prefix("text ").unwrap_or("");
+                        data.state.inject_text(text);
+                    }
                     _ => {}
                 }
             })?;

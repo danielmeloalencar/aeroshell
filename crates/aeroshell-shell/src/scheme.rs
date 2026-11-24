@@ -1,6 +1,8 @@
 //! Esquema `aero://`. Serve o reset compartilhado e os bundles das superfícies.
 //! Navegação externa é bloqueada: apenas estas rotas existem.
 
+use gtk4::gio::prelude::FileExt;
+use gtk4::{IconLookupFlags, IconTheme, TextDirection};
 use webkit6::gio::MemoryInputStream;
 use webkit6::glib::Bytes;
 use webkit6::{URISchemeRequest, WebContext};
@@ -20,8 +22,27 @@ const REACT_PANEL_HTML: &str = r##"
     <style>
       #root { height: 100%; display: flex; align-items: center; padding: 0 8px;
         color: #e8f6ff; font: 14px sans-serif; }
-      .aero-panel { display: flex; align-items: center; gap: 8px; width: 100%; }
+      .aero-panel { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; }
       .aero-workspaces { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+      .aero-launcher-toggle { flex: 0 0 auto; height: 24px; padding: 0 8px;
+        border: 1px solid #4a6b8a; border-radius: 4px; background: #23364a;
+        color: #e8f6ff; font: 12px sans-serif; cursor: pointer; }
+      .aero-launcher-toggle:hover { border-color: #9fd0ff; }
+      .aero-launcher { display: flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; }
+      .aero-launcher-search { flex: 0 0 150px; width: 150px; height: 24px; padding: 0 7px;
+        border: 1px solid #4a6b8a; border-radius: 4px; outline: none;
+        background: #182635; color: #e8f6ff; font: 12px sans-serif; user-select: text; }
+      .aero-launcher-search:focus { border-color: #9fd0ff; }
+      .aero-apps { display: flex; align-items: center; gap: 5px; min-width: 0;
+        overflow-x: auto; overflow-y: hidden; }
+      .aero-app-row { display: flex; align-items: center; gap: 5px; flex: 0 0 auto;
+        max-width: 160px; height: 26px; padding: 0 7px; border: 1px solid #4a6b8a;
+        border-radius: 4px; background: #23364a; color: #e8f6ff; font: 12px sans-serif;
+        cursor: pointer; }
+      .aero-app-row:hover { background: #34618a; border-color: #9fd0ff; }
+      .aero-app-icon { width: 16px; height: 16px; flex: 0 0 16px; }
+      .aero-app-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .aero-apps-empty { color: #b8c9d9; font: 12px sans-serif; white-space: nowrap; }
       .aero-workspace { width: 88px; height: 20px; padding: 0 3px; border: 1px solid #4a6b8a;
         border-radius: 4px; background: #23364a; cursor: pointer; }
       .aero-workspace[data-active="1"] { background: #34618a; border-color: #9fd0ff; }
@@ -118,12 +139,73 @@ const PANEL_HTML: &str = r##"
 </html>
 "##;
 
+fn percent_decode(value: &str) -> Option<String> {
+    let bytes = value.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            let hex = bytes.get(index + 1..index + 3)?;
+            let text = std::str::from_utf8(hex).ok()?;
+            out.push(u8::from_str_radix(text, 16).ok()?);
+            index += 3;
+        } else {
+            out.push(bytes[index]);
+            index += 1;
+        }
+    }
+    String::from_utf8(out).ok()
+}
+
+/// Resolve o campo Icon do `.desktop` para um recurso local do tema. O painel
+/// continua restrito a `aero://`; somente SVG/PNG são servidos à WebView.
+fn themed_icon(uri: &str) -> Option<(Vec<u8>, &'static str)> {
+    let name = percent_decode(uri.strip_prefix("aero://icon/")?)?;
+    if name.is_empty() {
+        return None;
+    }
+    let path = if name.starts_with('/') {
+        std::path::PathBuf::from(name)
+    } else {
+        let display = gtk4::gdk::Display::default()?;
+        let theme = IconTheme::for_display(&display);
+        theme
+            .lookup_icon(
+                &name,
+                &[],
+                20,
+                1,
+                TextDirection::Ltr,
+                IconLookupFlags::empty(),
+            )
+            .file()?
+            .path()?
+    };
+    let mime = match path.extension().and_then(|ext| ext.to_str()) {
+        Some("svg") => "image/svg+xml",
+        Some("png") => "image/png",
+        _ => return None,
+    };
+    Some((std::fs::read(path).ok()?, mime))
+}
+
 pub fn install(context: &WebContext) {
     context.register_uri_scheme("aero", |request: &URISchemeRequest| {
         // `aero://panel/index.html` => host="panel", path="/index.html";
         // casar pela URI completa evita confundir host e path.
         let uri = request.uri().map(|u| u.to_string()).unwrap_or_default();
         tracing::info!(%uri, "aero:// request");
+        if uri.starts_with("aero://icon/") {
+            if let Some((bytes, mime)) = themed_icon(&uri) {
+                let size = bytes.len() as i64;
+                let stream = MemoryInputStream::from_bytes(&Bytes::from_owned(bytes));
+                request.finish(&stream, size, Some(mime));
+            } else {
+                let stream = MemoryInputStream::new();
+                request.finish(&stream, 0, Some("text/plain"));
+            }
+            return;
+        }
         let legacy = uri.contains("legacy");
         if uri.contains("app.js") {
             let stream = MemoryInputStream::from_bytes(&Bytes::from_static(PANEL_JS));

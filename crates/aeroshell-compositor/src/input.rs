@@ -102,6 +102,58 @@ impl AeroState {
         pointer.frame(self);
     }
 
+    /// Texto sintético para o harness do launcher. Usa o mesmo KeyboardHandle
+    /// do input físico; keycodes XKB = evdev + 8 (convenção já usada no udev).
+    pub fn inject_text(&mut self, text: &str) {
+        for ch in text.chars() {
+            let evdev = match ch {
+                'a' => 30,
+                'b' => 48,
+                'c' => 46,
+                'd' => 32,
+                'e' => 18,
+                'f' => 33,
+                'g' => 34,
+                'h' => 35,
+                'i' => 23,
+                'j' => 36,
+                'k' => 37,
+                'l' => 38,
+                'm' => 50,
+                'n' => 49,
+                'o' => 24,
+                'p' => 25,
+                'q' => 16,
+                'r' => 19,
+                's' => 31,
+                't' => 20,
+                'u' => 22,
+                'v' => 47,
+                'w' => 17,
+                'x' => 45,
+                'y' => 21,
+                'z' => 44,
+                ' ' => 57,
+                '\u{8}' => 14, // BackSpace: usado para limpar a query no harness.
+                _ => continue,
+            };
+            let keycode = smithay::input::keyboard::Keycode::new(evdev + 8);
+            for state in [
+                smithay::backend::input::KeyState::Pressed,
+                smithay::backend::input::KeyState::Released,
+            ] {
+                self.seat.get_keyboard().unwrap().input::<(), _>(
+                    self,
+                    keycode,
+                    state,
+                    SERIAL_COUNTER.next_serial(),
+                    0,
+                    |_, _, _| FilterResult::Forward,
+                );
+            }
+        }
+    }
+
     /// Foco de teclado no clique: vai para a janela do space sob o ponteiro, ou
     /// None. O frame NUNCA recebe foco — não é janela do space e sua layer surface
     /// tem keyboard_interactivity None. Compartilhado pelo caminho real e sintético.
@@ -116,6 +168,19 @@ impl AeroState {
         // ele ignora a titlebar (layer surface), então um clique na barra da
         // janela da frente sobre o conteúdo da de trás elevaria a de trás.
         let under = self.surface_under(pointer.current_location());
+        // Painéis que declararam keyboard_interactivity OnDemand/Exclusive são
+        // clientes de texto reais (launcher, renomear workspace). Frames não
+        // entram em layer_surfaces e continuam sem receber foco.
+        let layer_focus = under.as_ref().and_then(|(surface, _)| {
+            self.layer_surfaces
+                .iter()
+                .any(|layer| layer.wl_surface() == surface && layer.can_receive_keyboard_focus())
+                .then(|| surface.clone())
+        });
+        if let Some(surface) = layer_focus {
+            keyboard.set_focus(self, Some(surface), serial);
+            return;
+        }
         let window = under.as_ref().and_then(|(surface, _)| {
             // Frame -> janela dona pelo window_id associado.
             if let Some((_, _, window_id, _)) = self

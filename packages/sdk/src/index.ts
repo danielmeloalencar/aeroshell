@@ -2,6 +2,7 @@
 //! Os tipos de estado vêm de `./generated` (gerados por ts-rs a partir do Rust).
 
 import type { AeroEvent } from "./generated/AeroEvent";
+import type { App } from "./generated/App";
 import type { Snapshot } from "./generated/Snapshot";
 import type { WindowInfo } from "./generated/WindowInfo";
 import type { Workspace } from "./generated/Workspace";
@@ -46,7 +47,8 @@ export function parseWorkspaces(lines: string[]): Workspace[] {
 const EVENT_KEYS = [
   "Snapshot", "Title", "Icon", "Focus", "Geometry", "Csd",
   "FramePainted", "WorkspaceCreated", "WorkspaceActivated", "WorkspaceRenamed",
-  "WorkspaceDestroyed", "WindowMovedToWorkspace", "DecorationRequest", "DecorationApplied",
+  "WorkspaceDestroyed", "WindowMovedToWorkspace", "AppListUpdated",
+  "DecorationRequest", "DecorationApplied",
 ] as const;
 
 /**
@@ -80,6 +82,28 @@ function sameWindow(a: WindowInfo, b: WindowInfo): boolean {
 
 function expectOk(lines: string[]): void {
   if (lines[0] !== "OK") throw new Error(lines.join("\n") || "IPC sem resposta");
+}
+
+function normalized(value: string): string {
+  return value.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLocaleLowerCase();
+}
+
+/** Subsequência case/diacritics-insensitive; substring direta tem prioridade. */
+function fuzzyScore(query: string, text: string): number | null {
+  const needle = normalized(query).trim();
+  const haystack = normalized(text);
+  if (!needle) return 0;
+  const direct = haystack.indexOf(needle);
+  if (direct !== -1) return direct;
+  let cursor = 0;
+  let score = 100;
+  for (const char of needle) {
+    const found = haystack.indexOf(char, cursor);
+    if (found === -1) return null;
+    score += found - cursor;
+    cursor = found + 1;
+  }
+  return score;
 }
 
 export function createAero(transport: Transport) {
@@ -116,6 +140,33 @@ export function createAero(transport: Transport) {
     const activeId = activeLine ? Number(activeLine.match(/^WS (\d+)/)?.[1]) : null;
     store.applyWorkspaces(workspaces, activeId);
     return workspaces;
+  }
+
+  function listApps(): App[] {
+    return store.getApps();
+  }
+
+  function searchApps(query: string): App[] {
+    if (!query.trim()) return listApps();
+    return listApps()
+      .map((app) => {
+        const scores = [app.name, ...app.categories]
+          .map((text) => fuzzyScore(query, text))
+          .filter((score): score is number => score !== null);
+        return { app, score: scores.length ? Math.min(...scores) : null };
+      })
+      .filter((item): item is { app: App; score: number } => item.score !== null)
+      .sort((a, b) => a.score - b.score || a.app.name.localeCompare(b.app.name))
+      .map((item) => item.app);
+  }
+
+  function launchApp(appId: string, workspaceId?: number): void {
+    const command = workspaceId === undefined
+      ? `launch ${appId}`
+      : `launch ${appId} ${workspaceId}`;
+    void transport(command).then(expectOk).catch((error: unknown) => {
+      console.error(`falha ao lançar ${appId}:`, error);
+    });
   }
 
   async function listWorkspaces(): Promise<Workspace[]> {
@@ -156,6 +207,9 @@ export function createAero(transport: Transport) {
 
   return {
     store,
+    listApps,
+    searchApps,
+    launchApp,
     listWorkspaces,
     createWorkspace,
     renameWorkspace,

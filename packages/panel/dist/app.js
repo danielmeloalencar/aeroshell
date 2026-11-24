@@ -17128,6 +17128,8 @@ class WindowStore {
   indicatorListeners = new Set;
   workspacesState = { workspaces: [], activeId: null };
   workspaceListeners = new Set;
+  appsState = [];
+  appListeners = new Set;
   constructor(initial = { revision: 0, windows: [] }) {
     this.state = initial;
   }
@@ -17157,6 +17159,20 @@ class WindowStore {
     return () => {
       this.workspaceListeners.delete(listener);
     };
+  }
+  getApps() {
+    return this.appsState;
+  }
+  subscribeApps(listener) {
+    this.appListeners.add(listener);
+    return () => {
+      this.appListeners.delete(listener);
+    };
+  }
+  setApps(apps) {
+    this.appsState = apps;
+    for (const listener of this.appListeners)
+      listener();
   }
   applyWorkspaces(workspaces, activeId) {
     this.setWorkspaces({ workspaces, activeId });
@@ -17203,6 +17219,10 @@ class WindowStore {
   applyEvent(event) {
     if ("Snapshot" in event) {
       this.applySnapshot(event.Snapshot.snapshot);
+      return;
+    }
+    if ("AppListUpdated" in event) {
+      this.setApps(event.AppListUpdated.apps);
       return;
     }
     if ("WorkspaceCreated" in event) {
@@ -17352,6 +17372,7 @@ var EVENT_KEYS = [
   "WorkspaceRenamed",
   "WorkspaceDestroyed",
   "WindowMovedToWorkspace",
+  "AppListUpdated",
   "DecorationRequest",
   "DecorationApplied"
 ];
@@ -17374,6 +17395,28 @@ function expectOk(lines) {
   if (lines[0] !== "OK")
     throw new Error(lines.join(`
 `) || "IPC sem resposta");
+}
+function normalized(value) {
+  return value.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLocaleLowerCase();
+}
+function fuzzyScore(query, text) {
+  const needle = normalized(query).trim();
+  const haystack = normalized(text);
+  if (!needle)
+    return 0;
+  const direct = haystack.indexOf(needle);
+  if (direct !== -1)
+    return direct;
+  let cursor = 0;
+  let score = 100;
+  for (const char of needle) {
+    const found = haystack.indexOf(char, cursor);
+    if (found === -1)
+      return null;
+    score += found - cursor;
+    cursor = found + 1;
+  }
+  return score;
 }
 function createAero(transport) {
   const store = new WindowStore;
@@ -17408,6 +17451,23 @@ function createAero(transport) {
     store.applyWorkspaces(workspaces, activeId);
     return workspaces;
   }
+  function listApps() {
+    return store.getApps();
+  }
+  function searchApps(query) {
+    if (!query.trim())
+      return listApps();
+    return listApps().map((app) => {
+      const scores = [app.name, ...app.categories].map((text) => fuzzyScore(query, text)).filter((score) => score !== null);
+      return { app, score: scores.length ? Math.min(...scores) : null };
+    }).filter((item) => item.score !== null).sort((a, b) => a.score - b.score || a.app.name.localeCompare(b.app.name)).map((item) => item.app);
+  }
+  function launchApp(appId, workspaceId) {
+    const command = workspaceId === undefined ? `launch ${appId}` : `launch ${appId} ${workspaceId}`;
+    transport(command).then(expectOk).catch((error) => {
+      console.error(`falha ao lançar ${appId}:`, error);
+    });
+  }
   async function listWorkspaces() {
     return refreshWorkspaces();
   }
@@ -17441,6 +17501,9 @@ function createAero(transport) {
   }
   return {
     store,
+    listApps,
+    searchApps,
+    launchApp,
     listWorkspaces,
     createWorkspace,
     renameWorkspace,
@@ -17471,6 +17534,9 @@ function useWindows(store) {
 }
 function useIndicators(store) {
   return import_react.useSyncExternalStore((listener) => store.subscribeIndicators(listener), () => store.getIndicators(), () => store.getIndicators());
+}
+function useApps(store) {
+  return import_react.useSyncExternalStore((listener) => store.subscribeApps(listener), () => store.getApps(), () => store.getApps());
 }
 function useWorkspaces(store) {
   return import_react.useSyncExternalStore((listener) => store.subscribeWorkspaces(listener), () => store.getWorkspaces(), () => store.getWorkspaces());
@@ -17503,7 +17569,7 @@ window.__aeroEvent = (json) => {
     aero.store.applyEvent(event);
 };
 post({ type: "ready" });
-function publishPanelState(windows, indicators, workspaceState) {
+function publishPanelState(windows, indicators, workspaceState, launcherOpen, query, apps) {
   const rect = (el) => {
     const r = el.getBoundingClientRect();
     return { x: r.left, y: r.top, w: r.width, h: r.height };
@@ -17519,7 +17585,12 @@ function publishPanelState(windows, indicators, workspaceState) {
   });
   const addControl = document.querySelector(".aero-workspace-add");
   const addRect = addControl ? rect(addControl) : null;
-  post({ type: "interactive", rects: [...rowRects, ...workspaceRects], cursor: "pointer" });
+  const launcherRects = Array.from(document.querySelectorAll(".aero-launcher-toggle, .aero-launcher-search, .aero-app-row")).map(rect).filter((r) => r.w > 0 && r.h > 0);
+  post({
+    type: "interactive",
+    rects: [...rowRects, ...workspaceRects, ...launcherRects],
+    cursor: "pointer"
+  });
   const closes = {};
   windows.forEach((window2, index) => {
     const row = rowRects[index];
@@ -17527,6 +17598,14 @@ function publishPanelState(windows, indicators, workspaceState) {
       closes[window2.id] = { x: row.x + row.w - 18, y: row.y + 1, w: 18, h: row.h - 2 };
     }
   });
+  const appRects = {};
+  document.querySelectorAll(".aero-app-row").forEach((element) => {
+    const id = element.dataset.appId;
+    if (id)
+      appRects[id] = rect(element);
+  });
+  const toggle = document.querySelector(".aero-launcher-toggle");
+  const search = document.querySelector(".aero-launcher-search");
   post({
     type: "panel-state",
     rows: windows.map((w) => ({
@@ -17544,7 +17623,15 @@ function publishPanelState(windows, indicators, workspaceState) {
     })),
     activeWorkspace: workspaceState.activeId,
     workspaceRects: tabs,
-    addRect
+    addRect,
+    launcher: {
+      open: launcherOpen,
+      query,
+      apps: apps.map((app) => ({ id: app.id, name: app.name, icon: app.icon })),
+      appRects,
+      toggleRect: toggle ? rect(toggle) : null,
+      searchRect: search ? rect(search) : null
+    }
   });
 }
 function WorkspaceTab({ workspace, active }) {
@@ -17585,6 +17672,10 @@ function Panel() {
   const allWindows = useWindows(aero.store);
   const indicators = useIndicators(aero.store);
   const workspaceState = useWorkspaces(aero.store);
+  const allApps = useApps(aero.store);
+  const [launcherOpen, setLauncherOpen] = import_react2.useState(false);
+  const [query, setQuery] = import_react2.useState("");
+  const filteredApps = launcherOpen ? aero.searchApps(query) : [];
   const activeWorkspace = workspaceState.workspaces.find((workspace) => workspace.id === workspaceState.activeId);
   const windows = activeWorkspace ? allWindows.filter((window2) => activeWorkspace.window_ids.includes(window2.id)) : allWindows;
   import_react2.useEffect(() => {
@@ -17594,8 +17685,8 @@ function Panel() {
     });
   }, []);
   import_react2.useEffect(() => {
-    publishPanelState(windows, indicators, workspaceState);
-  }, [windows, indicators, workspaceState]);
+    publishPanelState(launcherOpen ? [] : windows, indicators, workspaceState, launcherOpen, query, filteredApps);
+  }, [windows, indicators, workspaceState, launcherOpen, query, filteredApps, allApps]);
   return /* @__PURE__ */ jsx_dev_runtime.jsxDEV("div", {
     className: "aero-panel",
     children: [
@@ -17615,7 +17706,70 @@ function Panel() {
           }, undefined, false, undefined, this)
         ]
       }, undefined, true, undefined, this),
-      windows.map((w) => /* @__PURE__ */ jsx_dev_runtime.jsxDEV("div", {
+      /* @__PURE__ */ jsx_dev_runtime.jsxDEV("button", {
+        type: "button",
+        className: "aero-launcher-toggle",
+        "aria-label": launcherOpen ? "fechar launcher" : "abrir launcher",
+        onClick: () => {
+          setLauncherOpen((open) => !open);
+          setQuery("");
+        },
+        children: launcherOpen ? "Fechar" : "Apps"
+      }, undefined, false, undefined, this),
+      launcherOpen && /* @__PURE__ */ jsx_dev_runtime.jsxDEV("div", {
+        className: "aero-launcher",
+        children: [
+          /* @__PURE__ */ jsx_dev_runtime.jsxDEV("input", {
+            className: "aero-launcher-search",
+            "aria-label": "buscar aplicativos",
+            placeholder: "Buscar aplicativos",
+            value: query,
+            autoFocus: true,
+            onChange: (event) => setQuery(event.currentTarget.value),
+            onKeyDown: (event) => {
+              if (event.key === "Escape") {
+                setLauncherOpen(false);
+                setQuery("");
+              }
+            }
+          }, undefined, false, undefined, this),
+          /* @__PURE__ */ jsx_dev_runtime.jsxDEV("div", {
+            className: "aero-apps",
+            role: "list",
+            "aria-label": "aplicativos filtrados",
+            children: [
+              filteredApps.map((app) => /* @__PURE__ */ jsx_dev_runtime.jsxDEV("button", {
+                type: "button",
+                role: "listitem",
+                className: "aero-app-row",
+                "data-app-id": app.id,
+                title: app.exec,
+                onClick: () => {
+                  aero.launchApp(app.id, workspaceState.activeId ?? undefined);
+                  setLauncherOpen(false);
+                  setQuery("");
+                },
+                children: [
+                  /* @__PURE__ */ jsx_dev_runtime.jsxDEV("img", {
+                    className: "aero-app-icon",
+                    alt: "",
+                    src: `aero://icon/${encodeURIComponent(app.icon || "application-x-executable")}`
+                  }, undefined, false, undefined, this),
+                  /* @__PURE__ */ jsx_dev_runtime.jsxDEV("span", {
+                    className: "aero-app-name",
+                    children: app.name
+                  }, undefined, false, undefined, this)
+                ]
+              }, app.id, true, undefined, this)),
+              filteredApps.length === 0 && /* @__PURE__ */ jsx_dev_runtime.jsxDEV("span", {
+                className: "aero-apps-empty",
+                children: "Nenhum aplicativo"
+              }, undefined, false, undefined, this)
+            ]
+          }, undefined, true, undefined, this)
+        ]
+      }, undefined, true, undefined, this),
+      !launcherOpen && windows.map((w) => /* @__PURE__ */ jsx_dev_runtime.jsxDEV("div", {
         "data-window-id": w.id,
         className: "aero-row",
         role: "button",

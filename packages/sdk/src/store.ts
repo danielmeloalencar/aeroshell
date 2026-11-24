@@ -1,4 +1,5 @@
 import type { AeroEvent } from "./generated/AeroEvent";
+import type { App } from "./generated/App";
 import type { DecorationPolicy } from "./generated/DecorationPolicy";
 import type { Patch } from "./generated/Patch";
 import type { Snapshot } from "./generated/Snapshot";
@@ -34,6 +35,8 @@ export class WindowStore {
   private readonly indicatorListeners = new Set<Listener>();
   private workspacesState: WorkspacesState = { workspaces: [], activeId: null };
   private readonly workspaceListeners = new Set<Listener>();
+  private appsState: App[] = [];
+  private readonly appListeners = new Set<Listener>();
 
   constructor(initial: Snapshot = { revision: 0, windows: [] }) {
     this.state = initial;
@@ -70,6 +73,22 @@ export class WindowStore {
     return () => {
       this.workspaceListeners.delete(listener);
     };
+  }
+
+  getApps(): App[] {
+    return this.appsState;
+  }
+
+  subscribeApps(listener: Listener): () => void {
+    this.appListeners.add(listener);
+    return () => {
+      this.appListeners.delete(listener);
+    };
+  }
+
+  private setApps(apps: App[]): void {
+    this.appsState = apps;
+    for (const listener of this.appListeners) listener();
   }
 
   applyWorkspaces(workspaces: Workspace[], activeId: number | null): void {
@@ -124,6 +143,10 @@ export class WindowStore {
   applyEvent(event: AeroEvent): void {
     if ("Snapshot" in event) {
       this.applySnapshot(event.Snapshot.snapshot);
+      return;
+    }
+    if ("AppListUpdated" in event) {
+      this.setApps(event.AppListUpdated.apps);
       return;
     }
     if ("WorkspaceCreated" in event) {

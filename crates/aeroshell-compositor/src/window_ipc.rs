@@ -10,6 +10,7 @@
 //!   policy-ready    -> OK (uso interno: runtime Bun conectado)
 //!   policy <id> ... -> OK (uso interno: decisão de decoração)
 //!   policy-reload   -> OK (uso interno: reemite DecorationRequest às janelas decididas)
+//!   launch <app_id> [workspace_id] -> OK (lança ou foca uma instância existente)
 //! Cada request é despachado no event loop (canal calloop) e respondido por um
 //! oneshot mpsc, para que `list` veja o estado atual do space sem snapshot obsoleto.
 
@@ -21,7 +22,7 @@ use std::{
     time::Duration,
 };
 
-use aeroshell_ipc::types::{AeroEvent, DecorationPolicy, Snapshot, WindowInfo, Workspace};
+use aeroshell_ipc::types::{AeroEvent, App, DecorationPolicy, Snapshot, WindowInfo, Workspace};
 use calloop::channel;
 use serde_json::{json, Value};
 use smithay::{
@@ -92,6 +93,33 @@ fn icon_name(surface: &WlSurface) -> Option<String> {
         let mut cached = states.cached_state.get::<IconPixels>();
         cached.current().name.clone()
     })
+}
+
+fn focus_window(state: &mut AeroState, window_id: u32) -> Result<(), String> {
+    let window = state
+        .window_for_id(window_id)
+        .cloned()
+        .ok_or_else(|| "ERR janela inexistente".to_owned())?;
+    state.space.raise_element(&window, true);
+    if let Some(toplevel) = window.toplevel() {
+        if let Some(keyboard) = state.seat.get_keyboard() {
+            keyboard.set_focus(
+                state,
+                Some(toplevel.wl_surface().clone()),
+                SERIAL_COUNTER.next_serial(),
+            );
+        }
+    }
+    Ok(())
+}
+
+fn activate_workspace(state: &mut AeroState, workspace_id: u32) -> Result<(), String> {
+    if state.workspaces.active_id() != workspace_id {
+        state.workspaces.activate(workspace_id)?;
+        emit_event(AeroEvent::WorkspaceActivated { id: workspace_id });
+    }
+    state.refresh_workspace_focus();
+    Ok(())
 }
 
 pub type Command = (String, mpsc::Sender<String>);
@@ -210,6 +238,10 @@ fn event_json(event: &AeroEvent) -> Value {
                 "window_id": window_id, "workspace_id": workspace_id
             } })
         }
+        AeroEvent::AppListUpdated { apps } => {
+            let apps: Vec<Value> = apps.iter().map(app_json).collect();
+            json!({ "AppListUpdated": { "apps": apps } })
+        }
         AeroEvent::DecorationRequest {
             id,
             app_id,
@@ -234,6 +266,16 @@ fn event_json(event: &AeroEvent) -> Value {
             }
         }),
     }
+}
+
+fn app_json(app: &App) -> Value {
+    json!({
+        "id": app.id,
+        "name": app.name,
+        "icon": app.icon,
+        "exec": app.exec,
+        "categories": app.categories,
+    })
 }
 
 fn policy_name(policy: DecorationPolicy) -> &'static str {
@@ -288,6 +330,7 @@ fn event_name(event: &AeroEvent) -> &'static str {
         AeroEvent::WorkspaceRenamed { .. } => "workspace_renamed",
         AeroEvent::WorkspaceDestroyed { .. } => "workspace_destroyed",
         AeroEvent::WindowMovedToWorkspace { .. } => "window_moved_to_workspace",
+        AeroEvent::AppListUpdated { .. } => "app_list_updated",
         AeroEvent::DecorationRequest { .. } => "decoration_request",
         AeroEvent::DecorationApplied { .. } => "decoration_applied",
     }
@@ -386,7 +429,13 @@ impl AeroState {
     pub fn window_command(&mut self, cmd: &str) -> String {
         let mut parts = cmd.split_whitespace();
         let op = parts.next().unwrap_or("");
-        let id = parts.next().and_then(|v| v.parse::<usize>().ok());
+        // `launch` é a única operação cujo segundo token é textual; consumi-lo
+        // no parser numérico comum faria o app_id virar o workspace (ou sumir).
+        let id = if op == "launch" {
+            None
+        } else {
+            parts.next().and_then(|v| v.parse::<usize>().ok())
+        };
         match op {
             // Comando INTERNO do subscribe do stream: publica o estado atual
             // para o assinante que acabou de conectar (não é protocolo público).
@@ -403,6 +452,13 @@ impl AeroState {
                 }
                 emit_event(AeroEvent::WorkspaceActivated {
                     id: self.workspaces.active_id(),
+                });
+                emit_event(AeroEvent::AppListUpdated {
+                    apps: self
+                        .installed_apps
+                        .iter()
+                        .map(|app| app.info.clone())
+                        .collect(),
                 });
                 for (&id, &decision) in self.decorations.iter() {
                     emit_event(AeroEvent::DecorationApplied {
@@ -572,6 +628,85 @@ impl AeroState {
                     Err(err) => err,
                 }
             }
+            "launch" => {
+                let Some(app_key) = parts.next() else {
+                    return "ERR uso: launch <app_id> [workspace_id]".to_owned();
+                };
+                let requested_workspace = match parts.next() {
+                    Some(value) => match value.parse::<u32>() {
+                        Ok(value) => Some(value),
+                        Err(_) => return "ERR uso: launch <app_id> [workspace_id]".to_owned(),
+                    },
+                    None => None,
+                };
+                if parts.next().is_some() {
+                    return "ERR uso: launch <app_id> [workspace_id]".to_owned();
+                }
+                let Some(app) = self
+                    .installed_apps
+                    .iter()
+                    .find(|app| app.info.id == app_key)
+                    .cloned()
+                else {
+                    return format!("ERR aplicativo inexistente: {app_key}");
+                };
+                if let Some(workspace_id) = requested_workspace {
+                    if !self
+                        .workspaces
+                        .list()
+                        .iter()
+                        .any(|workspace| workspace.id == workspace_id)
+                    {
+                        return "ERR workspace inexistente".to_owned();
+                    }
+                }
+
+                let mut ids: Vec<u32> = self.window_surfaces.keys().copied().collect();
+                ids.sort_unstable();
+                let existing = ids.into_iter().find(|window_id| {
+                    self.window_for_id(*window_id)
+                        .map(|window| app.matches_window_app_id(&app_id_for(window)))
+                        .unwrap_or(false)
+                });
+
+                if let Some(window_id) = existing {
+                    let current = self.workspaces.workspace_of_window(window_id);
+                    let target = requested_workspace
+                        .or(current)
+                        .unwrap_or_else(|| self.workspaces.active_id());
+                    if current != Some(target) {
+                        if let Err(err) = self.workspaces.move_window(window_id, target) {
+                            return err;
+                        }
+                        emit_event(AeroEvent::WindowMovedToWorkspace {
+                            window_id,
+                            workspace_id: target,
+                        });
+                    }
+                    if let Err(err) = activate_workspace(self, target) {
+                        return err;
+                    }
+                    return match focus_window(self, window_id) {
+                        Ok(()) => {
+                            tracing::info!(app_id = %app.info.id, window_id, target, "APP_FOCUS");
+                            "OK".to_owned()
+                        }
+                        Err(err) => err,
+                    };
+                }
+
+                let target = requested_workspace.unwrap_or_else(|| self.workspaces.active_id());
+                match crate::supervisor::spawn_public_client(&self.socket_name, &app.info.exec) {
+                    Ok(pid) => match activate_workspace(self, target) {
+                        Ok(()) => {
+                            tracing::info!(app_id = %app.info.id, pid, target, "APP_LAUNCH");
+                            "OK".to_owned()
+                        }
+                        Err(err) => err,
+                    },
+                    Err(err) => format!("ERR falha ao lançar {}: {err}", app.info.id),
+                }
+            }
             "list" => {
                 let mut out = String::new();
                 // `space.elements()` é ordem z e muda a cada raise_element: usar o
@@ -634,22 +769,16 @@ impl AeroState {
                 let Some(window_id) = id.map(|value| value as u32) else {
                     return "ERR janela inexistente".to_owned();
                 };
-                let Some(window) = self.window_for_id(window_id).cloned() else {
+                if self.window_for_id(window_id).is_none() {
                     return "ERR janela inexistente".to_owned();
-                };
+                }
                 if !self.window_visible(window_id) {
                     return "ERR janela fora do workspace ativo".to_owned();
                 }
-                self.space.raise_element(&window, true);
-                if let Some(toplevel) = window.toplevel() {
-                    let serial = SERIAL_COUNTER.next_serial();
-                    self.seat.get_keyboard().unwrap().set_focus(
-                        self,
-                        Some(toplevel.wl_surface().clone()),
-                        serial,
-                    );
+                match focus_window(self, window_id) {
+                    Ok(()) => "OK".to_owned(),
+                    Err(err) => err,
                 }
-                "OK".to_owned()
             }
             "close" => {
                 let Some(window) = id.and_then(|i| self.window_for_id(i as u32).cloned()) else {

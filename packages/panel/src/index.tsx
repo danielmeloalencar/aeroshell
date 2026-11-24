@@ -5,11 +5,12 @@
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 
+import type { App } from "../../sdk/src/generated/App";
 import type { WindowInfo } from "../../sdk/src/generated/WindowInfo";
 import type { PanelIndicators, WorkspacesState } from "../../sdk/src/store";
 import type { Workspace } from "../../sdk/src/generated/Workspace";
 import { createAero, parseEvent } from "../../sdk/src/index";
-import { useIndicators, useWindows, useWorkspaces } from "../../react/src/useWindows";
+import { useApps, useIndicators, useWindows, useWorkspaces } from "../../react/src/useWindows";
 
 type Reply = (lines: string[]) => void;
 
@@ -59,6 +60,9 @@ function publishPanelState(
   windows: WindowInfo[],
   indicators: PanelIndicators,
   workspaceState: WorkspacesState,
+  launcherOpen: boolean,
+  query: string,
+  apps: App[],
 ): void {
   const rect = (el: HTMLElement) => {
     const r = el.getBoundingClientRect();
@@ -78,8 +82,16 @@ function publishPanelState(
   });
   const addControl = document.querySelector<HTMLElement>(".aero-workspace-add");
   const addRect = addControl ? rect(addControl) : null;
-  // Janelas continuam nos primeiros índices (contrato dos harnesses S3/F2).
-  post({ type: "interactive", rects: [...rowRects, ...workspaceRects], cursor: "pointer" });
+  const launcherRects = Array.from(document.querySelectorAll<HTMLElement>(
+    ".aero-launcher-toggle, .aero-launcher-search, .aero-app-row",
+  )).map(rect).filter((r) => r.w > 0 && r.h > 0);
+  // Janelas/workspaces continuam nos primeiros índices (contrato S3/F2); os
+  // controles novos são anexados DEPOIS para não deslocar os rects antigos.
+  post({
+    type: "interactive",
+    rects: [...rowRects, ...workspaceRects, ...launcherRects],
+    cursor: "pointer",
+  });
 
   // O ✕ pode ficar fora do box da linha quando o conteúdo transborda (o CSS
   // de reset usa overflow:hidden). A linha mesma trata os 18 px finais como
@@ -91,8 +103,15 @@ function publishPanelState(
       closes[window.id] = { x: row.x + row.w - 18, y: row.y + 1, w: 18, h: row.h - 2 };
     }
   });
+  const appRects: Record<string, { x: number; y: number; w: number; h: number }> = {};
+  document.querySelectorAll<HTMLElement>(".aero-app-row").forEach((element) => {
+    const id = element.dataset.appId;
+    if (id) appRects[id] = rect(element);
+  });
+  const toggle = document.querySelector<HTMLElement>(".aero-launcher-toggle");
+  const search = document.querySelector<HTMLElement>(".aero-launcher-search");
   // O bridge loga mensagens não-ipc como `mensagem da WebView`; o harness lê
-  // este estado renderizado (linhas + indicadores + retângulo do ✕) do log.
+  // este estado renderizado (linhas + indicadores + retângulos) do log.
   post({
     type: "panel-state",
     rows: windows.map((w) => ({
@@ -111,6 +130,14 @@ function publishPanelState(
     activeWorkspace: workspaceState.activeId,
     workspaceRects: tabs,
     addRect,
+    launcher: {
+      open: launcherOpen,
+      query,
+      apps: apps.map((app) => ({ id: app.id, name: app.name, icon: app.icon })),
+      appRects,
+      toggleRect: toggle ? rect(toggle) : null,
+      searchRect: search ? rect(search) : null,
+    },
   });
 }
 
@@ -157,6 +184,10 @@ function Panel() {
   const allWindows = useWindows(aero.store);
   const indicators = useIndicators(aero.store);
   const workspaceState = useWorkspaces(aero.store);
+  const allApps = useApps(aero.store);
+  const [launcherOpen, setLauncherOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const filteredApps = launcherOpen ? aero.searchApps(query) : [];
   const activeWorkspace = workspaceState.workspaces.find(
     (workspace) => workspace.id === workspaceState.activeId,
   );
@@ -177,8 +208,15 @@ function Panel() {
 
   // Roda após o commit: os rects refletem o layout real dos botões.
   useEffect(() => {
-    publishPanelState(windows, indicators, workspaceState);
-  }, [windows, indicators, workspaceState]);
+    publishPanelState(
+      launcherOpen ? [] : windows,
+      indicators,
+      workspaceState,
+      launcherOpen,
+      query,
+      filteredApps,
+    );
+  }, [windows, indicators, workspaceState, launcherOpen, query, filteredApps, allApps]);
 
   return (
     <div className="aero-panel">
@@ -199,7 +237,63 @@ function Panel() {
           +
         </button>
       </div>
-      {windows.map((w) => (
+      <button
+        type="button"
+        className="aero-launcher-toggle"
+        aria-label={launcherOpen ? "fechar launcher" : "abrir launcher"}
+        onClick={() => {
+          setLauncherOpen((open) => !open);
+          setQuery("");
+        }}
+      >
+        {launcherOpen ? "Fechar" : "Apps"}
+      </button>
+      {launcherOpen && (
+        <div className="aero-launcher">
+          <input
+            className="aero-launcher-search"
+            aria-label="buscar aplicativos"
+            placeholder="Buscar aplicativos"
+            value={query}
+            autoFocus
+            onChange={(event) => setQuery(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                setLauncherOpen(false);
+                setQuery("");
+              }
+            }}
+          />
+          <div className="aero-apps" role="list" aria-label="aplicativos filtrados">
+            {filteredApps.map((app) => (
+              <button
+                type="button"
+                role="listitem"
+                className="aero-app-row"
+                data-app-id={app.id}
+                key={app.id}
+                title={app.exec}
+                onClick={() => {
+                  aero.launchApp(app.id, workspaceState.activeId ?? undefined);
+                  setLauncherOpen(false);
+                  setQuery("");
+                }}
+              >
+                <img
+                  className="aero-app-icon"
+                  alt=""
+                  src={`aero://icon/${encodeURIComponent(app.icon || "application-x-executable")}`}
+                />
+                <span className="aero-app-name">{app.name}</span>
+              </button>
+            ))}
+            {filteredApps.length === 0 && (
+              <span className="aero-apps-empty">Nenhum aplicativo</span>
+            )}
+          </div>
+        </div>
+      )}
+      {!launcherOpen && windows.map((w) => (
         <div
           key={w.id}
           data-window-id={w.id}

@@ -240,6 +240,8 @@ pub struct AeroState {
     pub event_revision: u32,
     /// F2-workspaces: membership canônica; janelas inativas seguem no Space.
     pub workspaces: WorkspaceManager,
+    /// F2-launcher: aplicativos descobertos nos diretórios `.desktop` no startup.
+    pub installed_apps: Vec<crate::apps::InstalledApp>,
     /// F2-decoration-policy: runtime conectado? decisões e pedidos pendentes.
     pub policy_runtime: bool,
     pub decorations: HashMap<u32, DecorationPolicy>,
@@ -729,6 +731,7 @@ impl AeroState {
             presentation_seq: HashMap::new(),
             event_revision: 0,
             workspaces: WorkspaceManager::default(),
+            installed_apps: crate::apps::load_apps(),
             policy_runtime: false,
             decorations: HashMap::new(),
             policy_requested: HashSet::new(),
