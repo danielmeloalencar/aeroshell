@@ -179,6 +179,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     event_loop.run(None, &mut data, |data| {
         #[cfg(feature = "bench")]
         data.state.check_frame_timeouts();
+        data.state.check_policy_timeouts();
         let _ = data;
     })?;
     // Shutdown gracioso dos filhos do supervisor. Em morte abrupta (SIGKILL/

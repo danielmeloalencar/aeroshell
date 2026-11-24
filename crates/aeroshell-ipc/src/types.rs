@@ -49,6 +49,16 @@ pub struct Patch {
     pub change: WindowChange,
 }
 
+/// Decisão de decoração devolvida pela política Bun (F2-decoration-policy).
+#[cfg_attr(feature = "export-bindings", derive(TS))]
+#[cfg_attr(feature = "export-bindings", ts(export))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DecorationPolicy {
+    Server,
+    Client,
+    None,
+}
+
 /// Evento PUSH do compositor para shell/SDK (substitui o polling do S4).
 /// A serialização na wire é o enum em forma de tagged object do ts-rs, ex.:
 /// `{"Title":{"id":0,"title":"foot"}}`.
@@ -84,5 +94,20 @@ pub enum AeroEvent {
     },
     FramePainted {
         id: u32,
+    },
+    /// Pergunta ao runtime Bun como decorar esta janela.
+    DecorationRequest {
+        id: u32,
+        app_id: String,
+        title: String,
+        mode: String,
+        client_frame: bool,
+    },
+    /// Decisão aplicada (explícita ou fallback).
+    DecorationApplied {
+        id: u32,
+        decision: DecorationPolicy,
+        fallback: bool,
+        reason: Option<String>,
     },
 }

@@ -10,6 +10,8 @@ use smithay::utils::Physical;
 #[cfg(feature = "bench")]
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use aeroshell_ipc::types::DecorationPolicy;
+
 use smithay::{
     backend::renderer::{
         buffer_dimensions,
@@ -206,7 +208,29 @@ pub fn collect_output_elements(
                 })
                 .map(|id| state.window_fullscreen(id))
                 .unwrap_or(false);
-            if !fullscreen {
+            let policy_window_id = client_surface.and_then(|surface| {
+                state
+                    .window_surfaces
+                    .iter()
+                    .find(|(_, candidate)| *candidate == surface)
+                    .map(|(id, _)| *id)
+            });
+            let policy_none = policy_window_id
+                .map(|id| state.decoration(id) == Some(DecorationPolicy::None))
+                .unwrap_or(false);
+            if policy_none {
+                #[cfg(feature = "bench")]
+                {
+                    let t = crate::frame_diagnostics::now_ns();
+                    eprintln!(
+                        "POLICY_RENDER t={t} window_id={} suppressed=policy_none",
+                        policy_window_id.unwrap_or(u32::MAX)
+                    );
+                }
+                #[cfg(not(feature = "bench"))]
+                let _ = policy_window_id;
+            }
+            if !fullscreen && !policy_none {
                 if let Some((frame_surface, _, _window_id, _)) = state
                     .associated_frames
                     .iter()

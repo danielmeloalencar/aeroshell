@@ -65,7 +65,8 @@ struct ClientDrawsFrame(AtomicBool);
 #[derive(Default)]
 struct KdeAnsweredServer(AtomicBool);
 
-fn set_client_frame(state: &mut AeroState, surface: &WlSurface, value: bool) {
+/// Aplica o flag sem consultar política (usado pela própria política).
+pub fn force_client_frame(state: &mut AeroState, surface: &WlSurface, value: bool) {
     let before = client_draws_frame(surface);
     with_states(surface, |states| {
         states
@@ -88,6 +89,19 @@ fn set_client_frame(state: &mut AeroState, surface: &WlSurface, value: bool) {
             });
         }
     }
+}
+
+/// Detecção CSD (protocolo) NON entra se já há decisão explícita da política.
+fn set_client_frame(state: &mut AeroState, surface: &WlSurface, value: bool) {
+    let explicit = state
+        .window_surfaces
+        .iter()
+        .find(|(_, candidate)| *candidate == surface)
+        .and_then(|(id, _)| state.decorations.get(id));
+    if explicit.is_some() {
+        return;
+    }
+    force_client_frame(state, surface, value);
 }
 
 pub fn client_draws_frame(surface: &WlSurface) -> bool {

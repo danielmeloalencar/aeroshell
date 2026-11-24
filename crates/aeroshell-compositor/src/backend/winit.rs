@@ -512,10 +512,20 @@ pub fn init_winit(
                                         .associated_frames
                                         .iter()
                                         .find(|(_, _, _, cs)| cs.as_ref() == client_surface)
+                                        .cloned()
                                     {
+                                      if state.policy_suppresses(&frame_surface) {
+                                        #[cfg(feature = "bench")]
+                                        {
+                                            let t = crate::frame_diagnostics::now_ns();
+                                            eprintln!("POLICY_RENDER t={t} window_id={_window_id} suppressed=policy_none");
+                                        }
+                                        #[cfg(not(feature = "bench"))]
+                                        let _ = &frame_surface;
+                                      } else {
                                         let fgeo = state
                                             .frame_geometries
-                                            .get(frame_surface)
+                                            .get(&frame_surface)
                                             .copied()
                                             .unwrap_or_default();
                                         let (dx, dy) = fgeo.offset();
@@ -563,7 +573,7 @@ pub fn init_winit(
                                             let t = crate::frame_diagnostics::now_ns();
                                             eprintln!(
                                                 "FSCALE_FRAME t={t} backend=winit-n1 output={} window_id={} output_scale={} client_scale={} foot_buffer_scale={} foot_dst={:?} frame_dst={:?} frame_loc={:?}",
-                                                output.name(), *_window_id, output_scale,
+                                                output.name(), _window_id, output_scale,
                                                 client_scale, foot_bs, foot_dst, frame_dst, loc
                                             );
                                         }
@@ -574,7 +584,7 @@ pub fn init_winit(
                                             renderer,
                                             &mut elements,
                                             FrameRenderInput {
-                                                surface: frame_surface,
+                                                surface: &frame_surface,
                                                 fgeo,
                                                 loc,
                                                 client_origin: geo.loc,
@@ -582,10 +592,10 @@ pub fn init_winit(
                                                 output_scale,
                                                 #[cfg(feature = "bench")]
                                                 output: &output,
-                                                window_id: *_window_id,
+                                                window_id: _window_id,
                                                 #[cfg(feature = "bench")]
                                                 resize_active: state.resize_grab_active
-                                                    == Some(*_window_id),
+                                                    == Some(_window_id),
                                             },
                                             #[cfg(feature = "bench")]
                                             &mut state.frame_diag,
@@ -603,6 +613,7 @@ pub fn init_winit(
                                                 titlebar_probe = Some(probe);
                                             }
                                         }
+                                      }
                                     } else {
                                         // 02q: nenhum WebView associado ainda. A janela
                                         // mapeada recebe a decoração sólida do compositor
@@ -658,7 +669,10 @@ pub fn init_winit(
 
                                 // Frames sem cliente mapeado: abaixo de todas as janelas.
                                 for layer in &state.frame_layer_surfaces {
-                                    if !layer.alive() || placed_frames.contains(layer.wl_surface()) {
+                                    if !layer.alive()
+                                        || placed_frames.contains(layer.wl_surface())
+                                        || state.frame_suppressed(layer.wl_surface())
+                                    {
                                         continue;
                                     }
                                     let f = smithay::utils::Point::<f64, smithay::utils::Physical>::from((

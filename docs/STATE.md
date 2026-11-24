@@ -21,6 +21,24 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [~] **F2-decoration-policy (2026-11-24) — código/teste/gates verdes, 3× harness OK; JUIZ VISUAL PENDENTE (§7).**
+      Cartão `docs/tasks/F2-decoration-policy.md` aprovado com 2 salvaguardas. Mecanismo: `DecorationPolicy` +
+      `AeroEvent::DecorationRequest/DecorationApplied` em `aeroshell-ipc` (bindings gerados por `ts-rs`), consulta
+      por IPC (`policy-ready`, `policy <id> server|client|none`) no MESMO socket, sem protocolo Wayland novo e sem
+      XML/ADR/dep externa. **Fallback imediato sem runtime** (`reason=no-runtime`, medido em 0 ms no harness — zero
+      latência no caminho frio/02q); timeout de 300 ms (`AERO_POLICY_TIMEOUT_MS`) **só com runtime conectado lento**
+      (`reason=timeout`). Precedência: decisão explícita > detecção CSD > default — `set_client_frame` ignora a
+      detecção quando há política explícita; `policy client/none` chama `force_client_frame(true)`, emite `Csd` e o
+      shell esconde `#bar`/`#border` sem flash; `none` suprime o frame no render (cena compartilhada **e** caminho
+      N=1 do winit, corrigido nesta sessão) com sonda `POLICY_RENDER … suppressed=policy_none` só sob `bench`.
+      **Teste-first:** `policy_client.rs` (app_id `aero-no-deco`), `policy_runtime_mock.rs` e
+      `tests/integration/f2_decoration_policy.py` escritos antes; baseline `VEREDITO: FALHA`; depois 3× `VEREDITO: OK`
+      (policy none aplicada, fallback no-runtime <100 ms, timeout com runtime lento, 0 erros de protocolo).
+      Gates: `check.sh` EXIT=0, clippy bench 0, no-default 0, `bun run generate:types`/`bun test` verdes; sonda
+      `POLICY t=` 0 no binário normal. Vizinhos: `f1_csd_gtk`, `frame_title`, `f1_toplevel_icon`,
+      `frame_resize_glue`, `headless_render_damage` OK; `f1_csd_gtk --geometry-only` e `frame_buttons` falharam 1×
+      e passaram nas repetições; `frame_window_id` segue no flake pré-existente (§6). **Não toquei no snap/F7.**
+      Instância nested deixada para o juiz: PID 103538, socket `wayland-aero-f2-policy-visual2`.
 - [x] **F2-event-stream (2026-11-23) — FECHADO PELO JUIZ VISUAL: humano confirmou que `printf '\033]0;TITULO_AO_VIVO\007'` muda a titlebar ao vivo, com ícone/foco acompanhando.**
       Código/teste/gates verdes; commit `02158a9`. Juiz operou a instância nested (PID 81595, socket
       `wayland-aero-f2-visual2`) e aprovou o stream sem poll. O agente não encerrou a aplicação.
@@ -1370,6 +1388,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
+- **F2-decoration-policy (§3): código/teste/gates verdes, 3× harness OK; JUIZ VISUAL PENDENTE (§7).**
+  Instância nested aberta (PID 103538, socket `wayland-aero-f2-policy-visual2`) com `foot` decorado, `gedit` CSD
+  flash-less e a janela `aero-no-deco` sem moldura (`POLICY_RENDER suppressed=policy_none`). **PARAR no veredito.**
 - **F2-event-stream FECHADO (§3): humano aprovou o juiz visual (título ao vivo por evento).**
   Gate de sessão F2 entregue, mas **inconclusivo** (§6): `~/u --socket wayland-0` falhou com `Error: AlreadyInUse`
   antes de o compositor subir; a tentativa seguinte usou `wayland-aero-tty3` (nome custom). `F7-compat-snap`
@@ -1451,9 +1472,10 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
    FECHADO (A→B em headless+winit, 3× OK, sem mudança de produto); F1-xdg-toplevel-states FECHADO PELO JUIZ
    ("aprovado"); F1-presentation-time FECHADO (3× OK headless+winit, gates verdes, sonda fora do binário normal,
    juiz visual N/A). **GATE FINAL executado e F1 FECHADA (§3).**
-   **F2 ABERTA pelo humano (2026-11-23): primeiro cartão `docs/tasks/F2-event-stream-typed-sdk.md` aprovado e em
-   execução (stream tipado substituindo poll; S4 deferido). `F7-compat-snap.md` segue como cartão nosso de sessão,
-   sem snapd/slot neste cartão.**
+   **F2: `F2-event-stream-typed-sdk.md` FECHADO (juiz visual); `F2-decoration-policy.md` em execução nesta sessão
+   (mecanismo, fallback imediato, precedência explícita > CSD > default), aguardando juiz visual. `F7-compat-snap.md`
+   segue como cartão nosso de sessão, com dado + plano de experimento, sem snapd/slot e sem intercalar com F2.**
+   **Próximo: só com "ok" — cartão F2 da política completa em TS/Quem-decora-o-quê (este cartão entrega só o mecanismo).**
    **cursor-shape e primary-selection JÁ FECHADOS — removidos da fila pelo humano**; F1f FECHADO; xdg_activation
    sanada na F1i+. Decoração: manter ServerSide+CSD e expor estado via IPC para a política Bun na F2, sem mudar
    arquitetura. STATE.md >150 linhas: cartão de docs próprio depois.
@@ -1490,6 +1512,13 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **F2-decoration-policy (2026-11-24): amostras e armadilhas.** O runtime mock conectou antes do socket IPC existir
+  numa execução (`ready_reply=ERR sem resposta`) → harness passou a esperar o arquivo do IPC; baseline fora isso
+  falhou como esperado. `f1_csd_gtk --geometry-only` (o harness de flash-less correto; o nome `f1_csd_sem_flash.py`
+  no cartão não existe) falhou 1× em 206 ms e passou em 2 repetições (80,8/114,2 ms); `frame_buttons` falhou 1× e
+  passou 2×; `frame_window_id` segue no flake pré-existente. Nenhuma amostra descartada. A sonda `POLICY_RENDER`
+  inicialmente só existia na cena compartilhada; o caminho N=1 do winit (usado no nested) também foi instrumentado
+  e passou a suprimir a moldura da política `none`. Experimento do snap NÃO foi tocado neste cartão.
 - **Avisos benignos / item menor (decisão do humano, 2026-11-23):** `atk-bridge` é aviso benigno do GTK (não é
   defeito do AeroShell); `xdg_system_bell_v1` ausente é item menor a registrar no F7, **não bloqueia** F1/F2.
 - **GATE DE SESSÃO DO SNAP (2026-11-23) — dado entregue, INVÁLIDO para a hipótese (esclarecido pelo humano).**
@@ -2090,6 +2119,11 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `rescaled=true` e o primeiro `rescaled=false` com o MESMO `target` de apresentação — é o par 9-slice/nativo que
   o humano vê. Limiares de diff/flash não foram alterados; amostra crua preservada em `/tmp/opencode/02o_pixels_*`.
 ## 7. Não medido / não validado (não trate como fato)
+- **F2-decoration-policy (2026-11-24): JUIZ VISUAL PENDENTE.** Instância nested deixada aberta: compositor PID
+  103538, socket `wayland-aero-f2-policy-visual2`, IPC `/tmp/opencode/f2-policy/visual2/ipc.sock`, mock
+  `/tmp/opencode/f2-policy/visual2/mock.log`. Humano deve conferir: `foot` decorado, `gedit` sem barra dupla/flash,
+  `aero-no-deco` sem moldura e controlos do frame funcionando. Agente não encerrou processos; quem fecha é o humano.
+  Não medido: GPU real/DRM (VM sem 3D) e desempenho da consulta de política em sessão real.
 - **F2-event-stream (2026-11-23): JUIZ VISUAL APROVADO; gate de sessão do snap entregue, mas inconclusivo (§6).**
   Humano confirmou `printf '\033]0;TITULO_AO_VIVO\007'` mudando a titlebar ao vivo, com ícone/foco. Não medido:
   desempenho em GPU real (VM sem 3D) e DRM/tty3 deste cartão. A instância nested do juiz (PID 81595) não foi
@@ -2522,6 +2556,14 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
+- **SESSÃO ATUAL (2026-11-24): F2-decoration-policy — 3× harness OK, gates verdes; JUIZ VISUAL PENDENTE.**
+  Reproduzir (bench POR ÚLTIMO):
+  `cargo build --workspace --examples && cargo build -p aeroshell-compositor --features bench && python3 tests/integration/f2_decoration_policy.py`
+  → `VEREDITO: OK`; baseline sem mecanismo dava FALHA. Salvaguardas medidas: `fallback_ms=0.0` sem runtime;
+  `reason=timeout` só com runtime lento; precedência explícita > CSD > default. `check.sh` 0, clippy bench 0,
+  no-default 0, `bun run generate:types`/`bun test` verdes, sonda `POLICY` 0 no binário normal. Vizinhos e
+  amostras em §6. Instância para o juiz: PID 103538, socket `wayland-aero-f2-policy-visual2` (§7).
+  **Próximo: só com "ok" — cartão da política completa em TS; NÃO tocar no snap.** Sem push.
 - **SESSÃO ENCERRADA (2026-11-23): F2-event-stream FECHADO PELO JUIZ VISUAL (título ao vivo por evento).**
   Reproduzir (bench POR ÚLTIMO):
   `cargo build --workspace --examples && cargo build -p aeroshell-compositor --features bench && python3 tests/integration/f2_event_stream.py`

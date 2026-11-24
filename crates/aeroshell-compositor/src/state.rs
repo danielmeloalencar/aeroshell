@@ -1,6 +1,11 @@
 //! Estado global do compositor. Não conhece o backend concreto.
 
-use std::{collections::HashMap, ffi::OsString, sync::Arc, time::Instant};
+use std::{
+    collections::{HashMap, HashSet},
+    ffi::OsString,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use smithay::{
     desktop::{PopupManager, Space, Window, WindowSurfaceType},
@@ -40,10 +45,14 @@ use smithay::{
 use crate::protocols::toplevel_icon::IconManager;
 use smithay::reexports::wayland_protocols_misc::server_decoration::server::org_kde_kwin_server_decoration_manager::Mode as DefaultMode;
 
-use aeroshell_ipc::types::AeroEvent;
+use aeroshell_ipc::types::{AeroEvent, DecorationPolicy};
 
 use crate::{
     cli::Options,
+    protocols::{
+        toplevel_states::{app_id_for, frame_state_for},
+        xdg_shell::force_client_frame,
+    },
     render::cursor::CursorImage,
     window_ipc::{emit_event, window_title},
     CalloopData,
@@ -225,6 +234,12 @@ pub struct AeroState {
     pub presentation_seq: HashMap<String, u64>,
     /// F2: revisão monotônica dos snapshots/eventos publicados no stream.
     pub event_revision: u32,
+    /// F2-decoration-policy: runtime conectado? decisões e pedidos pendentes.
+    pub policy_runtime: bool,
+    pub decorations: HashMap<u32, DecorationPolicy>,
+    pub policy_requested: HashSet<u32>,
+    pub pending_policies: HashMap<u32, Instant>,
+    pub policy_timeout: Duration,
     /// F2: último estado observado para gerar eventos SÓ na mudança.
     pub last_titles: HashMap<u32, String>,
     pub last_geometries: HashMap<u32, Rectangle<i32, Logical>>,
@@ -321,6 +336,122 @@ impl AeroState {
             })
     }
 
+    /// F2-decoration-policy: decisão explícita tem precedência sobre CSD detection.
+    pub fn decoration(&self, id: u32) -> Option<DecorationPolicy> {
+        self.decorations.get(&id).copied()
+    }
+
+    fn log_policy(&self, id: u32, decision: &str, fallback: bool, reason: &str) {
+        #[cfg(feature = "bench")]
+        {
+            let t = crate::frame_diagnostics::now_ns();
+            eprintln!(
+                "POLICY t={t} window_id={id} decision={decision} fallback={fallback} reason={reason}"
+            );
+        }
+        #[cfg(not(feature = "bench"))]
+        let _ = (id, decision, fallback, reason);
+    }
+
+    /// Pede uma decisão ao runtime. Sem runtime: fallback IMEDIATO, sem espera.
+    pub fn request_decoration_policy(&mut self, id: u32) {
+        if self.decoration(id).is_some() || self.pending_policies.contains_key(&id) {
+            return;
+        }
+        let Some(window) = self.window_for_id(id).cloned() else {
+            return;
+        };
+        let surface = window.toplevel().map(|t| t.wl_surface().clone());
+        let app_id = app_id_for(&window);
+        let title = window_title(&window);
+        let bits = frame_state_for(self, id);
+        let mode = if bits.contains(crate::aero_frame_protocol::aero_frame_v1::State::Fullscreen) {
+            "fullscreen"
+        } else if bits.contains(crate::aero_frame_protocol::aero_frame_v1::State::Maximized) {
+            "maximized"
+        } else {
+            "normal"
+        };
+        let client_frame = surface
+            .as_ref()
+            .map(crate::protocols::xdg_shell::client_draws_frame)
+            .unwrap_or(false);
+        self.policy_requested.insert(id);
+        emit_event(AeroEvent::DecorationRequest {
+            id,
+            app_id,
+            title,
+            mode: mode.to_owned(),
+            client_frame,
+        });
+        if !self.policy_runtime {
+            self.policy_fallback(id, "no-runtime");
+            return;
+        }
+        self.pending_policies.insert(id, Instant::now());
+    }
+
+    /// Fallback NÃO cria política explícita: CSD detection/default continuam.
+    pub fn policy_fallback(&mut self, id: u32, reason: &str) {
+        self.pending_policies.remove(&id);
+        self.log_policy(id, "fallback", true, reason);
+        emit_event(AeroEvent::DecorationApplied {
+            id,
+            decision: DecorationPolicy::Server,
+            fallback: true,
+            reason: Some(reason.to_owned()),
+        });
+    }
+
+    /// Aplica uma decisão explícita pelo caminho existente de CSD/frame.
+    pub fn apply_decoration_policy(&mut self, id: u32, decision: DecorationPolicy) {
+        self.pending_policies.remove(&id);
+        let Some(surface) = self.window_surfaces.get(&id).cloned() else {
+            return;
+        };
+        let client_frame = match decision {
+            DecorationPolicy::Server => false,
+            DecorationPolicy::Client | DecorationPolicy::None => true,
+        };
+        force_client_frame(self, &surface, client_frame);
+        self.decorations.insert(id, decision);
+        let label = match decision {
+            DecorationPolicy::Server => "server",
+            DecorationPolicy::Client => "client",
+            DecorationPolicy::None => "none",
+        };
+        self.log_policy(id, label, false, "explicit");
+        emit_event(AeroEvent::DecorationApplied {
+            id,
+            decision,
+            fallback: false,
+            reason: None,
+        });
+    }
+
+    /// Chamado a cada iteração do event loop; timeout só vale com runtime conectado.
+    pub fn check_policy_timeouts(&mut self) {
+        let timeout = self.policy_timeout;
+        let expired: Vec<u32> = self
+            .pending_policies
+            .iter()
+            .filter(|(_, started)| started.elapsed() >= timeout)
+            .map(|(id, _)| *id)
+            .collect();
+        for id in expired {
+            self.policy_fallback(id, "timeout");
+        }
+    }
+
+    /// True se a política explícita pediu "sem decoração" para este frame.
+    pub fn policy_suppresses(&self, frame_surface: &WlSurface) -> bool {
+        self.associated_frames
+            .iter()
+            .find(|(s, _, _, _)| s == frame_surface)
+            .and_then(|(_, _, id, _)| self.decoration(*id))
+            == Some(DecorationPolicy::None)
+    }
+
     /// F2: emite Title/Geometry SOMENTE quando o estado observado mudou.
     pub fn observe_surface_change(&mut self, surface: &WlSurface) {
         let Some(id) = self
@@ -335,9 +466,15 @@ impl AeroState {
             return;
         };
         let title = window_title(&window);
-        if self.last_titles.get(&id) != Some(&title) {
+        let title_changed = self.last_titles.get(&id) != Some(&title);
+        if title_changed {
             self.last_titles.insert(id, title.clone());
             emit_event(AeroEvent::Title { id, title });
+        }
+        // F2-decoration-policy: pergunta no map (1º commit) e em mudança de título.
+        // `request_decoration_policy` é idempotente e faz fallback imediato sem runtime.
+        if title_changed || !self.policy_requested.contains(&id) {
+            self.request_decoration_policy(id);
         }
         if let Some(geo) = self.space.element_geometry(&window) {
             if self.last_geometries.get(&id) != Some(&geo) {
@@ -370,7 +507,9 @@ impl AeroState {
         self.associated_frames
             .iter()
             .find(|(s, _, _, _)| s == frame_surface)
-            .map(|(_, _, id, _)| self.window_fullscreen(*id))
+            .map(|(_, _, id, _)| {
+                self.window_fullscreen(*id) || self.decoration(*id) == Some(DecorationPolicy::None)
+            })
             .unwrap_or(false)
     }
 
@@ -521,6 +660,16 @@ impl AeroState {
             presentation_state,
             presentation_seq: HashMap::new(),
             event_revision: 0,
+            policy_runtime: false,
+            decorations: HashMap::new(),
+            policy_requested: HashSet::new(),
+            pending_policies: HashMap::new(),
+            policy_timeout: Duration::from_millis(
+                std::env::var("AERO_POLICY_TIMEOUT_MS")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(300),
+            ),
             last_titles: HashMap::new(),
             last_geometries: HashMap::new(),
             output_manager_state,

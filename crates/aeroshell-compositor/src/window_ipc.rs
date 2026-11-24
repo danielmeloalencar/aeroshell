@@ -18,7 +18,7 @@ use std::{
     time::Duration,
 };
 
-use aeroshell_ipc::types::{AeroEvent, Snapshot, WindowInfo};
+use aeroshell_ipc::types::{AeroEvent, DecorationPolicy, Snapshot, WindowInfo};
 use calloop::channel;
 use serde_json::{json, Value};
 use smithay::{
@@ -179,6 +179,37 @@ fn event_json(event: &AeroEvent) -> Value {
             json!({ "Csd": { "id": id, "client_frame": client_frame } })
         }
         AeroEvent::FramePainted { id } => json!({ "FramePainted": { "id": id } }),
+        AeroEvent::DecorationRequest {
+            id,
+            app_id,
+            title,
+            mode,
+            client_frame,
+        } => json!({
+            "DecorationRequest": {
+                "id": id, "app_id": app_id, "title": title,
+                "mode": mode, "client_frame": client_frame
+            }
+        }),
+        AeroEvent::DecorationApplied {
+            id,
+            decision,
+            fallback,
+            reason,
+        } => json!({
+            "DecorationApplied": {
+                "id": id, "decision": policy_name(*decision),
+                "fallback": fallback, "reason": reason
+            }
+        }),
+    }
+}
+
+fn policy_name(policy: DecorationPolicy) -> &'static str {
+    match policy {
+        DecorationPolicy::Server => "server",
+        DecorationPolicy::Client => "client",
+        DecorationPolicy::None => "none",
     }
 }
 
@@ -221,6 +252,8 @@ fn event_name(event: &AeroEvent) -> &'static str {
         AeroEvent::Geometry { .. } => "geometry",
         AeroEvent::Csd { .. } => "csd",
         AeroEvent::FramePainted { .. } => "frame_painted",
+        AeroEvent::DecorationRequest { .. } => "decoration_request",
+        AeroEvent::DecorationApplied { .. } => "decoration_applied",
     }
 }
 
@@ -324,6 +357,30 @@ impl AeroState {
             "__subscribe__" => {
                 self.emit_snapshot();
                 "OK".to_owned()
+            }
+            // F2-decoration-policy: runtime Bun opcional informa que está vivo e
+            // responde `policy <id> server|client|none` no MESMO socket IPC.
+            "policy-ready" => {
+                self.policy_runtime = true;
+                tracing::info!("POLICY runtime conectado no IPC");
+                "OK".to_owned()
+            }
+            "policy" => {
+                let (Some(id), Some(raw)) = (id, parts.next()) else {
+                    return "ERR uso: policy <id> <server|client|none>".to_owned();
+                };
+                let decision = match raw {
+                    "server" => DecorationPolicy::Server,
+                    "client" => DecorationPolicy::Client,
+                    "none" => DecorationPolicy::None,
+                    other => return format!("ERR decisão desconhecida: {other}"),
+                };
+                if self.pending_policies.contains_key(&(id as u32)) {
+                    self.apply_decoration_policy(id as u32, decision);
+                    "OK".to_owned()
+                } else {
+                    "ERR janela sem pedido de política pendente".to_owned()
+                }
             }
             "list" => {
                 let mut out = String::new();
