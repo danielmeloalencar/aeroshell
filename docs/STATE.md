@@ -33,10 +33,10 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `frame_resize_glue` voltou a OK; `frame_follows_resize` falha idêntico no commit anterior
   (A/B `/tmp/opencode/f2-surface-fix2-ab-follows.log`, pré-existente). Vizinhos
   buttons/CSD/policy/workspaces/launcher/host OK. `check.sh` EXIT=0, clippy bench 0,
-  `--no-default-features` 0. **Juiz visual de 60 s PENDENTE na instância aberta:** socket
-  `wayland-aero-fix2-visual`, compositor PID 36441, host PID 36477, `foot A/B` PIDs 37003/37004,
-  log `/tmp/opencode/f2-surface-fix2-visual/compositor.log`. Humano deve digitar e arrastar
-  após 60 s e dizer "ok/aprovado" ou o que falhou; cartão NÃO fechado.
+  `--no-default-features` 0. **Juiz visual de 60 s APROVADO pelo humano ("aprovado")** na
+  instância `wayland-aero-fix2-visual` (compositor PID 36441, host PID 36477, `foot A/B`
+  PIDs 37003/37004): digitou e arrastou após 60 s, sem perda de responsividade, com superfícies
+  corretas. A instância fica aberta para o humano fechar. **CARTÃO FECHADO.**
 - [x] **F2-surface-perf-fix PASSO 1 (2026-11-25) — compartilhamento de WebProcess validado.**
   `crates/aeroshell-shell/src/surfaces/mod.rs` agora cria UM `WebContext`, uma âncora construct-only
   e `related_view` em todas as WebViews do host (ADR 0001). Instrumento corrigido para NÃO contar
@@ -1809,6 +1809,7 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
+**F2-surface-perf-fix: FECHADO (passos 1/2 e juiz visual 60 s aprovado). PARAR.**
 **F2-surface-perf: PARAR. Invariantes de WebProcess/related_view falharam (§3); humano decidirá se
 abre cartão de correção dirigido (compartilhamento de WebProcess / damage / pool). NENHUMA correção
 neste cartão; sem push.**
@@ -3309,6 +3310,14 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
+- **F2-surface-perf-fix (2026-11-25): FECHADO PELO JUIZ VISUAL ("aprovado").** Compartilhamento
+  ADR 0001 e redraw só com damage entregues. Reproduzir (bench por último):
+  `cargo build -p aeroshell-compositor --features bench && python3 tests/integration/f2_surface_perf.py`
+  → tabela antes/depois em `/tmp/opencode/f2-surface-fix2-perf-final.log`. WebProcesses constantes
+  (host 1 p/ 2 e 4 superfícies); CPU winit 2,2–2,6%; 0 redraw estático/5 s; clique p50/p99 B
+  18,3/26,9 ms. `check.sh` EXIT=0, clippy bench 0, no-default 0, vizinhos OK; `frame_follows_resize`
+  falha pré-existente por A/B. Instância `wayland-aero-fix2-visual` fica aberta para o humano fechar.
+  **NENHUM próximo cartão autorizado; sem push.**
 - **F2-surface-perf (2026-11-25): MEDIÇÃO ENTREGUE, SEM CORREÇÃO.** Reproduzir:
   `cargo build -p aeroshell-compositor --features bench && python3 tests/integration/f2_surface_perf.py`
   → tabela em `/tmp/opencode/f2-surface-perf-run2.log`. A 3 WebProcesses/87% CPU; B 9 WebProcesses
