@@ -1,6 +1,7 @@
 # Tarefa F2-HMR via Bun.serve — loop de DX do desenvolvedor web
 
 > Texto fornecido e implementação autorizada pelo humano em 2026-11-25. Base: `6f989a4` (F2-sdk-surfaces fechado).
+> FECHADO em 2026-11-25: integração/vizinhos/gates verdes, três medições de perf e juiz visual "Aprovado"/"perfeito, está aprovado".
 
 ## Objetivo (uma frase, verificável)
 Em `--dev`, editar `desktop.config.tsx` e os módulos das superfícies atualiza DOM/pixels e o diff create/update/destroy sem reiniciar compositor/runtime nem recriar WebView/superfície ou aumentar WebProcesses; produção continua restrita a `aero://`.
