@@ -22,6 +22,20 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **F2-outputs+input-binds (2026-11-25) — FECHADO PELO JUIZ VISUAL ("sim, tudo funcionou corretamente… está aprovado").**
+  Cartão `docs/tasks/F2-outputs-input-binds.md`. Baseline: 5 fail + 1 import, harness FALHA e parser
+  Rust ausente. Depois `f2_outputs_input_binds.py` **VEREDITO: OK**
+  (`/tmp/opencode/f2-outputs-binds-integration-after6.log`): headless + 2 winit outputs,
+  list/get/OutputAdded, `LayerMap` único por painel, clique no segundo tile, Super+1/2,
+  callback/unbind, repeat/release reverso, reload/update/remove sem duplicar e guest recusado.
+  Baseline estrita anterior falhou em LayerMap/clique/repeat (`-strict-baseline.log`). `check.sh`
+  EXIT=0 (57 Bun), clippy bench 0, no-default 0 e 11 vizinhos OK (`-neighbors.log`). Três perfs:
+  1 WebProcess no host inclusive 4 superfícies, 0 redraws estáticos/5 s e 0 px damage; B clique
+  p50/p99 8,2/21,6; 9,4/21,0; 7,5/14,6 ms; A texto teve outliers 234,5/286,3 ms, preservados.
+  VM sem 3D. Primeira rodada visual reprovada: painel direito 404 por 2 runtimes na mesma porta
+  (§6) e GNOME capturando Super. Na rodada final, porta única e painéis OK; humano aceitou injeção
+  via AERO_TEST_INPUT_SOCK e aprovou Super+2→foot B, Super+1→foot A e 60 s. Não foi teste físico
+  de Super. Instância final 60491/60515/60741/60782/60784 deixada aberta. **CARTÃO FECHADO.**
 - [x] **F2-HMR via Bun.serve (2026-11-25) — FECHADO PELO JUIZ VISUAL ("Aprovado"; "perfeito, está aprovado").**
   Cartão `docs/tasks/F2-hmr.md`; implementação em `e25281d`. Baseline: 3 fail + 2 imports ausentes,
   harness `VEREDITO: FALHA` e validador Rust ausente. Depois `f2_hmr.py` **VEREDITO: OK**
@@ -1774,6 +1788,10 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
+- **F2-outputs+input-binds: FECHADO PELO JUIZ VISUAL ("sim, tudo funcionou corretamente… está aprovado").**
+  Integração estrita, 11 vizinhos, gates e 3 perfs verdes (§3). Rodada final com porta única, dois
+  painéis e Super+1/2 injetados aprovada; instância deixada aberta para o humano fechar. **PARAR;
+  próximo cartão somente com ok.**
 - **F2-HMR via Bun.serve: FECHADO PELO JUIZ VISUAL ("Aprovado"; "perfeito, está aprovado").**
   Integração, nove vizinhos e gates verdes; três perfs com WebProcess/redraw invariantes e p99 variável
   na VM (§3). Na checagem final só o runtime visual 21604 permanecia em `ps`, sem ação do agente.
@@ -1881,8 +1899,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-**F2-HMR FECHADO PELO JUIZ VISUAL: PARAR. Sequência proposta, não iniciada: F2-outputs+input-binds →
-F2-windows-completo → alpha-confirm → adapters+exemplos, cada um somente com cartão próprio e ok.**
+**F2-outputs+input-binds FECHADO PELO JUIZ VISUAL: PARAR. Sequência proposta, não iniciada:
+F2-windows-completo → alpha-confirm → adapters+exemplos, cada um com cartão próprio e ok.**
 **F2-surface-perf-fix: FECHADO (passos 1/2 e juiz visual 60 s aprovado). PARAR.**
 **F2-surface-perf: PARAR. Invariantes de WebProcess/related_view falharam (§3); humano decidirá se
 abre cartão de correção dirigido (compartilhamento de WebProcess / damage / pool). NENHUMA correção
@@ -1944,6 +1962,12 @@ fechados, fora da fila.
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **F2-HMR — colisão de porta entre runtimes:** o runtime antigo 21604 e o visual 53667 escutavam
+  simultaneamente 127.0.0.1:4173 (`ss`); 6 fetches ao novo painel alternaram 404/200. O antigo tem
+  só 2 superfícies. O harness usa porta livre, portanto não mede esta colisão. Não corrigir neste cartão.
+- **F2-outputs+input-binds:** hotplug/remoção dinâmica udev continua fora de escopo; `OutputRemoved`
+  tem contrato/store, mas nenhum backend no recorte emite remoção. `OutputChanged` é emitido no resize
+  winit N=1. IDs de output são índices do vetor atual; uma futura remoção no meio exigirá IDs estáveis.
 - **F2-launcher — amostra vizinha preservada (2026-11-24):** `react_panel.py` falhou 1× porque a string de
   z-order não mudou, embora o log mostrasse foco na janela correta; passou 2/3 janelas na repetição com o mesmo
   binário (`/tmp/opencode/f2-launcher-neighbors/react_panel{,-repeat}.log`). Flutuação já conhecida, não ocultada.
@@ -2801,6 +2825,12 @@ fechados, fora da fila.
   (`under = Some` com espaços) **também no HEAD** — pré-existente, amostra preservada em
   `/tmp/opencode/f2-surface-host-s3-input.log`. **CARTÃO FECHADO.**
 ## 7. Não medido / não validado (não trate como fato)
+- **F2-outputs+input-binds: juiz visual APROVADO com ressalvas.** Na rodada final o humano viu os
+  dois painéis e aprovou Super+2→foot B e Super+1→foot A injetados pelo socket, além de 60 s. O GNOME
+  captura Super físico no nested; portanto NÃO houve validação de Super por teclado físico nem udev.
+  Background azul só no output 0 e clear escuro no 1 são esperados no exemplo; winit mostra 2 outputs
+  lógicos em tiles de uma única janela host, com ponteiro livre. Hotplug/OutputRemoved real, resize
+  visual de OutputChanged e GPU real não medidos.
 - **F2-HMR: juiz visual APROVADO; partes NÃO medidas.** Edição ao vivo e 60 s com 2 `foot` aprovados;
   GPU real não medida e p99 variou na VM (§3). Destroy remove o registro/spec, mas a WebView fica em
   `retired` até o host sair para evitar o ProtocolError 0×0 do GTK; desaparecimento visual da layer
@@ -3387,6 +3417,13 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
+- **F2-outputs+input-binds (2026-11-25): FECHADO PELO JUIZ VISUAL.** Reproduzir:
+  `bun build packages/sdk/src/client.ts --target=browser --outfile=packages/sdk/dist/client.js &&
+  cargo build -p aeroshell-shell && cargo build -p aeroshell-compositor --features bench &&
+  python3 tests/integration/f2_outputs_input_binds.py` → OK. `check.sh` 57/57, clippy/no-default 0,
+  11 vizinhos OK e 3 perfs com 1 WebProcess no host/0 redraws. Juiz aprovou 2 painéis e Super+1/2
+  injetados; Super físico/udev/hotplug/GPU não medidos. Instância final deixada aberta.
+  **Próximo: F2-windows-completo apenas com cartão próprio e ok; sem push.**
 - **F2-HMR (2026-11-25): FECHADO PELO JUIZ VISUAL ("Aprovado").** Reproduzir:
   `bun build packages/sdk/src/client.ts --target=browser --outfile=packages/sdk/dist/client.js &&
   cargo build -p aeroshell-shell && cargo build -p aeroshell-compositor --features bench &&

@@ -172,6 +172,33 @@ Harness headless completo (edita cor/texto, módulo e create/destroy; mede pixel
 python3 tests/integration/f2_hmr.py
 ```
 
+### Outputs e atalhos globais (`F2-outputs+input-binds`)
+`aero.outputs.list/get/subscribe` expõe nome, geometria lógica, escala e modo físico; o stream faz
+replay com `OutputAdded`, resize winit publica `OutputChanged` e o contrato inclui `OutputRemoved`.
+Hotplug/remoção dinâmica udev NÃO está implementada. `SurfaceSpec.output` escolhe o monitor GTK e o
+`LayerMap`; IDs fora da lista são recusados.
+`aero.input.bind/unbind/list` existe apenas no runtime privilegiado. O guest continua restrito a
+input/blur da própria surface. No config, a ação disponível é `workspace-activate <id>`:
+```
+keybindings: [
+  { keys: "Super+1", command: "workspace-activate 1" },
+  { keys: "Super+2", command: "workspace-activate 2" },
+]
+```
+O compositor intercepta press/repeat/release pelo keycode e publica `KeyBind { id, keys }`; callbacks
+e ações ficam no TypeScript, nunca num shell. Para testes, `AERO_TEST_INPUT_SOCK` aceita
+`key press|release <evdev>` (Super esquerdo=125, tecla 1=2, tecla 2=3).
+```
+cargo build -p aeroshell-compositor --features bench
+python3 tests/integration/f2_outputs_input_binds.py
+```
+O harness cobre headless + winit de 2 outputs, `LayerMap`, clique no segundo tile, SDK real,
+callback/unbind, repeat/release reverso, reload sem duplicar e recusa do guest. O exemplo
+`blank-desktop` tem painéis nos outputs 0/1; crie o workspace 2 antes de testar `Super+2`.
+O background azul existe só no output 0; o clear escuro no output 1 é esperado. No nested, os dois
+outputs são tiles lógicos de uma única janela host e o ponteiro atravessa os lados livremente. O GNOME
+pode capturar Super físico; o juiz pode aceitar injeção documentada pelo socket, sem alterar o host.
+
 Tipos TS gerados do Rust (não editar à mão):
 ```
 bun run generate:types   # cargo test -p aeroshell-ipc --features export-bindings
