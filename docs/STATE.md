@@ -33,7 +33,10 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `frame_resize_glue` voltou a OK; `frame_follows_resize` falha idêntico no commit anterior
   (A/B `/tmp/opencode/f2-surface-fix2-ab-follows.log`, pré-existente). Vizinhos
   buttons/CSD/policy/workspaces/launcher/host OK. `check.sh` EXIT=0, clippy bench 0,
-  `--no-default-features` 0. **Juiz visual de 60 s ainda não executado; cartão NÃO fechado.**
+  `--no-default-features` 0. **Juiz visual de 60 s PENDENTE na instância aberta:** socket
+  `wayland-aero-fix2-visual`, compositor PID 36441, host PID 36477, `foot A/B` PIDs 37003/37004,
+  log `/tmp/opencode/f2-surface-fix2-visual/compositor.log`. Humano deve digitar e arrastar
+  após 60 s e dizer "ok/aprovado" ou o que falhou; cartão NÃO fechado.
 - [x] **F2-surface-perf-fix PASSO 1 (2026-11-25) — compartilhamento de WebProcess validado.**
   `crates/aeroshell-shell/src/surfaces/mod.rs` agora cria UM `WebContext`, uma âncora construct-only
   e `related_view` em todas as WebViews do host (ADR 0001). Instrumento corrigido para NÃO contar
