@@ -22,7 +22,7 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
-- [~] **F2-surface-host-frame (2026-11-25) — migração do spike para o host; juiz visual pendente.**
+- [x] **F2-surface-host-frame (2026-11-25) — FECHADO PELO JUIZ VISUAL ("aprovado").**
   `crates/aeroshell-shell/src/lib.rs` expõe o host; `surfaces/shared.rs` centraliza WebContext/âncora;
   `surfaces/frame.rs` recebe o spike (pool/related-view, canvas 9-slice, CSD opacidade, título/ícone,
   cursores/grabs/insets/slices); `examples/frame_webview.rs` é shim de 5 linhas. Manifesto usa as
@@ -34,11 +34,10 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `f2_surface_perf.py`: A 1 WebProcess, B 2 (1 host) e constante com 4 superfícies, 0 redraws
   estáticos, CPU 2,0–2,4%, clique p50/p99 B 11,9/32,8 ms e texto 29,8/48,8 ms
   (`/tmp/opencode/f2-surface-frame-perf.log`). `check.sh` EXIT=0, clippy bench 0,
-  `--no-default-features` 0. **Juiz visual PENDENTE na instância aberta:** socket
-  `wayland-aero-frame-visual`, compositor PID 47064, frame PID 47076, foot PID 47148,
-  gedit PID 47149, kate PID 47216, runtime Bun de política com hot-reload em
-  `/tmp/opencode/f2-surface-frame-visual/rules.ts`. Humano deve conferir decoração, botões,
-  cursores, hot-reload e responsividade por 60 s; cartão NÃO fechado.
+  `--no-default-features` 0. **Juiz visual APROVADO pelo humano ("aprovado")** na instância
+  `wayland-aero-frame-visual` (compositor PID 47064, frame PID 47076, foot PID 47148,
+  gedit PID 47149, kate PID 47216): decoração, botões, cursores, hot-reload e 60 s responsivo.
+  A instância fica aberta para o humano fechar. **CARTÃO FECHADO.**
 - [x] **F2-surface-perf-fix PASSO 2 (2026-11-25) — redraw só com trabalho real validado.**
   `backend/winit.rs` deixou de pedir Redraw incondicional: timer de 16 ms com `flush_clients`
   periódico + `dirty` por commits/input, callbacks de frame, `resize_grab_active`,
@@ -1826,6 +1825,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
+**F2-surface-host-frame: FECHADO PELO JUIZ VISUAL. PRÓXIMO AUTORIZADO: F2-sdk-surfaces +
+defineDesktop, apenas com cartão próprio e ok do humano.**
 **F2-surface-perf-fix: FECHADO (passos 1/2 e juiz visual 60 s aprovado). PARAR.**
 **F2-surface-perf: PARAR. Invariantes de WebProcess/related_view falharam (§3); humano decidirá se
 abre cartão de correção dirigido (compartilhamento de WebProcess / damage / pool). NENHUMA correção
@@ -2727,8 +2728,7 @@ fechados, fora da fila.
   é registrado só no barramento privado do nested, escolhe dependência Rust (ex.: zbus, sujeita a
   aprovação) e testes de segurança/isolamento. **NÃO implementar D-Bus sem cartão e aprovação
   explícitos.** Aguardando decisão: manter F2 interna + novo cartão F4, ou reescopo deste cartão.
-- **F2-surface-host (2026-11-24): PARCIAL, 2 etapas commitadas; migração do kind `frame` e juiz visual
-  pendentes.** `21bcee1` (contrato ts-rs, comandos `surface-create/update/destroy`, eventos
+- **F2-surface-host (2026-11-24/25): FECHADO (migração do frame aprovada pelo juiz visual).** `21bcee1` (contrato ts-rs, comandos `surface-create/update/destroy`, eventos
   `SurfaceCreated/Updated/Destroyed`, replay e API SDK com JSDoc) e `1772fed` (host em
   `crates/aeroshell-shell/src/surfaces/`: layer por spec, bridge, input region, z-order `SURFACE_Z`).
   Harness `tests/integration/f2_surface_host.py` baseline FALHA → 3× `VEREDITO: OK` (desktop vermelho
@@ -2740,10 +2740,10 @@ fechados, fora da fila.
   migrar o `frame_webview.rs` para o kind `frame` do host (`src/lib.rs`/manifesto precisam ser
   reestruturados; não iniciado sem risco de quebrar os 5 harnesses de caminho fixo); `surface-create`
   com `kind: "frame"` hoje cai no caminho genérico de layer e NÃO deve ser considerado correto.
-  Juiz visual NÃO obtido: cartão NÃO fechado. `s3_input.sh` falha com regex defasada
+  **FECHAMENTO (2026-11-25):** migração do frame entregue em `cf02321` e aprovada pelo juiz visual
+  em `d3a72cd`; ver `F2-surface-host-frame` em §3. `s3_input.sh` falha com regex defasada
   (`under = Some` com espaços) **também no HEAD** — pré-existente, amostra preservada em
-  `/tmp/opencode/f2-surface-host-s3-input.log`. Próximo passo exige decisão: continuar a migração do
-  frame como etapa 3 ou abrir cartão separado.
+  `/tmp/opencode/f2-surface-host-s3-input.log`. **CARTÃO FECHADO.**
 ## 7. Não medido / não validado (não trate como fato)
 - **F2-surface-host (2026-11-24): JUIZ VISUAL NEGOU a 1ª instância; correção aplicada, reteste
   bloqueado pelo ambiente.** Humano: *"vejo uma borda verde e dentro branco. nada mais."* O
@@ -3327,6 +3327,13 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
+- **F2-surface-host-frame (2026-11-25): FECHADO PELO JUIZ VISUAL ("aprovado").** `cf02321`
+  migra o spike para `surfaces/frame.rs` com `lib.rs`, `surfaces/shared.rs` e shim de 5 linhas.
+  Reproduzir (bench por último): `cargo build -p aeroshell-compositor --features bench &&
+  python3 tests/integration/f2_surface_host_frame.py && python3 tests/integration/f2_surface_perf.py`.
+  `check.sh` EXIT=0, clippy bench 0, no-default 0, vizinhos OK; `frame_follows_resize` pré-existente.
+  WebProcesses constantes, 0 redraws estáticos, 60 s responsivo. Instância `wayland-aero-frame-visual`
+  fica aberta para o humano fechar. **Próximo: F2-sdk-surfaces + defineDesktop (cartão próprio).**
 - **F2-surface-perf-fix (2026-11-25): FECHADO PELO JUIZ VISUAL ("aprovado").** Compartilhamento
   ADR 0001 e redraw só com damage entregues. Reproduzir (bench por último):
   `cargo build -p aeroshell-compositor --features bench && python3 tests/integration/f2_surface_perf.py`
