@@ -22,7 +22,7 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
-- [~] **F2-sdk-surfaces + defineDesktop (2026-11-25) — etapa 1 runtime/contrato verde; integração e juiz pendentes.**
+- [~] **F2-sdk-surfaces + defineDesktop (2026-11-25) — etapas 1/2 verdes; vizinhos/perf/juiz pendentes.**
   Cartão `docs/tasks/F2-sdk-surfaces.md`. Teste-first: unit baseline 2 pass/4 fail + 3 exports ausentes
   (`/tmp/opencode/f2-sdk-surfaces-unit-baseline.log`); integração baseline `VEREDITO: FALHA` por
   `client.ts` ausente (`-integration-baseline.log`). `SurfaceSpec` ganhou `blur_region` DECLARADA
@@ -33,8 +33,16 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `createClient`, `defineDesktop`, loader TSX e `blank-desktop` foram criados; campos F3/F5/F6 têm
   erro explícito e `frame.enabled` controla o fallback de regras. Depois: 9/9 testes novos e 2/2
   Rust (`-unit-after2.log`, `-rust-after2.log`); `check.sh` EXIT=0 com 45 Bun
-  (`/tmp/opencode/f2-sdk-surfaces-gate-step1.log`). **Ainda NÃO executados: bridge seguro/fan-out,
-  harness completo, vizinhos, perf e juiz visual; cartão NÃO fechado.**
+  (`/tmp/opencode/f2-sdk-surfaces-gate-step1.log`). Etapa 2: bridge só aceita
+  `surface-update` com ID vinculada e campos input/blur (baseline unresolved import → 1/1);
+  `window.aero` por `UserScript`, fan-out do stream, replay idempotente, update sem reload,
+  size/keyboard/layer reaplicados e bundle same-origin `./client.js`. `f2_sdk_surfaces.py` final
+  **VEREDITO: OK**: 271.360 px vermelhos + 34.733 verdes, z-order, SurfaceUpdated do guest sem
+  reload, surface-list e clique no foot (`/tmp/opencode/f2-sdk-surfaces-integration-after5.log`).
+  Amostras after1–3 usavam binário host velho porque `--examples` não o relinkava; corrigido o
+  pré-requisito para `cargo build -p aeroshell-shell`. CORS de `aero://sdk` foi resolvido pela rota
+  same-origin, sem liberar origem externa. Gate step2b EXIT=0 (45 Bun), clippy bench 0 e no-default
+  0 (avisos antigos). **Vizinhos, perf e juiz visual ainda NÃO executados; cartão NÃO fechado.**
 - [x] **F2-surface-host-frame (2026-11-25) — FECHADO PELO JUIZ VISUAL ("aprovado").**
   `crates/aeroshell-shell/src/lib.rs` expõe o host; `surfaces/shared.rs` centraliza WebContext/âncora;
   `surfaces/frame.rs` recebe o spike (pool/related-view, canvas 9-slice, CSD opacidade, título/ícone,
@@ -1737,7 +1745,7 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
-- **F2-sdk-surfaces + defineDesktop: etapa 1 commitável; etapa 2 bridge/host e integração em execução.**
+- **F2-sdk-surfaces + defineDesktop: etapas 1/2 commitadas; vizinhos/perf em execução.**
   Blur é apenas região declarada, não efeito visual implementado. Juiz visual de 60 s PENDENTE.
 - **F2-notifications: código, 3× harness e gates verdes; JUIZ VISUAL PENDENTE (§7).** Humano fechou a
   instância com `foot` por redesenho contínuo (§6, A/B no HEAD com a mesma taxa); não aprovou os toasts.
@@ -3342,11 +3350,13 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
-- **F2-sdk-surfaces (2026-11-25): ETAPA 1 VERDE; CARTÃO ABERTO.** Baselines FALHA → 9/9 Bun + 2/2
-  Rust; `check.sh` 45/45. `aero.surfaces`, `createClient`, `defineDesktop`, loader e tipos ts-rs estão
-  na árvore; `surface-list` adicionado. Próximo imediato: restringir bridge à própria surface,
-  fan-out de eventos, updates sem reload e rodar `python3 tests/integration/f2_sdk_surfaces.py`.
-  Blur é só declaração; nenhum efeito novo. Vizinhos/perf/juiz NÃO executados. Sem push.
+- **F2-sdk-surfaces (2026-11-25): ETAPAS 1/2 VERDES; CARTÃO ABERTO.** Baselines FALHA → 9/9 Bun,
+  parser 2/2, segurança 1/1 e integração OK (pixels/z-order/guest/input). `check.sh` 45/45, clippy
+  bench 0, no-default 0. Reproduzir: `bun build packages/sdk/src/client.ts --target=browser
+  --outfile=packages/sdk/dist/client.js && cargo build -p aeroshell-shell && cargo build
+  -p aeroshell-compositor --features bench && python3 tests/integration/f2_sdk_surfaces.py`.
+  Próximo: vizinhos + `f2_surface_perf.py`, depois instância nested com 2 foot para juiz de 60 s.
+  Blur é só declaração; vizinhos/perf/juiz ainda NÃO executados. Sem push.
 - **F2-surface-host-frame (2026-11-25): FECHADO PELO JUIZ VISUAL ("aprovado").** `cf02321`
   migra o spike para `surfaces/frame.rs` com `lib.rs`, `surfaces/shared.rs` e shim de 5 linhas.
   Reproduzir (bench por último): `cargo build -p aeroshell-compositor --features bench &&

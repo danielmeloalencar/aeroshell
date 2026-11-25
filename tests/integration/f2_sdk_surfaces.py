@@ -8,6 +8,7 @@ clique que atravessa as regiões transparentes até o foot.
 Pré-requisitos (bench POR ÚLTIMO):
   bun build packages/sdk/src/client.ts --target=browser --outfile=packages/sdk/dist/client.js
   cargo build --workspace --examples
+  cargo build -p aeroshell-shell
   cargo build -p aeroshell-compositor --features bench
 """
 import json
@@ -260,9 +261,6 @@ def main():
         checks["background vermelho e painel verde medidos"] = bool(
             counts and counts[0] > 150_000 and counts[1] > 20_000
         )
-        checks["z-order desktop < cliente < panel"] = wait_for(
-            lambda: "SURFACE_Z desktop < cliente < overlay" in clean()
-        )
         checks["guest atualiza a PRÓPRIA região input/blur sem reload"] = wait_for(
             lambda: events.has(
                 "SurfaceUpdated", "blank-panel",
@@ -281,6 +279,9 @@ def main():
         ))
         print("=== IPC list cru ===")
         print(command("list", dot=True))
+        checks["z-order desktop < cliente < panel"] = wait_for(
+            lambda: "SURFACE_Z desktop < cliente < overlay" in clean()
+        )
         target = (OUTPUT[0] // 2, OUTPUT[1] // 2)
         wait_for(lambda: surface_id(
             r"CLIENT_ELEMENT_PROBE [^\n]*surface=ObjectId\([^,]+, (\d+)\)"

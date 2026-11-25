@@ -172,16 +172,61 @@ fn reply(webview: &WebView, seq: u64, lines: &[String]) {
     );
 }
 
-/// Bridge padrão das superfícies genéricas: input region por alfa/retângulos e
-/// o mesmo comando IPC do painel, sem o gate de eventos (cada host já assina
-/// o stream e entrega os eventos ao WebView por `window.__aeroEvent`).
-pub fn install_surface(window: &gtk4::ApplicationWindow, webview: &WebView) -> UserContentManager {
+/// Única capability IPC de uma WebView genérica: input/blur da surface dona.
+/// O ID vem do host, nunca de PID/env; qualquer outro comando/campo é recusado.
+fn guest_update_command(surface_id: &str, command: &str) -> Result<String, String> {
+    let raw = command
+        .strip_prefix("surface-update ")
+        .ok_or_else(|| "guest só pode atualizar input/blur da própria superfície".to_owned())?;
+    let value: serde_json::Value = serde_json::from_str(raw).map_err(|err| err.to_string())?;
+    let object = value
+        .as_object()
+        .ok_or_else(|| "surface-update guest espera objeto".to_owned())?;
+    if object.get("id").and_then(serde_json::Value::as_str) != Some(surface_id) {
+        return Err("guest não pode atualizar outra superfície".to_owned());
+    }
+    if object
+        .keys()
+        .any(|key| !matches!(key.as_str(), "id" | "input_region" | "blur_region"))
+    {
+        return Err("guest só pode atualizar input_region/blur_region".to_owned());
+    }
+    Ok(command.to_owned())
+}
+
+/// Bridge padrão das superfícies genéricas. Eventos chegam pelo único stream do
+/// host; comandos passam pela allowlist da superfície vinculada.
+pub fn install_surface(
+    window: &gtk4::ApplicationWindow,
+    webview: &WebView,
+    surface_id: &str,
+) -> UserContentManager {
     let weak_window = window.downgrade();
     let weak_webview = webview.downgrade();
     let manager = webview
         .user_content_manager()
         .expect("WebView sem UserContentManager");
+    let id_json = serde_json::to_string(surface_id).unwrap_or_else(|_| "\"\"".to_owned());
+    let bootstrap = format!(
+        r#"window.aeroSurfaceId={id_json};
+window.aero=Object.freeze({{
+  postMessage(message) {{
+    window.webkit.messageHandlers.aero.postMessage(message);
+  }}
+}});
+window.__aeroEvent=function(event) {{
+  window.dispatchEvent(new CustomEvent('aeroEvent',{{detail:event}}));
+}};"#
+    );
+    manager.add_script(&webkit6::UserScript::new(
+        &bootstrap,
+        webkit6::UserContentInjectedFrames::TopFrame,
+        webkit6::UserScriptInjectionTime::Start,
+        &[],
+        &[],
+    ));
     manager.register_script_message_handler("aero", None);
+    let owned_id = surface_id.to_owned();
     manager.connect_script_message_received(Some("aero"), move |_, value| {
         let json = value.to_json(0).unwrap_or_default().to_string();
         let Ok(message) = serde_json::from_str::<serde_json::Value>(&json) else {
@@ -200,8 +245,11 @@ pub fn install_surface(window: &gtk4::ApplicationWindow, webview: &WebView) -> U
                 ) else {
                     return;
                 };
-                let lines = forward(command);
-                tracing::info!(command, ?lines, "PONTE IPC superfície");
+                let lines = match guest_update_command(&owned_id, command) {
+                    Ok(allowed) => forward(&allowed),
+                    Err(error) => vec![format!("ERR permissão negada: {error}")],
+                };
+                tracing::info!(command, ?lines, "PONTE IPC superfície restrita");
                 reply(&webview, seq, &lines);
             }
             _ => {
@@ -210,6 +258,8 @@ pub fn install_surface(window: &gtk4::ApplicationWindow, webview: &WebView) -> U
                 };
                 if let Some(rects) = crate::input_region::parse(&json) {
                     crate::input_region::apply(&window, &rects);
+                } else {
+                    tracing::info!(%json, "mensagem do guest de superfície");
                 }
             }
         }
@@ -292,4 +342,31 @@ pub fn install(window: &gtk4::ApplicationWindow, webview: &WebView) -> UserConte
         }
     });
     manager
+}
+
+#[cfg(test)]
+mod tests {
+    use super::guest_update_command;
+
+    #[test]
+    fn guest_so_atualiza_input_e_blur_da_propria_superficie() {
+        let own = guest_update_command(
+            "panel-a",
+            r#"surface-update {"id":"panel-a","input_region":[],"blur_region":null}"#,
+        );
+        assert!(own.is_ok());
+        for command in [
+            "focus 1",
+            "surface-create {}",
+            "surface-destroy panel-a",
+            r#"surface-update {"id":"panel-b","input_region":[]}"#,
+            r#"surface-update {"id":"panel-a","html":"fora da capability"}"#,
+            r#"surface-update {"id":"panel-a","keyboard_mode":"exclusive"}"#,
+        ] {
+            assert!(
+                guest_update_command("panel-a", command).is_err(),
+                "aceitou: {command}"
+            );
+        }
+    }
 }

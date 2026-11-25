@@ -109,7 +109,7 @@ pub fn collect_output_elements(
         #[cfg(feature = "bench")]
         {
             let desktop = lower.iter().any(|l| matches!(l.layer(), Layer::Background));
-            let overlay = upper.iter().any(|l| matches!(l.layer(), Layer::Overlay));
+            let overlay = !upper.is_empty();
             let client = state.space.elements().any(|w| w.toplevel().is_some());
             static LOGGED_Z: std::sync::atomic::AtomicBool =
                 std::sync::atomic::AtomicBool::new(false);

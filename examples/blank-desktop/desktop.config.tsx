@@ -12,14 +12,19 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#00d000;col
 body{display:flex;align-items:center;justify-content:center}
 </style></head><body><strong>blank-desktop · SDK sem framework</strong>
 <script type="module">
-import { createClient } from "aero://sdk/client.js";
-const client = createClient();
-client.subscribe((event) => {
-  if ("Focus" in event) document.body.dataset.focus = String(event.Focus.id);
-});
-const rect = () => [{ x: 0, y: 0, width: window.innerWidth, height: window.innerHeight }];
-await client.update({ input_region: rect(), blur_region: rect() });
-document.body.dataset.aeroClient = "ready";
+try {
+  const { createClient } = await import("./client.js");
+  const client = createClient();
+  client.subscribe((event) => {
+    if ("Focus" in event) document.body.dataset.focus = String(event.Focus.id);
+  });
+  const rect = () => [{ x: 0, y: 0, width: window.innerWidth, height: window.innerHeight }];
+  await client.update({ input_region: rect(), blur_region: rect() });
+  document.body.dataset.aeroClient = "ready";
+  window.aero.postMessage({ type: "guest-ready", id: window.aeroSurfaceId });
+} catch (error) {
+  window.aero.postMessage({ type: "guest-error", message: String(error) });
+}
 </script></body></html>`;
 
 export default defineDesktop({

@@ -11,6 +11,7 @@ pub const PANEL_URI: &str = "aero://panel/index.html";
 
 const SHELL_RESET_CSS: &str = include_str!("../../../assets/shell-reset.css");
 const PANEL_JS: &[u8] = include_bytes!("../../../packages/panel/dist/app.js");
+const SDK_CLIENT_JS: &[u8] = include_bytes!("../../../packages/sdk/dist/client.js");
 
 /// HTML do painel React (04b). O bundle é servido em `aero://panel/app.js`.
 const REACT_PANEL_HTML: &str = r##"
@@ -224,6 +225,13 @@ pub fn install(context: &WebContext) {
             return;
         }
         let legacy = uri.contains("legacy");
+        if uri == "aero://sdk/client.js"
+            || (uri.starts_with("aero://surface/") && uri.ends_with("/client.js"))
+        {
+            let stream = MemoryInputStream::from_bytes(&Bytes::from_static(SDK_CLIENT_JS));
+            request.finish(&stream, SDK_CLIENT_JS.len() as i64, Some("text/javascript"));
+            return;
+        }
         if uri.contains("app.js") {
             let stream = MemoryInputStream::from_bytes(&Bytes::from_static(PANEL_JS));
             request.finish(&stream, PANEL_JS.len() as i64, Some("text/javascript"));

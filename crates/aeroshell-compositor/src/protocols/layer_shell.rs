@@ -35,9 +35,18 @@ impl AeroState {
                 .anchor
                 .anchored_vertically()
         });
-        let height = if anchored_vertically { mode.size.h } else { 48 };
-        let desired = (mode.size.w, height).into();
         let protocol = layer.layer_surface();
+        let requested_height = protocol
+            .current_state()
+            .size
+            .map(|size| size.h)
+            .filter(|height| *height > 0);
+        let height = if anchored_vertically {
+            mode.size.h
+        } else {
+            requested_height.unwrap_or(48)
+        };
+        let desired = (mode.size.w, height).into();
         if protocol.current_state().size != Some(desired) {
             protocol.with_pending_state(|state| state.size = Some(desired));
             let _ = protocol.send_pending_configure();

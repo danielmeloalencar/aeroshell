@@ -88,7 +88,7 @@ function complete(kind: SurfaceKind, options: SurfaceOptions): SurfaceSpec {
     input_region: options.input_region ?? null,
     blur_region: options.blur_region ?? null,
     width: options.width ?? null,
-    height: options.height ?? null,
+    height: options.height ?? (panel ? 48 : null),
     html: options.html ?? null,
     url: options.url ?? null,
   };
