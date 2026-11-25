@@ -36,7 +36,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   preservado. Variância de VM sem 3D: não declarar p99 constante nem benchmark de GPU real
   (`f2-hmr-perf.log`, `f2-hmr-perf-run{2,3}.log`). **Juiz visual APROVADO** após editar cor/texto,
   9 revisões HMR no log e 2 `foot` por 60 s; compositor 21349, host 21373, runtime 21604 e foot
-  21650/21651 continuavam abertos no fechamento, sem ação do agente. **CARTÃO FECHADO.**
+  21650/21651: na checagem final só o runtime 21604 permanecia em `ps`; os demais já haviam saído,
+  todos sem encerramento pelo agente. **CARTÃO FECHADO.**
 - [x] **F2-sdk-surfaces + defineDesktop (2026-11-25) — FECHADO PELO JUIZ VISUAL ("aprovado").**
   Cartão `docs/tasks/F2-sdk-surfaces.md`. Teste-first: unit baseline 2 pass/4 fail + 3 exports ausentes
   (`/tmp/opencode/f2-sdk-surfaces-unit-baseline.log`); integração baseline `VEREDITO: FALHA` por
@@ -1775,7 +1776,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
 ## 4. Em andamento
 - **F2-HMR via Bun.serve: FECHADO PELO JUIZ VISUAL ("Aprovado"; "perfeito, está aprovado").**
   Integração, nove vizinhos e gates verdes; três perfs com WebProcess/redraw invariantes e p99 variável
-  na VM (§3). Instância visual continua aberta para o humano fechar. **PARAR; próximo cartão só com ok.**
+  na VM (§3). Na checagem final só o runtime visual 21604 permanecia em `ps`, sem ação do agente.
+  **PARAR; próximo cartão só com ok.**
 - **F2-sdk-surfaces + defineDesktop: FECHADO PELO JUIZ VISUAL ("aprovado").** PARAR.
   Blur é apenas região declarada, não efeito visual implementado. Nenhum próximo cartão autorizado.
 - **F2-notifications: código, 3× harness e gates verdes; JUIZ VISUAL PENDENTE (§7).** Humano fechou a
@@ -3390,7 +3392,8 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
   cargo build -p aeroshell-shell && cargo build -p aeroshell-compositor --features bench &&
   python3 tests/integration/f2_hmr.py` → OK. Nove vizinhos OK; `check.sh` 50/50; clippy/no-default 0;
   3 perfs com 1 WebProcess no host e 0 redraws estáticos. Edição ao vivo aprovada com 2 `foot`/60 s;
-  instância 21349/21373/21604/21650/21651 continua aberta. Produção só `aero://`; GPU real não medida.
+  na checagem final só o runtime 21604 permanecia em `ps`, sem ação do agente. Produção só `aero://`;
+  GPU real não medida.
   **Próximo: F2-outputs+input-binds apenas com cartão próprio e ok; sem push.**
 - **F2-sdk-surfaces (2026-11-25): FECHADO PELO JUIZ VISUAL ("aprovado").** SDK runtime/guest,
   defineDesktop completo por ts-rs e blank-desktop entregues. Reproduzir: `bun build
