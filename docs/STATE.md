@@ -52,7 +52,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   VM sem 3D, não é benchmark de GPU real). **Juiz visual APROVADO ("aprovado")** com
   `examples/blank-desktop/desktop.config.tsx`, painel verde, background e 2 `foot` por 60 s
   (compositor 19711, host 19729, runtime 19912, foot 19989/19990). O compositor estava fechado
-  após o teste; o runtime 19912 permanece vivo, sem encerramento pelo agente. Gate final
+  após o teste; o runtime 19912 também não estava mais em `ps` no fechamento, sem encerramento
+  pelo agente. Gate final
   `check.sh` EXIT=0 (45 Bun). `frame_follows_resize` não foi reexecutado; falha antiga por A/B.
   **CARTÃO FECHADO.**
 - [x] **F2-surface-host-frame (2026-11-25) — FECHADO PELO JUIZ VISUAL ("aprovado").**
@@ -3369,7 +3370,8 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
   python3 tests/integration/f2_sdk_surfaces.py` → OK. 8 vizinhos OK; perf 1 WebProcess no host
   (2 e 4 superfícies), 0 redraws estáticos; `check.sh` 45/45, clippy bench/no-default 0.
   Blur é só declaração; GPU real não medida. Compositor visual fechado após o teste; runtime 19912
-  permanece vivo sem ação do agente. **Próximo: HMR apenas com cartão próprio; sem push.**
+  também não estava mais em `ps` no fechamento, sem ação do agente. **Próximo: HMR apenas com
+  cartão próprio; sem push.**
 - **F2-surface-host-frame (2026-11-25): FECHADO PELO JUIZ VISUAL ("aprovado").** `cf02321`
   migra o spike para `surfaces/frame.rs` com `lib.rs`, `surfaces/shared.rs` e shim de 5 linhas.
   Reproduzir (bench por último): `cargo build -p aeroshell-compositor --features bench &&
