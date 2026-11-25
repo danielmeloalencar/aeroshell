@@ -8,6 +8,7 @@ import type { Snapshot } from "./generated/Snapshot";
 import type { SurfaceSpec } from "./generated/SurfaceSpec";
 import type { WindowInfo } from "./generated/WindowInfo";
 import type { Workspace } from "./generated/Workspace";
+import { createSurfacesApi, surfaceFromWire } from "./api/surfaces";
 import { WindowStore } from "./store";
 
 /** Transporte textual: recebe um comando e devolve as linhas da resposta. */
@@ -66,6 +67,12 @@ export function parseEvent(raw: string | unknown): AeroEvent | null {
     const value: unknown = typeof raw === "string" ? JSON.parse(raw) : raw;
     if (typeof value !== "object" || value === null) return null;
     if (!EVENT_KEYS.some((key) => key in value)) return null;
+    if ("SurfaceCreated" in value) {
+      return { SurfaceCreated: { surface: surfaceFromWire(value.SurfaceCreated.surface) } };
+    }
+    if ("SurfaceUpdated" in value) {
+      return { SurfaceUpdated: { surface: surfaceFromWire(value.SurfaceUpdated.surface) } };
+    }
     return value as AeroEvent;
   } catch {
     return null;
@@ -116,6 +123,7 @@ function fuzzyScore(query: string, text: string): number | null {
 
 export function createAero(transport: Transport) {
   const store = new WindowStore();
+  const surfaces = createSurfacesApi(transport, store);
 
   /** Busca o estado no compositor e o publica como snapshot (1ª vez) ou patches. */
   async function refresh(): Promise<Snapshot> {
@@ -191,22 +199,22 @@ export function createAero(transport: Transport) {
    * });
    */
   function createSurface(spec: SurfaceSpec): void {
-    void transport(`surface-create ${JSON.stringify(spec)}`).then(expectOk).catch(
+    const { kind, ...options } = spec;
+    void surfaces.create(kind, options).catch(
       (error: unknown) => console.error(`falha ao criar superfície ${spec.id}:`, error),
     );
   }
 
   /** Atualiza somente os campos informados de uma superfície existente. */
   function updateSurface(id: string, patch: Partial<SurfaceSpec>): void {
-    const spec = { ...patch, id };
-    void transport(`surface-update ${JSON.stringify(spec)}`).then(expectOk).catch(
+    void surfaces.update(id, patch).catch(
       (error: unknown) => console.error(`falha ao atualizar superfície ${id}:`, error),
     );
   }
 
   /** Destrói uma superfície e libera a WebView associada no host. */
   function destroySurface(id: string): void {
-    void transport(`surface-destroy ${id}`).then(expectOk).catch((error: unknown) => {
+    void surfaces.destroy(id).catch((error: unknown) => {
       console.error(`falha ao destruir superfície ${id}:`, error);
     });
   }
@@ -277,6 +285,7 @@ export function createAero(transport: Transport) {
     listApps,
     searchApps,
     launchApp,
+    surfaces,
     createSurface,
     updateSurface,
     destroySurface,

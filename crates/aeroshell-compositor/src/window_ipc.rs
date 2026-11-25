@@ -12,6 +12,7 @@
 //!   policy-reload   -> OK (uso interno: reemite DecorationRequest às janelas decididas)
 //!   launch <app_id> [workspace_id] -> OK (lança ou foca uma instância existente)
 //!   surface-create <json> -> OK (declara superfície web e publica SurfaceCreated)
+//!   surface-list          -> uma linha `S <json>` por superfície, terminada por `.`
 //!   surface-update <json> -> OK (mescla campos e publica SurfaceUpdated)
 //!   surface-destroy <id>  -> OK (publica SurfaceDestroyed)
 //!   notify <titulo-json> <corpo-json> [icone-json] [timeout-ms] [id-json]
@@ -310,12 +311,14 @@ fn app_json(app: &App) -> Value {
 }
 
 fn surface_json(surface: &SurfaceSpec) -> Value {
-    let region: Option<Vec<Value>> = surface.input_region.as_ref().map(|rects| {
-        rects
-            .iter()
-            .map(|r| json!({ "x": r.x, "y": r.y, "width": r.width, "height": r.height }))
-            .collect()
-    });
+    let rects = |regions: &Option<Vec<SurfaceInputRegion>>| {
+        regions.as_ref().map(|rects| {
+            rects
+                .iter()
+                .map(|r| json!({ "x": r.x, "y": r.y, "width": r.width, "height": r.height }))
+                .collect::<Vec<Value>>()
+        })
+    };
     json!({
         "id": surface.id,
         "kind": surface_kind_name(surface.kind),
@@ -331,7 +334,10 @@ fn surface_json(surface: &SurfaceSpec) -> Value {
         "exclusive_zone": surface.exclusive_zone,
         "layer": surface_layer_name(surface.layer),
         "keyboard_mode": surface_keyboard_name(surface.keyboard_mode),
-        "input_region": region,
+        "input_region": rects(&surface.input_region),
+        "blur_region": rects(&surface.blur_region),
+        "width": surface.width,
+        "height": surface.height,
         "html": surface.html,
         "url": surface.url,
     })
@@ -397,6 +403,37 @@ fn field_u32(value: &Value, field: &str, default: u32) -> Result<u32, String> {
     }
 }
 
+fn optional_u32(value: &Value, field: &str) -> Result<Option<u32>, String> {
+    match value.get(field) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::Number(number)) => number
+            .as_u64()
+            .and_then(|v| u32::try_from(v).ok())
+            .map(Some)
+            .ok_or_else(|| format!("campo {field} fora da faixa u32")),
+        Some(_) => Err(format!("campo {field} deveria ser número")),
+    }
+}
+
+fn surface_regions(value: &Value, field: &str) -> Result<Option<Vec<SurfaceInputRegion>>, String> {
+    match value.get(field) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::Array(items)) => {
+            let mut rects = Vec::with_capacity(items.len());
+            for item in items {
+                rects.push(SurfaceInputRegion {
+                    x: field_i32(item, "x", 0)?,
+                    y: field_i32(item, "y", 0)?,
+                    width: field_u32(item, "width", 0)?,
+                    height: field_u32(item, "height", 0)?,
+                });
+            }
+            Ok(Some(rects))
+        }
+        Some(_) => Err(format!("{field} deveria ser lista")),
+    }
+}
+
 /// Converte o JSON de `surface-create/update` no tipo gerado por ts-rs.
 /// Nenhum serde é adicionado à crate de IPC: a wire continua montada à mão.
 fn parse_surface_spec(value: &Value) -> Result<SurfaceSpec, String> {
@@ -451,22 +488,8 @@ fn parse_surface_spec(value: &Value) -> Result<SurfaceSpec, String> {
         top: margin_at(2)?,
         bottom: margin_at(3)?,
     };
-    let input_region = match value.get("input_region") {
-        None | Some(Value::Null) => None,
-        Some(Value::Array(items)) => {
-            let mut rects = Vec::with_capacity(items.len());
-            for item in items {
-                rects.push(SurfaceInputRegion {
-                    x: field_i32(item, "x", 0)?,
-                    y: field_i32(item, "y", 0)?,
-                    width: field_u32(item, "width", 0)?,
-                    height: field_u32(item, "height", 0)?,
-                });
-            }
-            Some(rects)
-        }
-        Some(_) => return Err("input_region deveria ser lista".to_owned()),
-    };
+    let input_region = surface_regions(value, "input_region")?;
+    let blur_region = surface_regions(value, "blur_region")?;
     let html = value.get("html").and_then(Value::as_str).map(str::to_owned);
     let url = value.get("url").and_then(Value::as_str).map(str::to_owned);
     if html.is_some() && url.is_some() {
@@ -480,15 +503,7 @@ fn parse_surface_spec(value: &Value) -> Result<SurfaceSpec, String> {
     Ok(SurfaceSpec {
         id,
         kind,
-        output: match value.get("output") {
-            None | Some(Value::Null) => None,
-            Some(Value::Number(n)) => Some(
-                n.as_u64()
-                    .and_then(|v| u32::try_from(v).ok())
-                    .ok_or_else(|| "output inválido".to_owned())?,
-            ),
-            Some(_) => return Err("output deveria ser número".to_owned()),
-        },
+        output: optional_u32(value, "output")?,
         anchors: SurfaceAnchors {
             left: anchors
                 .map(|a| field_bool(a, "left", false))
@@ -508,6 +523,9 @@ fn parse_surface_spec(value: &Value) -> Result<SurfaceSpec, String> {
         layer,
         keyboard_mode,
         input_region,
+        blur_region,
+        width: optional_u32(value, "width")?,
+        height: optional_u32(value, "height")?,
         html,
         url,
     })
@@ -1036,6 +1054,18 @@ impl AeroState {
             }
             // F2-surface-host: o runtime declara superfícies por JSON numa linha;
             // o host de superfícies consome os eventos no stream PUSH existente.
+            "surface-list" => {
+                let mut ids: Vec<_> = self.surfaces.keys().cloned().collect();
+                ids.sort();
+                let mut out = String::new();
+                for id in ids {
+                    if let Some(surface) = self.surfaces.get(&id) {
+                        out.push_str(&format!("S {}\n", surface_json(surface)));
+                    }
+                }
+                out.push('.');
+                out
+            }
             "surface-create" => {
                 let raw = cmd.strip_prefix("surface-create").unwrap_or("").trim();
                 let value: Value = match serde_json::from_str(raw) {
@@ -1311,6 +1341,19 @@ mod tests {
         assert_eq!(spec.id, "desk");
         assert_eq!(surface_kind_name_local(spec.kind), "desktop");
         assert_eq!(spec.margins.left, 0);
+        assert_eq!(spec.blur_region, None);
+        assert_eq!(spec.width, None);
+
+        let with_regions: serde_json::Value = serde_json::from_str(
+            r#"{"id":"panel","kind":"panel","height":56,"margins":[0,0,0,0],
+                "input_region":[{"x":0,"y":0,"width":640,"height":56}],
+                "blur_region":[{"x":0,"y":0,"width":640,"height":56}]}"#,
+        )
+        .unwrap();
+        let spec = parse_surface_spec(&with_regions).unwrap();
+        assert_eq!(spec.height, Some(56));
+        assert_eq!(spec.input_region.unwrap()[0].width, 640);
+        assert_eq!(spec.blur_region.unwrap()[0].height, 56);
 
         let external: serde_json::Value =
             serde_json::from_str(r#"{"id":"x","kind":"overlay","url":"https://example.com"}"#)

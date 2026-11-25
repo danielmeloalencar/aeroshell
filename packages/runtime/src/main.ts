@@ -4,6 +4,7 @@
 //!                                                                --close <id>
 
 import { createAero } from "../../sdk/src/index";
+import { startDesktop } from "./config-loader";
 import { ipcTransport } from "./ipc-client";
 
 const socketPath = process.env.AERO_WINDOW_IPC_SOCK;
@@ -15,7 +16,13 @@ if (!socketPath) {
 const aero = createAero(ipcTransport(socketPath));
 const [command, rawId] = process.argv.slice(2);
 
-if (command === "--list") {
+if (command === "--config") {
+  if (!rawId) {
+    console.error("Uso: --config <desktop.config.tsx>");
+    process.exit(2);
+  }
+  await startDesktop(rawId);
+} else if (command === "--list") {
   const windows = await aero.windows.list();
   for (const window of windows) console.log(`${window.id}\t${window.title}`);
 } else if (command === "--focus" || command === "--close") {
@@ -28,6 +35,6 @@ if (command === "--list") {
   else await aero.windows.close(id);
   console.log(`OK: ${command.slice(2)} ${id}`);
 } else {
-  console.error("Uso: --list | --focus <id> | --close <id>");
+  console.error("Uso: --config <desktop.config.tsx> | --list | --focus <id> | --close <id>");
   process.exit(2);
 }

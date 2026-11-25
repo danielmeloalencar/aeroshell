@@ -198,8 +198,146 @@ pub struct SurfaceSpec {
     pub layer: SurfaceLayer,
     pub keyboard_mode: SurfaceKeyboardMode,
     pub input_region: Option<Vec<SurfaceInputRegion>>,
+    /// Região declarada para blur; a aplicação usa exclusivamente
+    /// `ext-background-effect-v1` quando esse mecanismo estiver ligado.
+    pub blur_region: Option<Vec<SurfaceInputRegion>>,
+    /// Tamanho lógico pedido à layer; `None` deixa o eixo ser resolvido pelas âncoras.
+    pub width: Option<u32>,
+    pub height: Option<u32>,
     pub html: Option<String>,
     pub url: Option<String>,
+}
+
+/// Opções de `aero.surfaces.create`; campos omitidos recebem defaults por kind no SDK.
+#[cfg_attr(feature = "export-bindings", derive(TS))]
+#[cfg_attr(feature = "export-bindings", ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SurfaceOptions {
+    pub id: String,
+    #[cfg_attr(feature = "export-bindings", ts(optional))]
+    pub output: Option<u32>,
+    #[cfg_attr(feature = "export-bindings", ts(optional))]
+    pub anchors: Option<SurfaceAnchors>,
+    #[cfg_attr(feature = "export-bindings", ts(optional))]
+    pub margins: Option<SurfaceMargins>,
+    #[cfg_attr(feature = "export-bindings", ts(optional))]
+    pub exclusive_zone: Option<u32>,
+    #[cfg_attr(feature = "export-bindings", ts(optional))]
+    pub layer: Option<SurfaceLayer>,
+    #[cfg_attr(feature = "export-bindings", ts(optional))]
+    pub keyboard_mode: Option<SurfaceKeyboardMode>,
+    #[cfg_attr(feature = "export-bindings", ts(optional))]
+    pub input_region: Option<Vec<SurfaceInputRegion>>,
+    #[cfg_attr(feature = "export-bindings", ts(optional))]
+    pub blur_region: Option<Vec<SurfaceInputRegion>>,
+    #[cfg_attr(feature = "export-bindings", ts(optional))]
+    pub width: Option<u32>,
+    #[cfg_attr(feature = "export-bindings", ts(optional))]
+    pub height: Option<u32>,
+    #[cfg_attr(feature = "export-bindings", ts(optional))]
+    pub html: Option<String>,
+    #[cfg_attr(feature = "export-bindings", ts(optional))]
+    pub url: Option<String>,
+}
+
+/// Item declarativo de `defineDesktop({ surfaces })`, sem tipo TS paralelo.
+#[cfg_attr(feature = "export-bindings", derive(TS))]
+#[cfg_attr(feature = "export-bindings", ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SurfaceDeclaration {
+    pub kind: SurfaceKind,
+    #[cfg_attr(feature = "export-bindings", ts(flatten))]
+    pub options: SurfaceOptions,
+}
+
+/// Configuração atual da decoração SSD; regras explícitas têm precedência.
+#[cfg_attr(feature = "export-bindings", derive(TS))]
+#[cfg_attr(feature = "export-bindings", ts(export))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FrameConfig {
+    pub enabled: bool,
+}
+
+/// Entrada de layout deferida para F3 (tipada agora, rejeitada pelo runtime F2).
+#[cfg_attr(feature = "export-bindings", derive(TS))]
+#[cfg_attr(feature = "export-bindings", ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LayoutConfig {
+    pub name: String,
+}
+
+/// Atalho deferido para F3.
+#[cfg_attr(feature = "export-bindings", derive(TS))]
+#[cfg_attr(feature = "export-bindings", ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KeybindingConfig {
+    pub keys: String,
+    pub command: String,
+}
+
+/// Ação de idle prevista no contrato; a política e os timers chegam na F5.
+#[cfg_attr(feature = "export-bindings", derive(TS))]
+#[cfg_attr(feature = "export-bindings", ts(export))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IdleAction {
+    Dim,
+    Lock,
+    DpmsOff,
+    Suspend,
+    Custom,
+}
+
+/// Regra de idle deferida para F5.
+#[cfg_attr(feature = "export-bindings", derive(TS))]
+#[cfg_attr(feature = "export-bindings", ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IdleRule {
+    pub after_ms: u64,
+    pub action: IdleAction,
+    #[cfg_attr(feature = "export-bindings", ts(optional))]
+    pub custom_name: Option<String>,
+}
+
+/// Opções visuais de lock deferidas para F5; nenhum segredo passa por este tipo.
+#[cfg_attr(feature = "export-bindings", derive(TS))]
+#[cfg_attr(feature = "export-bindings", ts(export))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LockConfig {
+    #[cfg_attr(feature = "export-bindings", ts(optional))]
+    pub show_notifications: Option<bool>,
+}
+
+/// Opções visuais do greeter deferidas para F6; autenticação não entra no SDK geral.
+#[cfg_attr(feature = "export-bindings", derive(TS))]
+#[cfg_attr(feature = "export-bindings", ts(export))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GreeterConfig {
+    #[cfg_attr(feature = "export-bindings", ts(optional))]
+    pub show_users: Option<bool>,
+}
+
+/// Contrato completo de `desktop.config.tsx`; somente surfaces/frame/rules são
+/// aplicados na F2. O loader rejeita explicitamente qualquer campo deferido usado.
+#[cfg_attr(feature = "export-bindings", derive(TS))]
+#[cfg_attr(feature = "export-bindings", ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DesktopConfig {
+    #[cfg_attr(feature = "export-bindings", ts(optional))]
+    pub surfaces: Option<Vec<SurfaceDeclaration>>,
+    #[cfg_attr(feature = "export-bindings", ts(optional))]
+    pub frame: Option<FrameConfig>,
+    #[cfg_attr(feature = "export-bindings", ts(optional))]
+    pub layouts: Option<Vec<LayoutConfig>>,
+    #[cfg_attr(feature = "export-bindings", ts(optional))]
+    pub rules: Option<DecorationPolicyConfig>,
+    #[cfg_attr(feature = "export-bindings", ts(optional))]
+    pub keybindings: Option<Vec<KeybindingConfig>>,
+    #[cfg_attr(feature = "export-bindings", ts(optional))]
+    pub idle: Option<Vec<IdleRule>>,
+    #[cfg_attr(feature = "export-bindings", ts(optional))]
+    pub lock: Option<LockConfig>,
+    #[cfg_attr(feature = "export-bindings", ts(optional))]
+    pub greeter: Option<GreeterConfig>,
 }
 
 /// Evento PUSH do compositor para shell/SDK (substitui o polling do S4).

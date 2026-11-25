@@ -22,6 +22,19 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [~] **F2-sdk-surfaces + defineDesktop (2026-11-25) — etapa 1 runtime/contrato verde; integração e juiz pendentes.**
+  Cartão `docs/tasks/F2-sdk-surfaces.md`. Teste-first: unit baseline 2 pass/4 fail + 3 exports ausentes
+  (`/tmp/opencode/f2-sdk-surfaces-unit-baseline.log`); integração baseline `VEREDITO: FALHA` por
+  `client.ts` ausente (`-integration-baseline.log`). `SurfaceSpec` ganhou `blur_region` DECLARADA
+  (ADR 0003: efeito real só `ext-background-effect-v1`), `width/height`; `DesktopConfig` e todas as
+  opções/campos deferidos vêm de ts-rs (`bun run generate:types`: 28 exports). `surface-list` é
+  determinístico (`S <json>` + `.`); `aero.surfaces.create/update/destroy/list/setInputRegion/
+  setBlurRegion/setKeyboard` normaliza enums/margins na fronteira, propaga erros e reconcilia o store.
+  `createClient`, `defineDesktop`, loader TSX e `blank-desktop` foram criados; campos F3/F5/F6 têm
+  erro explícito e `frame.enabled` controla o fallback de regras. Depois: 9/9 testes novos e 2/2
+  Rust (`-unit-after2.log`, `-rust-after2.log`); `check.sh` EXIT=0 com 45 Bun
+  (`/tmp/opencode/f2-sdk-surfaces-gate-step1.log`). **Ainda NÃO executados: bridge seguro/fan-out,
+  harness completo, vizinhos, perf e juiz visual; cartão NÃO fechado.**
 - [x] **F2-surface-host-frame (2026-11-25) — FECHADO PELO JUIZ VISUAL ("aprovado").**
   `crates/aeroshell-shell/src/lib.rs` expõe o host; `surfaces/shared.rs` centraliza WebContext/âncora;
   `surfaces/frame.rs` recebe o spike (pool/related-view, canvas 9-slice, CSD opacidade, título/ícone,
@@ -1724,6 +1737,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
+- **F2-sdk-surfaces + defineDesktop: etapa 1 commitável; etapa 2 bridge/host e integração em execução.**
+  Blur é apenas região declarada, não efeito visual implementado. Juiz visual de 60 s PENDENTE.
 - **F2-notifications: código, 3× harness e gates verdes; JUIZ VISUAL PENDENTE (§7).** Humano fechou a
   instância com `foot` por redesenho contínuo (§6, A/B no HEAD com a mesma taxa); não aprovou os toasts.
   Não reabrir setup com `foot` sem decisão; próximo passo é perguntar se julga sem `foot` ou se abre
@@ -1825,8 +1840,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-**F2-surface-host-frame: FECHADO PELO JUIZ VISUAL. PRÓXIMO AUTORIZADO: F2-sdk-surfaces +
-defineDesktop, apenas com cartão próprio e ok do humano.**
+**F2-surface-host-frame: FECHADO PELO JUIZ VISUAL. F2-sdk-surfaces + defineDesktop AUTORIZADO E
+EM EXECUÇÃO (cartão próprio aprovado); PARAR para o juiz visual antes de qualquer próximo cartão.**
 **F2-surface-perf-fix: FECHADO (passos 1/2 e juiz visual 60 s aprovado). PARAR.**
 **F2-surface-perf: PARAR. Invariantes de WebProcess/related_view falharam (§3); humano decidirá se
 abre cartão de correção dirigido (compartilhamento de WebProcess / damage / pool). NENHUMA correção
@@ -3327,6 +3342,11 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
+- **F2-sdk-surfaces (2026-11-25): ETAPA 1 VERDE; CARTÃO ABERTO.** Baselines FALHA → 9/9 Bun + 2/2
+  Rust; `check.sh` 45/45. `aero.surfaces`, `createClient`, `defineDesktop`, loader e tipos ts-rs estão
+  na árvore; `surface-list` adicionado. Próximo imediato: restringir bridge à própria surface,
+  fan-out de eventos, updates sem reload e rodar `python3 tests/integration/f2_sdk_surfaces.py`.
+  Blur é só declaração; nenhum efeito novo. Vizinhos/perf/juiz NÃO executados. Sem push.
 - **F2-surface-host-frame (2026-11-25): FECHADO PELO JUIZ VISUAL ("aprovado").** `cf02321`
   migra o spike para `surfaces/frame.rs` com `lib.rs`, `surfaces/shared.rs` e shim de 5 linhas.
   Reproduzir (bench por último): `cargo build -p aeroshell-compositor --features bench &&

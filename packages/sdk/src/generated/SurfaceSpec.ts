@@ -10,4 +10,13 @@ import type { SurfaceMargins } from "./SurfaceMargins";
  * Especificação completa de uma superfície web enviada pelo runtime.
  * `html` e `url` são mutuamente exclusivos; URLs só podem usar `aero://`.
  */
-export type SurfaceSpec = { id: string, kind: SurfaceKind, output: number | null, anchors: SurfaceAnchors, margins: SurfaceMargins, exclusive_zone: number, layer: SurfaceLayer, keyboard_mode: SurfaceKeyboardMode, input_region: Array<SurfaceInputRegion> | null, html: string | null, url: string | null, };
+export type SurfaceSpec = { id: string, kind: SurfaceKind, output: number | null, anchors: SurfaceAnchors, margins: SurfaceMargins, exclusive_zone: number, layer: SurfaceLayer, keyboard_mode: SurfaceKeyboardMode, input_region: Array<SurfaceInputRegion> | null, 
+/**
+ * Região declarada para blur; a aplicação usa exclusivamente
+ * `ext-background-effect-v1` quando esse mecanismo estiver ligado.
+ */
+blur_region: Array<SurfaceInputRegion> | null, 
+/**
+ * Tamanho lógico pedido à layer; `None` deixa o eixo ser resolvido pelas âncoras.
+ */
+width: number | null, height: number | null, html: string | null, url: string | null, };

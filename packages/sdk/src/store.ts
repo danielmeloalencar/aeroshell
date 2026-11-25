@@ -141,6 +141,11 @@ export class WindowStore {
     this.setWorkspaces({ workspaces, activeId });
   }
 
+  /** Reconcilia o snapshot canônico retornado por `surface-list`. */
+  applySurfaces(surfaces: SurfaceSpec[]): void {
+    this.setSurfaces(surfaces);
+  }
+
   private setWorkspaces(next: WorkspacesState): void {
     this.workspacesState = next;
     for (const listener of this.workspaceListeners) listener();
