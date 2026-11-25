@@ -121,6 +121,23 @@ function createClient(host = window) {
       return () => host.removeEventListener("aeroEvent", listener);
     },
     update,
+    enableHmr() {
+      const location = host.location;
+      const Socket = host.WebSocket;
+      if (!location || location.protocol !== "http:" || !Socket) {
+        throw new Error("HMR requer uma superfície servida pelo dev-server HTTP");
+      }
+      const socket = new Socket(`ws://${location.host}/ws`);
+      socket.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          if (message.type === "reload" && message.surfaceIds?.includes(surfaceId)) {
+            location.reload();
+          }
+        } catch {}
+      };
+      return () => socket.close();
+    },
     setInputRegion(regions) {
       return update({ input_region: regions });
     },

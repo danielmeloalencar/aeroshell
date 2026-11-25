@@ -238,6 +238,8 @@ pub struct SurfaceOptions {
     pub html: Option<String>,
     #[cfg_attr(feature = "export-bindings", ts(optional))]
     pub url: Option<String>,
+    #[cfg_attr(feature = "export-bindings", ts(optional))]
+    pub dev_entry: Option<String>,
 }
 
 /// Item declarativo de `defineDesktop({ surfaces })`, sem tipo TS paralelo.

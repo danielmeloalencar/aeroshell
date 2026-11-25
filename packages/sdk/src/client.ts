@@ -9,10 +9,17 @@ type GuestPatch = {
   blur_region?: SurfaceInputRegion[] | null;
 };
 
+type HmrSocket = {
+  onmessage: ((event: { data: string }) => void) | null;
+  close(): void;
+};
+
 type GuestWindow = {
   aeroSurfaceId: string;
   aero: { postMessage(message: Record<string, unknown>): void };
   __aeroReply?: (seq: number, lines: string[]) => void;
+  location?: { protocol: string; host: string; reload(): void };
+  WebSocket?: new (url: string) => HmrSocket;
   addEventListener(type: string, listener: (event: Event) => void): void;
   removeEventListener(type: string, listener: (event: Event) => void): void;
 };
@@ -69,6 +76,30 @@ export function createClient(host: GuestWindow = window as unknown as GuestWindo
       return () => host.removeEventListener("aeroEvent", listener);
     },
     update,
+    /**
+     * Opt-in do canal HMR em páginas HTTP do dev-server. A mensagem de reload
+     * só afeta esta surface; o WebSocket nunca carrega comandos privilegiados.
+     * @returns função que fecha o canal ao desmontar o componente.
+     */
+    enableHmr(): () => void {
+      const location = host.location;
+      const Socket = host.WebSocket;
+      if (!location || location.protocol !== "http:" || !Socket) {
+        throw new Error("HMR requer uma superfície servida pelo dev-server HTTP");
+      }
+      const socket = new Socket(`ws://${location.host}/ws`);
+      socket.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data) as { type?: string; surfaceIds?: string[] };
+          if (message.type === "reload" && message.surfaceIds?.includes(surfaceId)) {
+            location.reload();
+          }
+        } catch {
+          // Mensagem malformada não altera o documento nem abre navegação.
+        }
+      };
+      return () => socket.close();
+    },
     /** Atualiza os retângulos interativos da própria superfície. */
     setInputRegion(regions: SurfaceInputRegion[] | null): Promise<void> {
       return update({ input_region: regions });

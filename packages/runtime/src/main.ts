@@ -14,14 +14,18 @@ if (!socketPath) {
 }
 
 const aero = createAero(ipcTransport(socketPath));
-const [command, rawId] = process.argv.slice(2);
+const [command, rawId, flag] = process.argv.slice(2);
 
 if (command === "--config") {
   if (!rawId) {
     console.error("Uso: --config <desktop.config.tsx>");
     process.exit(2);
   }
-  await startDesktop(rawId);
+  if (flag !== undefined && flag !== "--dev") {
+    console.error(`Flag desconhecida: ${flag}`);
+    process.exit(2);
+  }
+  await startDesktop(rawId, { dev: flag === "--dev" });
 } else if (command === "--list") {
   const windows = await aero.windows.list();
   for (const window of windows) console.log(`${window.id}\t${window.title}`);
@@ -35,6 +39,6 @@ if (command === "--config") {
   else await aero.windows.close(id);
   console.log(`OK: ${command.slice(2)} ${id}`);
 } else {
-  console.error("Uso: --config <desktop.config.tsx> | --list | --focus <id> | --close <id>");
+  console.error("Uso: --config <desktop.config.tsx> [--dev] | --list | --focus <id> | --close <id>");
   process.exit(2);
 }

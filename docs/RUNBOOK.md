@@ -155,6 +155,23 @@ input/blur da própria surface e clique pass-through. Em nested, inicie também 
 `AERO_SURFACE_HOST=1 WAYLAND_DISPLAY=<socket> target/debug/aeroshell-shell`; frames continuam em
 `--shell target/debug/examples/frame_webview`. Blur é somente declaração nesta fase.
 
+### HMR do desktop (`F2-HMR`, somente desenvolvimento)
+Defina `AERO_DEV_ORIGIN=http://127.0.0.1:4173` no compositor, no host genérico e no runtime. Só o
+runtime recebe a flag; o host/compositor usam a origem como allowlist de navegação:
+```
+bun packages/runtime/src/main.ts --config examples/blank-desktop/desktop.config.tsx --dev
+```
+`desktop.config.tsx` é empacotado novamente a cada edição (inclusive helpers) e gera diff
+create/update/destroy. `dev_entry: "./panel.ts"` marca o módulo browser construído por `Bun.build`;
+edições dele disparam `enableHmr()` via WebSocket same-origin. Sem `--dev`, o servidor não existe,
+HTTP é recusado e o HTML inline `aero://` permanece como fallback. O servidor não aceita conexões
+fora de `127.0.0.1`, valida `Origin` do WebSocket e não deve ser usado em produção.
+
+Harness headless completo (edita cor/texto, módulo e create/destroy; mede pixels e WebProcesses):
+```
+python3 tests/integration/f2_hmr.py
+```
+
 Tipos TS gerados do Rust (não editar à mão):
 ```
 bun run generate:types   # cargo test -p aeroshell-ipc --features export-bindings

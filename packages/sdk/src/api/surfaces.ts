@@ -71,7 +71,7 @@ export function surfaceFromWire(value: unknown): SurfaceSpec {
   } as SurfaceSpec;
 }
 
-function complete(kind: SurfaceKind, options: SurfaceOptions): SurfaceSpec {
+export function completeSurface(kind: SurfaceKind, options: SurfaceOptions): SurfaceSpec {
   const desktop = kind === "Desktop";
   const panel = kind === "Panel";
   return {
@@ -102,7 +102,7 @@ export function createSurfacesApi(transport: Transport, store: WindowStore) {
      * @example await aero.surfaces.create("Desktop", { id: "fundo", html: "<body></body>" })
      */
     async create(kind: SurfaceKind, options: SurfaceOptions): Promise<SurfaceSpec> {
-      const spec = complete(kind, options);
+      const spec = completeSurface(kind, options);
       expectOk(await transport(`surface-create ${JSON.stringify(surfaceToWire(spec))}`));
       return spec;
     },

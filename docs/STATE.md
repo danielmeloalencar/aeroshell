@@ -1758,6 +1758,13 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
+- **F2-HMR via Bun.serve: código/integração/gates verdes; vizinhos restantes, perf e JUIZ VISUAL PENDENTES.**
+  Cartão `docs/tasks/F2-hmr.md` autorizado. Baseline: 3 fail + 2 imports ausentes, harness FALHA e
+  validador Rust ausente. Depois `f2_hmr.py` **VEREDITO: OK** (`/tmp/opencode/f2-hmr-integration-after7.log`):
+  cor/texto e pixels mudam sem restart; diff create/update/destroy; WebSocket de módulo sem diff IPC;
+  WebProcess `[12930]` constante; produção recusa HTTP; dev só loopback exata e navegação externa bloqueada.
+  Reload de helper reproduziu cache (`ANTES`→`DEPOIS` falhou) e foi corrigido com `Bun.build`+`data:`.
+  `check.sh` EXIT=0 (50 Bun), clippy bench 0, no-default 0 e `f2_sdk_surfaces.py` OK. **Cartão ABERTO.**
 - **F2-sdk-surfaces + defineDesktop: FECHADO PELO JUIZ VISUAL ("aprovado").** PARAR.
   Blur é apenas região declarada, não efeito visual implementado. Nenhum próximo cartão autorizado.
 - **F2-notifications: código, 3× harness e gates verdes; JUIZ VISUAL PENDENTE (§7).** Humano fechou a
@@ -1861,8 +1868,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-**F2-sdk-surfaces + defineDesktop: FECHADO PELO JUIZ VISUAL. PARAR; próximo cartão (HMR ou outro)
-somente com texto e ok explícito do humano.**
+**F2-HMR AUTORIZADO E EM EXECUÇÃO: PARAR para juiz visual. Depois: F2-outputs+input-binds →
+F2-windows-completo → alpha-confirm → adapters+exemplos, cada um somente com cartão próprio.**
 **F2-surface-perf-fix: FECHADO (passos 1/2 e juiz visual 60 s aprovado). PARAR.**
 **F2-surface-perf: PARAR. Invariantes de WebProcess/related_view falharam (§3); humano decidirá se
 abre cartão de correção dirigido (compartilhamento de WebProcess / damage / pool). NENHUMA correção
@@ -2781,6 +2788,10 @@ fechados, fora da fila.
   (`under = Some` com espaços) **também no HEAD** — pré-existente, amostra preservada em
   `/tmp/opencode/f2-surface-host-s3-input.log`. **CARTÃO FECHADO.**
 ## 7. Não medido / não validado (não trate como fato)
+- **F2-HMR: juiz visual de 60 s PENDENTE.** Headless mediu pixels/DOM/processos, mas o humano ainda
+  precisa editar cor/texto no nested com 2 `foot`. Perf e vizinhos restantes ainda não executados;
+  GPU real não medida. Destroy remove o registro/spec, mas a WebView fica em `retired` até o host sair
+  para evitar o ProtocolError 0×0 do GTK; desaparecimento visual da layer não foi medido.
 - **F2-surface-host (2026-11-24): JUIZ VISUAL NEGOU a 1ª instância; correção aplicada, reteste
   bloqueado pelo ambiente.** Humano: *"vejo uma borda verde e dentro branco. nada mais."* O
   pré-filtro headless media o desktop só ANTES do overlay; lacuna registrada e corrigida com checagem
@@ -3363,6 +3374,12 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
+- **F2-HMR (2026-11-25): CARTÃO ABERTO; integração OK, juiz PENDENTE.** Reproduzir:
+  `bun build packages/sdk/src/client.ts --target=browser --outfile=packages/sdk/dist/client.js &&
+  cargo build -p aeroshell-shell && cargo build -p aeroshell-compositor --features bench &&
+  python3 tests/integration/f2_hmr.py` → OK. `check.sh` 50/50, clippy bench/no-default 0 e SDK vizinho
+  OK. Próximo: demais vizinhos + perf, instância nested `--dev` com 2 `foot`, edição ao vivo e 60 s.
+  Produção só `aero://`; dev exige `AERO_DEV_ORIGIN` loopback idêntica nos 3 processos. Sem push.
 - **F2-sdk-surfaces (2026-11-25): FECHADO PELO JUIZ VISUAL ("aprovado").** SDK runtime/guest,
   defineDesktop completo por ts-rs e blank-desktop entregues. Reproduzir: `bun build
   packages/sdk/src/client.ts --target=browser --outfile=packages/sdk/dist/client.js && cargo build

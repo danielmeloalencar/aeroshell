@@ -434,6 +434,27 @@ fn surface_regions(value: &Value, field: &str) -> Result<Option<Vec<SurfaceInput
     }
 }
 
+fn valid_dev_origin(origin: &str) -> bool {
+    origin
+        .strip_prefix("http://127.0.0.1:")
+        .filter(|port| !port.is_empty() && port.bytes().all(|byte| byte.is_ascii_digit()))
+        .and_then(|port| port.parse::<u16>().ok())
+        .is_some_and(|port| port > 0)
+}
+
+fn surface_url_allowed(address: &str, dev_origin: Option<&str>) -> bool {
+    if address.starts_with("aero://") {
+        return true;
+    }
+    let Some(origin) = dev_origin.filter(|origin| valid_dev_origin(origin)) else {
+        return false;
+    };
+    address == origin
+        || address
+            .strip_prefix(origin)
+            .is_some_and(|suffix| suffix.starts_with('/'))
+}
+
 /// Converte o JSON de `surface-create/update` no tipo gerado por ts-rs.
 /// Nenhum serde é adicionado à crate de IPC: a wire continua montada à mão.
 fn parse_surface_spec(value: &Value) -> Result<SurfaceSpec, String> {
@@ -496,7 +517,8 @@ fn parse_surface_spec(value: &Value) -> Result<SurfaceSpec, String> {
         return Err("html e url são mutuamente exclusivos".to_owned());
     }
     if let Some(address) = url.as_deref() {
-        if !address.starts_with("aero://") {
+        let dev_origin = std::env::var("AERO_DEV_ORIGIN").ok();
+        if !surface_url_allowed(address, dev_origin.as_deref()) {
             return Err("url externa não é permitida".to_owned());
         }
     }
@@ -1328,7 +1350,7 @@ impl AeroState {
 
 #[cfg(test)]
 mod tests {
-    use super::{base64_encode, parse_surface_spec};
+    use super::{base64_encode, parse_surface_spec, surface_url_allowed};
 
     #[test]
     fn parse_surface_spec_valida_kind_e_rejeita_url_externa() {
@@ -1369,6 +1391,27 @@ mod tests {
             SurfaceKind::Overlay => "overlay",
             SurfaceKind::Frame => "frame",
         }
+    }
+
+    #[test]
+    fn url_dev_so_aceita_loopback_configurado() {
+        let dev = Some("http://127.0.0.1:4173");
+        assert!(surface_url_allowed("aero://surface/panel/", None));
+        assert!(!surface_url_allowed("http://127.0.0.1:4173/panel", None));
+        assert!(surface_url_allowed("http://127.0.0.1:4173/panel?v=2", dev));
+        for url in [
+            "http://127.0.0.1:4174/panel",
+            "http://127.0.0.1:4173.evil.test/panel",
+            "http://localhost:4173/panel",
+            "https://127.0.0.1:4173/panel",
+            "https://example.com/",
+        ] {
+            assert!(!surface_url_allowed(url, dev), "aceitou {url}");
+        }
+        assert!(!surface_url_allowed(
+            "http://127.0.0.1:4173/panel",
+            Some("https://example.com")
+        ));
     }
 
     #[test]

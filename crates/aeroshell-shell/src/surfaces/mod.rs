@@ -209,6 +209,7 @@ fn create_surface(
         .build();
     webview.set_background_color(&gtk4::gdk::RGBA::new(0.0, 0.0, 0.0, 0.0));
     let content = crate::bridge::install_surface(&window, &webview, id);
+    install_navigation_policy(&webview, id);
     webview.connect_load_failed(move |_, event, uri, error| {
         tracing::warn!(?event, %uri, %error, "SURFACE_HOST carga falhou");
         true
@@ -218,6 +219,7 @@ fn create_surface(
         tracing::info!(id = %id, bytes = content.len(), "SURFACE_HOST html id={id}");
         webview.load_html(&content, Some(&format!("aero://surface/{id}/")));
     } else if let Some(url) = field_str(spec, "url") {
+        tracing::info!(id = %id, page_id = webview.page_id(), %url, "SURFACE_HOST load_uri");
         webview.load_uri(url);
     }
     window.set_child(Some(&webview));
@@ -252,6 +254,64 @@ fn broadcast_event(surfaces: &HashMap<String, Surface>, event: &serde_json::Valu
             },
         );
     }
+}
+
+fn navigation_uri_allowed(uri: &str, dev_origin: Option<&str>) -> bool {
+    if uri.starts_with("aero://") || uri == "about:blank" {
+        return true;
+    }
+    let Some(dev_origin) = dev_origin else {
+        return false;
+    };
+    let Ok(uri) = webkit6::glib::Uri::parse(uri, webkit6::glib::UriFlags::NONE) else {
+        return false;
+    };
+    let Ok(origin) = webkit6::glib::Uri::parse(dev_origin, webkit6::glib::UriFlags::NONE) else {
+        return false;
+    };
+    uri.scheme() == "http"
+        && origin.scheme() == "http"
+        && uri.host() == origin.host()
+        && uri.host().as_deref() == Some("127.0.0.1")
+        && uri.port() == origin.port()
+        && uri.userinfo().is_none()
+        && origin.userinfo().is_none()
+        && (origin.path().is_empty() || origin.path() == "/")
+        && origin.query().is_none()
+        && origin.fragment().is_none()
+}
+
+fn install_navigation_policy(webview: &WebView, surface_id: &str) {
+    let id = surface_id.to_owned();
+    let dev_origin = std::env::var("AERO_DEV_ORIGIN").ok();
+    webview.connect_decide_policy(move |_, decision, decision_type| {
+        if decision_type == webkit6::PolicyDecisionType::NewWindowAction {
+            decision.ignore();
+            tracing::info!(id = %id, "SURFACE_HOST nova janela bloqueada");
+            return true;
+        }
+        if decision_type != webkit6::PolicyDecisionType::NavigationAction {
+            return false;
+        }
+        let uri = decision
+            .dynamic_cast_ref::<webkit6::NavigationPolicyDecision>()
+            .and_then(|navigation| navigation.navigation_action())
+            .and_then(|action| action.request())
+            .and_then(|request| request.uri())
+            .map(|uri| uri.to_string());
+        if let Some(uri) = uri {
+            if navigation_uri_allowed(&uri, dev_origin.as_deref()) {
+                decision.use_();
+            } else {
+                decision.ignore();
+                tracing::info!(id = %id, %uri, "SURFACE_HOST navegação externa bloqueada");
+            }
+        } else {
+            decision.ignore();
+            tracing::info!(id = %id, "SURFACE_HOST navegação sem URI bloqueada");
+        }
+        true
+    });
 }
 
 /// Instala o consumidor do stream PUSH e roda o host até o app sair.
@@ -337,6 +397,12 @@ pub fn run(app: &gtk4::Application) {
                                                 Some(&format!("aero://surface/{id}/")),
                                             );
                                         } else if let Some(url) = field_str(spec, "url") {
+                                            tracing::info!(
+                                                id = %id,
+                                                page_id = surface.webview.page_id(),
+                                                %url,
+                                                "SURFACE_HOST load_uri"
+                                            );
                                             surface.webview.load_uri(url);
                                         }
                                     }
@@ -348,6 +414,8 @@ pub fn run(app: &gtk4::Application) {
                     "SurfaceDestroyed" => {
                         if let Some(id) = field_str(payload, "id") {
                             if let Some(surface) = surfaces.borrow_mut().remove(id) {
+                                // GTK 4.22 envia commit 0x0 ao ocultar/fechar a
+                                // layer; retired mantém a WebView viva sem erro.
                                 retired.borrow_mut().push(surface);
                                 tracing::info!(id = %id, "SURFACE_HOST destruido");
                             }
@@ -359,4 +427,31 @@ pub fn run(app: &gtk4::Application) {
         }
         gtk4::glib::ControlFlow::Continue
     });
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn navegacao_so_permite_aero_e_a_origem_dev_exata() {
+        assert!(super::navigation_uri_allowed("aero://surface/panel/", None));
+        assert!(super::navigation_uri_allowed("about:blank", None));
+        assert!(!super::navigation_uri_allowed(
+            "http://127.0.0.1:4173/panel",
+            None
+        ));
+        let dev = Some("http://127.0.0.1:4173");
+        assert!(super::navigation_uri_allowed(
+            "http://127.0.0.1:4173/panel",
+            dev
+        ));
+        assert!(!super::navigation_uri_allowed(
+            "http://127.0.0.1:4174/panel",
+            dev
+        ));
+        assert!(!super::navigation_uri_allowed(
+            "http://localhost:4173/panel",
+            dev
+        ));
+        assert!(!super::navigation_uri_allowed("https://example.com", dev));
+    }
 }

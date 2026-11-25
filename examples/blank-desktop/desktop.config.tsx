@@ -29,7 +29,12 @@ try {
 
 export default defineDesktop({
   surfaces: [
-    { kind: "Desktop", id: "blank-background", html: background },
+    {
+      kind: "Desktop",
+      id: "blank-background",
+      html: background,
+      dev_entry: "./background.ts",
+    },
     {
       kind: "Panel",
       id: "blank-panel",
@@ -37,6 +42,7 @@ export default defineDesktop({
       height: 56,
       exclusive_zone: 56,
       html: panel,
+      dev_entry: "./panel.ts",
     },
   ],
   frame: { enabled: true },

@@ -9,4 +9,4 @@ import type { SurfaceMargins } from "./SurfaceMargins";
 /**
  * Item declarativo de `defineDesktop({ surfaces })`, sem tipo TS paralelo.
  */
-export type SurfaceDeclaration = { kind: SurfaceKind, id: string, output?: number, anchors?: SurfaceAnchors, margins?: SurfaceMargins, exclusive_zone?: number, layer?: SurfaceLayer, keyboard_mode?: SurfaceKeyboardMode, input_region?: Array<SurfaceInputRegion>, blur_region?: Array<SurfaceInputRegion>, width?: number, height?: number, html?: string, url?: string, };
+export type SurfaceDeclaration = { kind: SurfaceKind, id: string, output?: number, anchors?: SurfaceAnchors, margins?: SurfaceMargins, exclusive_zone?: number, layer?: SurfaceLayer, keyboard_mode?: SurfaceKeyboardMode, input_region?: Array<SurfaceInputRegion>, blur_region?: Array<SurfaceInputRegion>, width?: number, height?: number, html?: string, url?: string, dev_entry?: string, };
