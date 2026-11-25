@@ -22,6 +22,32 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **F2-surface-perf (2026-11-25) — SÓ MEDIÇÃO; dados entregues, nenhuma correção.** Cartão
+  `docs/tasks/F2-surface-perf.md`; harness `tests/integration/f2_surface_perf.py`; build bench por
+  último; bruto em `/tmp/opencode/f2-surface-perf-run2.log`. Visual do F2-surface-host aprovado,
+  cartão anterior continua aberto até decisão sobre a responsividade.
+
+  | Cenário | WebProcesses (antes→depois) | CPU compositor/5 s | OUTPUT_FRAME/5 s | damage | clique p50/p99 (0–10 s → 35–45 s) | texto p50/p99 (0–10 s → 35–45 s) |
+  |---|---|---|---|---|---|---|
+  | A-foot (winit) | 3→3 | 87,0% | 593 | área NÃO instrumentada no winit (`damage=submitted`) | 65,8/97,5 → 144,6/202,6 ms | 112,2/159,9 → 153,0/265,2 ms |
+  | B-surfaces (winit) | 9→9 (6 no host p/ 2 superfícies) | 74,6% | 504 | área NÃO instrumentada no winit | 55,0/73,3 → 114,7/397,2 ms | 99,1/150,8 → 200,1/473,0 ms |
+  | C-headless (com superfícies) | 9→9 | 8,8% | 0 (`HEADLESS_FRAME` 2017, 1971 `damage=none`, 2016 `age>0`, 0 px de damage) | 10,9/14,9 → 8,0/19,9 ms | 28,8/32,1 → 32,8/45,5 ms |
+
+  Estágios (ms desde o boot): A `IPC 173,3`, cliente `282,4`; B `IPC 189,7`, cliente `268,8`,
+  `SURFACE_HOST pronto 2137,9`, `superfície criada 2785,5`; C `IPC 92,9`, cliente `112,6`,
+  `SURFACE_HOST 1251,6`, `superfície 1657,3`; `frame_painted` A `2863,0/2867,1`, B `2937,0/2937,4`,
+  C `1113,6/1117,9`. `frame_requested` não tem `t=` no log, não medido.
+
+  **Invariantes:** (1) WebProcess NÃO cresce com o nº de superfícies — **FALHOU**: A já tem 3 e B
+  tem 9, com 6 processos sob o host para 2 superfícies. (2) `related_view` da âncora — **FALHOU no
+  host genérico**: `frame_webview.rs:1510` usa `related_view(&anchor)`, mas
+  `surfaces/mod.rs:179-181` cria `WebContext::new()` por superfície e WebView sem `related_view`;
+  ADR 0001 exige 1 WebProcess. (3) cena estática quase idle — **parcial**: headless teve damage
+  vazio em 1971/2017 frames, mas winit manteve ~100–120 frames/s mesmo sem input; CPU do winit
+  Alta nos DOIS cenários (A e B), logo não é causada só pelas superfícies. (4) p99 não degrada —
+  **FALHOU no winit** (A e B pioram com o tempo; C estável). (5) cold-start lento medido
+  (~2,1 s até o host, ~2,8 s até a superfície). **Não medido**: GPU real/60 Hz/GPU ociosa <2%.
+  **PARAR: nenhuma correção neste cartão; aguardando cartão dirigido do humano.**
 - [~] **F2-notifications (2026-11-24) — código/teste/gates verdes; JUIZ VISUAL PENDENTE (§7).**
        Cartão `docs/tasks/F2-notifications.md` criado do texto aprovado (antecipação F2 explícita do
        subconjunto interno; D-Bus fica na F4). Sem XML/ADR/dependência nova. SDK: `showNotification`
@@ -1759,6 +1785,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
+**F2-surface-perf: PARAR. Invariantes de WebProcess/related_view falharam (§3); humano decidirá se
+abre cartão de correção dirigido (compartilhamento de WebProcess / damage / pool). NENHUMA correção
+neste cartão; sem push.**
 **F2-notifications: decisão do humano — (1) julgar toasts em nested sem `foot`, ou (2) abrir cartão
 separado para a recorrência do redesenho do frame (§6). Nenhuma das duas executada sem ok.**
 **F2-launcher FECHADO PELO JUIZ: PARAR — nenhum próximo cartão autorizado.**
@@ -3256,6 +3285,13 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
+- **F2-surface-perf (2026-11-25): MEDIÇÃO ENTREGUE, SEM CORREÇÃO.** Reproduzir:
+  `cargo build -p aeroshell-compositor --features bench && python3 tests/integration/f2_surface_perf.py`
+  → tabela em `/tmp/opencode/f2-surface-perf-run2.log`. A 3 WebProcesses/87% CPU; B 9 WebProcesses
+  (6 no host p/ 2 superfícies)/74,6%; C headless 9/8,8% e damage vazio em 1971/2017 frames.
+  p99 de clique/texto piora no winit nos dois cenários A e B; related-view ausente em
+  `surfaces/mod.rs:179-181`. Instância de medição encerrada por este harness (PIDs próprios);
+  nenhuma instância visual aberta. Próximo passo: humano abre cartão de correção dirigido. Sem push.
 - **F2-notifications (2026-11-24): código pronto, aguardando decisão do juiz.** Reproduzir (bench por
   último): `bun build packages/panel/src/index.tsx --target=browser --outfile=packages/panel/dist/app.js &&
   cargo build --workspace --examples && cargo build -p aeroshell-shell &&
