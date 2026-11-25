@@ -236,6 +236,10 @@ pub struct AeroState {
     /// F1-presentation-time: global `wp_presentation` + sequência por output.
     pub presentation_state: Option<PresentationState>,
     pub presentation_seq: HashMap<String, u64>,
+    /// F2-surface-perf-fix: alguma superfície commitou desde o último Redraw.
+    pub dirty: bool,
+    /// F2-surface-perf-fix: pequena janela de settle após release/grab.
+    pub redraw_until: Option<Instant>,
     /// F2: revisão monotônica dos snapshots/eventos publicados no stream.
     pub event_revision: u32,
     /// F2-workspaces: membership canônica; janelas inativas seguem no Space.
@@ -731,6 +735,8 @@ impl AeroState {
             dmabuf_global: None,
             presentation_state,
             presentation_seq: HashMap::new(),
+            dirty: false,
+            redraw_until: None,
             event_revision: 0,
             workspaces: WorkspaceManager::default(),
             surfaces: HashMap::new(),

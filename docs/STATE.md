@@ -22,6 +22,18 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **F2-surface-perf-fix PASSO 2 (2026-11-25) — redraw só com trabalho real validado.**
+  `backend/winit.rs` deixou de pedir Redraw incondicional: timer de 16 ms com `flush_clients`
+  periódico + `dirty` por commits/input, callbacks de frame, `resize_grab_active`,
+  `FrameCanvas.pending_growth` e `redraw_until=500 ms` após release. Backend compartilhado via
+  `Rc<RefCell>` porque `winit::Window` não é clonável. Baseline: ~118 OUTPUT_FRAME/s e CPU ~87%.
+  Depois (`/tmp/opencode/f2-surface-fix2-perf-final.log`): **0 frames estáticos/5 s**, CPU
+  compositor 2,2% (A) / 2,6% (B), latência clique p50/p99 B 18,3/26,9 ms e texto 35,1/62,6 ms,
+  WebProcesses A=1 e B=2 (1 host) e constante com 4 superfícies. Headless damage segue vazio.
+  `frame_resize_glue` voltou a OK; `frame_follows_resize` falha idêntico no commit anterior
+  (A/B `/tmp/opencode/f2-surface-fix2-ab-follows.log`, pré-existente). Vizinhos
+  buttons/CSD/policy/workspaces/launcher/host OK. `check.sh` EXIT=0, clippy bench 0,
+  `--no-default-features` 0. **Juiz visual de 60 s ainda não executado; cartão NÃO fechado.**
 - [x] **F2-surface-perf-fix PASSO 1 (2026-11-25) — compartilhamento de WebProcess validado.**
   `crates/aeroshell-shell/src/surfaces/mod.rs` agora cria UM `WebContext`, uma âncora construct-only
   e `related_view` em todas as WebViews do host (ADR 0001). Instrumento corrigido para NÃO contar

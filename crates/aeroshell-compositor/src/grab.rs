@@ -419,6 +419,9 @@ impl PointerGrab<AeroState> for ResizeGrab {
             window_id.and_then(|id| data.client_content_size(id).map(|c| (id, c)))
         {
             data.send_frame_configure(window_id, content, "final");
+            data.dirty = true;
+            data.redraw_until =
+                Some(std::time::Instant::now() + std::time::Duration::from_millis(500));
         }
     }
 }

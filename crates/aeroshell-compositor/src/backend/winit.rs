@@ -1,11 +1,11 @@
 //! Backend nested: janela no compositor host via winit.
 
-use std::time::Duration;
+use std::{cell::RefCell, rc::Rc, time::Duration};
 
 #[cfg(feature = "bench")]
 use smithay::{
     utils::{Physical, Size},
-    wayland::{compositor::SurfaceAttributes, fractional_scale::with_fractional_scale},
+    wayland::fractional_scale::with_fractional_scale,
 };
 #[cfg(feature = "bench")]
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -29,12 +29,18 @@ use smithay::{
     input::pointer::CursorImageStatus,
     output::{Mode, Output, PhysicalProperties, Scale, Subpixel},
     reexports::{
-        calloop::EventLoop,
-        wayland_server::Resource,
+        calloop::{
+            timer::{TimeoutAction, Timer},
+            EventLoop,
+        },
+        wayland_server::{protocol::wl_surface::WlSurface, Resource},
         winit::{dpi::PhysicalSize, window::CursorIcon},
     },
     utils::{IsAlive, Scale as UtilsScale, Transform},
-    wayland::{compositor::with_states, shell::wlr_layer::Layer},
+    wayland::{
+        compositor::{with_states, SurfaceAttributes},
+        shell::wlr_layer::Layer,
+    },
 };
 
 use crate::{
@@ -91,6 +97,45 @@ fn apply_host_cursor(state: &AeroState, window: &smithay::reexports::winit::wind
             icon.name()
         );
     }
+}
+
+/// Redraw só existe se houver commit/damage, animação ou frame callback pendente.
+/// Não usar `request_redraw()` incondicional no fim de todo Redraw (busy-loop).
+fn pending_redraw(state: &AeroState) -> bool {
+    if state.dirty
+        || state
+            .redraw_until
+            .map(|until| until > std::time::Instant::now())
+            .unwrap_or(false)
+        || state.resize_grab_active.is_some()
+        || state.last_geometry_action.is_some()
+        || state
+            .frame_canvases
+            .values()
+            .any(|canvas| canvas.pending_growth.is_some())
+    {
+        return true;
+    }
+    fn has_callback(surface: &WlSurface) -> bool {
+        with_states(surface, |states| {
+            !states
+                .cached_state
+                .get::<SurfaceAttributes>()
+                .current()
+                .frame_callbacks
+                .is_empty()
+        })
+    }
+    state.space.elements().any(|window| {
+        window
+            .toplevel()
+            .map(|t| has_callback(t.wl_surface()))
+            .unwrap_or(false)
+    }) || state
+        .layer_surfaces
+        .iter()
+        .chain(state.frame_layer_surfaces.iter())
+        .any(|layer| has_callback(layer.wl_surface()))
 }
 
 // A composição do host é especializada em GlesTexture; a cena de cada output
@@ -216,10 +261,13 @@ pub fn init_winit(
     let mut host_probe_done = false;
     let fixed_host_size = opts.size.is_some() || multi;
 
+    let backend = Rc::new(RefCell::new(backend));
+    let redraw_backend = Rc::clone(&backend);
     event_loop
         .handle()
         .insert_source(winit_source, move |event, _, data| {
             let state = &mut data.state;
+            let backend = &mut *backend.borrow_mut();
             match event {
                 WinitEvent::Resized { size, .. } => {
                     // Sem `--size`, a janela host é a fonte da verdade. Com `--size`,
@@ -236,7 +284,10 @@ pub fn init_winit(
                     }
                     backend.window().request_redraw();
                 }
-                WinitEvent::Input(event) => state.process_input_event(event),
+                WinitEvent::Input(event) => {
+                    state.dirty = true;
+                    state.process_input_event(event);
+                }
                 WinitEvent::Redraw => {
                     if state.outputs.len() > 1 {
                         let outputs = state.outputs.clone();
@@ -470,7 +521,7 @@ pub fn init_winit(
                         state.popups.cleanup();
                         let _ = data.display_handle.flush_clients();
                         apply_host_cursor(state, backend.window());
-                        backend.window().request_redraw();
+                        state.dirty = false;
                         return;
                     }
 
@@ -887,12 +938,41 @@ pub fn init_winit(
                     }
 
                     apply_host_cursor(state, backend.window());
-                    backend.window().request_redraw();
+                    state.dirty = false;
                 }
                 WinitEvent::CloseRequested => state.loop_signal.stop(),
                 _ => {}
             }
         })?;
+
+    // A janela host só acorda quando há trabalho real. O timer de 16 ms evita
+    // polling de redraw, mas só pede `request_redraw` se houver dirty/callback.
+    data.state.dirty = true;
+    event_loop.handle().insert_source(
+        Timer::from_duration(Duration::from_millis(16)),
+        move |_, _, data| {
+            // Flush continua periódico para entregar configure/map/commit;
+            // só a GPU/render fica condicionada ao `pending` abaixo.
+            let _ = data.display_handle.flush_clients();
+            let pending = pending_redraw(&data.state);
+            #[cfg(feature = "bench")]
+            {
+                static TICKS: AtomicU64 = AtomicU64::new(0);
+                let n = TICKS.fetch_add(1, Ordering::Relaxed);
+                if n < 5 || pending {
+                    eprintln!(
+                        "WINIT_TIMER t={} tick={n} pending={pending} dirty={}",
+                        crate::frame_diagnostics::now_ns(),
+                        data.state.dirty
+                    );
+                }
+            }
+            if pending {
+                redraw_backend.borrow().window().request_redraw();
+            }
+            TimeoutAction::ToDuration(Duration::from_millis(16))
+        },
+    )?;
 
     Ok(())
 }

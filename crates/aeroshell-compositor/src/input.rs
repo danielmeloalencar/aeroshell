@@ -38,6 +38,7 @@ fn absolute_pointer_space(
 impl AeroState {
     /// Injeção de ponteiro usada pelo backend headless de teste (S3).
     pub fn inject_motion(&mut self, x: f64, y: f64) {
+        self.dirty = true;
         let serial = smithay::utils::SERIAL_COUNTER.next_serial();
         let under = self.surface_under((x, y).into());
         self.cursor_over_interactive = under
@@ -70,6 +71,11 @@ impl AeroState {
     }
 
     pub fn inject_button(&mut self, pressed: bool) {
+        self.dirty = true;
+        if !pressed {
+            self.redraw_until =
+                Some(std::time::Instant::now() + std::time::Duration::from_millis(500));
+        }
         let serial = smithay::utils::SERIAL_COUNTER.next_serial();
         if pressed {
             self.last_button_serial = Some(u32::from(serial));
