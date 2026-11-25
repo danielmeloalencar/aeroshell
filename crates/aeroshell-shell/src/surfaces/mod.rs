@@ -5,6 +5,9 @@
 //! módulo materializa cada especificação como uma WebView GTK sobre uma layer
 //! surface. Nenhum socket/env/protocolo novo é introduzido.
 
+pub mod frame;
+pub mod shared;
+
 use std::{
     cell::RefCell,
     collections::HashMap,
@@ -233,22 +236,7 @@ pub fn run(app: &gtk4::Application) {
     };
     // ADR 0001: um WebContext e uma âncora construct-only para TODOS os kinds;
     // cada WebView nasce com related_view, não com um WebProcess próprio.
-    let context = WebContext::new();
-    crate::scheme::install(&context);
-    let anchor_window = gtk4::ApplicationWindow::builder()
-        .application(app)
-        .title("aero surface anchor (hidden)")
-        .default_width(1)
-        .default_height(1)
-        .build();
-    let anchor_webview = WebView::builder().web_context(&context).build();
-    anchor_webview.load_html(
-        "<!doctype html><html></html>",
-        Some("aero://surface-anchor/"),
-    );
-    anchor_window.set_child(Some(&anchor_webview));
-    gtk4::prelude::WidgetExt::realize(&anchor_window);
-
+    let shared = shared::new(app);
     let app_weak = app.downgrade();
     let surfaces: Rc<RefCell<HashMap<String, Surface>>> = Rc::new(RefCell::new(HashMap::new()));
     // GTK 4.22 commita 0x0 sem âncoras ao fechar uma layer surface (erro já
@@ -286,7 +274,7 @@ pub fn run(app: &gtk4::Application) {
                         if let Some(spec) = payload.get("surface") {
                             if let (Some(id), Some(surface)) = (
                                 field_str(spec, "id"),
-                                create_surface(&app, &context, &anchor_webview, spec),
+                                create_surface(&app, &shared.context, &shared.anchor_webview, spec),
                             ) {
                                 surfaces.borrow_mut().insert(id.to_owned(), surface);
                             }

@@ -22,6 +22,20 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [~] **F2-surface-host-frame (2026-11-25) — migração do spike para o host; juiz visual pendente.**
+  `crates/aeroshell-shell/src/lib.rs` expõe o host; `surfaces/shared.rs` centraliza WebContext/âncora;
+  `surfaces/frame.rs` recebe o spike (pool/related-view, canvas 9-slice, CSD opacidade, título/ícone,
+  cursores/grabs/insets/slices); `examples/frame_webview.rs` é shim de 5 linhas. Manifesto usa as
+  MESMAS versões já aprovadas de `gdk4-wayland`/`wayland-client`/`wayland-scanner`/`wayland-backend`/
+  `bitflags`, agora na biblioteca. Teste-first: `f2_surface_host_frame.py` baseline FALHA
+  (`shim_ok=False linhas=1667`) → depois OK + `frame_buttons.py` OK. Vizinhos:
+  `frame_resize_glue`, `f1_csd_gtk`, `f2_full_decoration_policy`, `f2_hotreload_decoration_policy`,
+  `f2_workspaces`, `f2_launcher` OK. `frame_follows_resize` falha idêntico no commit anterior (A/B).
+  `f2_surface_perf.py`: A 1 WebProcess, B 2 (1 host) e constante com 4 superfícies, 0 redraws
+  estáticos, CPU 2,0–2,4%, clique p50/p99 B 11,9/32,8 ms e texto 29,8/48,8 ms
+  (`/tmp/opencode/f2-surface-frame-perf.log`). `check.sh` EXIT=0, clippy bench 0,
+  `--no-default-features` 0. **Juiz visual foot/gedit/kate + hot-reload + 60 s ainda não executado;
+  cartão NÃO fechado.**
 - [x] **F2-surface-perf-fix PASSO 2 (2026-11-25) — redraw só com trabalho real validado.**
   `backend/winit.rs` deixou de pedir Redraw incondicional: timer de 16 ms com `flush_clients`
   periódico + `dirty` por commits/input, callbacks de frame, `resize_grab_active`,

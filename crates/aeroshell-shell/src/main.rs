@@ -1,13 +1,10 @@
 //! aeroshell-shell — host das WebViews (cliente Wayland do AeroShell).
 
 mod benchmark;
-mod bridge;
-mod host;
-mod input_region;
 #[cfg(feature = "probe-registry")]
 mod registry_probe;
-mod scheme;
-mod surfaces;
+
+use aeroshell_shell::{bridge, host, scheme, surfaces};
 
 use gtk4::prelude::*;
 use webkit6::prelude::*;
