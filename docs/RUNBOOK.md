@@ -139,6 +139,22 @@ python3 tests/integration/udev_client_compose_probe.py ~/aeroshell-udev-YYYYMMDD
 (distingue `CALLBACK_NAO_CHEGA` de `SEM_DAMAGE_FORA_DA_CENA`; exige ~10 s de interação com o `foot`.)
 
 ## Runtime Bun / SDK (tarefa 03)
+
+### `desktop.config.tsx` e superfícies sem framework
+```
+bun run generate:types
+bun build packages/sdk/src/client.ts --target=browser --outfile=packages/sdk/dist/client.js
+cargo build --workspace --examples
+cargo build -p aeroshell-shell   # --examples NÃO relinka este binário
+cargo build -p aeroshell-compositor --features bench  # por último nos harnesses de sonda
+python3 tests/integration/f2_sdk_surfaces.py
+```
+O harness sobe compositor/headless, host genérico e `examples/blank-desktop/desktop.config.tsx` por
+`bun packages/runtime/src/main.ts --config <arquivo>`. Mede background/painel, z-order, update
+input/blur da própria surface e clique pass-through. Em nested, inicie também o host genérico com
+`AERO_SURFACE_HOST=1 WAYLAND_DISPLAY=<socket> target/debug/aeroshell-shell`; frames continuam em
+`--shell target/debug/examples/frame_webview`. Blur é somente declaração nesta fase.
+
 Tipos TS gerados do Rust (não editar à mão):
 ```
 bun run generate:types   # cargo test -p aeroshell-ipc --features export-bindings

@@ -1,6 +1,7 @@
 # Tarefa F2-sdk-surfaces + defineDesktop
 
 > Texto aprovado pelo humano em 2026-11-25. Host genérico fechado em `bb592e5`.
+> FECHADO em 2026-11-25: integração/vizinhos/perf/gates verdes e juiz visual "aprovado".
 
 ## Objetivo (uma frase, verificável)
 Tornar o SDK real para desenvolvedores web: um `desktop.config.tsx` cria background e painel somente pelo SDK, sem Rust, com pixels, z-order e input pass-through medidos.
