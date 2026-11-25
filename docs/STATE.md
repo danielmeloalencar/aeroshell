@@ -34,8 +34,11 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   `f2_surface_perf.py`: A 1 WebProcess, B 2 (1 host) e constante com 4 superfícies, 0 redraws
   estáticos, CPU 2,0–2,4%, clique p50/p99 B 11,9/32,8 ms e texto 29,8/48,8 ms
   (`/tmp/opencode/f2-surface-frame-perf.log`). `check.sh` EXIT=0, clippy bench 0,
-  `--no-default-features` 0. **Juiz visual foot/gedit/kate + hot-reload + 60 s ainda não executado;
-  cartão NÃO fechado.**
+  `--no-default-features` 0. **Juiz visual PENDENTE na instância aberta:** socket
+  `wayland-aero-frame-visual`, compositor PID 47064, frame PID 47076, foot PID 47148,
+  gedit PID 47149, kate PID 47216, runtime Bun de política com hot-reload em
+  `/tmp/opencode/f2-surface-frame-visual/rules.ts`. Humano deve conferir decoração, botões,
+  cursores, hot-reload e responsividade por 60 s; cartão NÃO fechado.
 - [x] **F2-surface-perf-fix PASSO 2 (2026-11-25) — redraw só com trabalho real validado.**
   `backend/winit.rs` deixou de pedir Redraw incondicional: timer de 16 ms com `flush_clients`
   periódico + `dirty` por commits/input, callbacks de frame, `resize_grab_active`,
