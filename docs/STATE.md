@@ -35,7 +35,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   VM sem 3D. Primeira rodada visual reprovada: painel direito 404 por 2 runtimes na mesma porta
   (§6) e GNOME capturando Super. Na rodada final, porta única e painéis OK; humano aceitou injeção
   via AERO_TEST_INPUT_SOCK e aprovou Super+2→foot B, Super+1→foot A e 60 s. Não foi teste físico
-  de Super. Instância final 60491/60515/60741/60782/60784 deixada aberta. **CARTÃO FECHADO.**
+  de Super. Na checagem final só o runtime 60741 permanecia em `ps`; compositor/host/foot já haviam
+  saído, todos sem encerramento pelo agente. **CARTÃO FECHADO.**
 - [x] **F2-HMR via Bun.serve (2026-11-25) — FECHADO PELO JUIZ VISUAL ("Aprovado"; "perfeito, está aprovado").**
   Cartão `docs/tasks/F2-hmr.md`; implementação em `e25281d`. Baseline: 3 fail + 2 imports ausentes,
   harness `VEREDITO: FALHA` e validador Rust ausente. Depois `f2_hmr.py` **VEREDITO: OK**
@@ -1790,8 +1791,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
 ## 4. Em andamento
 - **F2-outputs+input-binds: FECHADO PELO JUIZ VISUAL ("sim, tudo funcionou corretamente… está aprovado").**
   Integração estrita, 11 vizinhos, gates e 3 perfs verdes (§3). Rodada final com porta única, dois
-  painéis e Super+1/2 injetados aprovada; instância deixada aberta para o humano fechar. **PARAR;
-  próximo cartão somente com ok.**
+  painéis e Super+1/2 injetados aprovada. Na checagem final só o runtime 60741 permanecia em `ps`,
+  sem ação do agente. **PARAR; próximo cartão somente com ok.**
 - **F2-HMR via Bun.serve: FECHADO PELO JUIZ VISUAL ("Aprovado"; "perfeito, está aprovado").**
   Integração, nove vizinhos e gates verdes; três perfs com WebProcess/redraw invariantes e p99 variável
   na VM (§3). Na checagem final só o runtime visual 21604 permanecia em `ps`, sem ação do agente.
@@ -1962,6 +1963,9 @@ fechados, fora da fila.
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **Multi-output/maximize (relato do humano):** ao arrastar o foot para output 1 e maximizar, o
+  resultado atual vai para output 0 porque `work_area()` usa `outputs.first()` (`state.rs:390-403`),
+  consumido por `toplevel_states.rs:128-149`. Esperado: área útil do output sob a janela. F2-windows.
 - **F2-HMR — colisão de porta entre runtimes:** o runtime antigo 21604 e o visual 53667 escutavam
   simultaneamente 127.0.0.1:4173 (`ss`); 6 fetches ao novo painel alternaram 404/200. O antigo tem
   só 2 superfícies. O harness usa porta livre, portanto não mede esta colisão. Não corrigir neste cartão.
@@ -3422,7 +3426,8 @@ WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
   cargo build -p aeroshell-shell && cargo build -p aeroshell-compositor --features bench &&
   python3 tests/integration/f2_outputs_input_binds.py` → OK. `check.sh` 57/57, clippy/no-default 0,
   11 vizinhos OK e 3 perfs com 1 WebProcess no host/0 redraws. Juiz aprovou 2 painéis e Super+1/2
-  injetados; Super físico/udev/hotplug/GPU não medidos. Instância final deixada aberta.
+  injetados; Super físico/udev/hotplug/GPU não medidos. Na checagem final só o runtime 60741
+  permanecia em `ps`, sem ação do agente.
   **Próximo: F2-windows-completo apenas com cartão próprio e ok; sem push.**
 - **F2-HMR (2026-11-25): FECHADO PELO JUIZ VISUAL ("Aprovado").** Reproduzir:
   `bun build packages/sdk/src/client.ts --target=browser --outfile=packages/sdk/dist/client.js &&
