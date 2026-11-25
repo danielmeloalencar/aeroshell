@@ -2685,6 +2685,11 @@ fechados, fora da fila.
   D-Bus/`GL ... LLVM`), amostras preservadas em `-transparent-final{a,b,c}.log` e
   `/tmp/opencode/f2-surface-host-visual4/compositor.log`. Aplicada a regra das duas tentativas: PARAR.
   Não escrever "validado visualmente". Não medido: GPU real/udev e o kind `frame` (não migrado).
+  Reaberta instância estável após a correção: socket `wayland-aero-f2-surface-visual5`, IPC
+  `/tmp/opencode/f2-surface-host-visual5/ipc.sock`, compositor PID 5512, host PID 5525, `foot A/B`
+  PIDs 6291/6292, dois clientes pequenos `aero-large-client` 240x170 (IDs 2/3, reiniciam a cada
+  12 s) PIDs 6687/6688, log `/tmp/opencode/f2-surface-host-visual5/compositor.log`. Aguardando
+  novo veredito do humano.
 - **F2-notifications (2026-11-24): JUIZ VISUAL PENDENTE NA INSTÂNCIA CORRETA.** Código/testes/gates
   verdes, 3× harness `VEREDITO: OK`. A 1ª instância (com `--size`) foi fechada pelo humano por uma
   janela transparente do tamanho do output que repintava (§6); sem `--size` o `foot` ficou normal.
