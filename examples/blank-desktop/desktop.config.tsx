@@ -38,6 +38,17 @@ export default defineDesktop({
     {
       kind: "Panel",
       id: "blank-panel",
+      output: 0,
+      anchors: { left: true, right: true, top: false, bottom: true },
+      height: 56,
+      exclusive_zone: 56,
+      html: panel,
+      dev_entry: "./panel.ts",
+    },
+    {
+      kind: "Panel",
+      id: "blank-panel-output-1",
+      output: 1,
       anchors: { left: true, right: true, top: false, bottom: true },
       height: 56,
       exclusive_zone: 56,
@@ -46,6 +57,11 @@ export default defineDesktop({
     },
   ],
   frame: { enabled: true },
+  // A política fica no runtime: estas ações chamam aero.activateWorkspace(id).
+  keybindings: [
+    { keys: "Super+1", command: "workspace-activate 1" },
+    { keys: "Super+2", command: "workspace-activate 2" },
+  ],
   rules: {
     default: "Server",
     rules: [

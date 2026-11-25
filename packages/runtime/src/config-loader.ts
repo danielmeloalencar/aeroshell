@@ -7,14 +7,16 @@ import { dirname, join, resolve } from "node:path";
 import type { DesktopConfig } from "../../sdk/src/generated/DesktopConfig";
 import type { SurfaceDeclaration } from "../../sdk/src/generated/SurfaceDeclaration";
 import type { DecorationPolicyConfig } from "../../sdk/src/generated/DecorationPolicyConfig";
+import type { KeybindingConfig } from "../../sdk/src/generated/KeybindingConfig";
 import { createAero, parseEvent } from "../../sdk/src/index";
 import { completeSurface } from "../../sdk/src/api/surfaces";
 import { validateConfig } from "./policy-config";
 import { eventStream, ipcTransport } from "./ipc-client";
 import { normalizeDevOrigin, startDevServer, type DevServer } from "./dev-server";
+import { syncKeybindings, validateKeybindings } from "./keybindings";
 
 const DEFERRED: Record<string, string> = {
-  layouts: "F3", keybindings: "F3", idle: "F5", lock: "F5", greeter: "F6",
+  layouts: "F3", idle: "F5", lock: "F5", greeter: "F6",
 };
 
 /** Valida a parte executável na F2 e rejeita todo campo deferido presente. */
@@ -34,6 +36,7 @@ export function validateDesktopConfig(value: unknown): DesktopConfig {
     }
   }
   if (config.rules !== undefined) validateConfig(config.rules);
+  if (config.keybindings !== undefined) validateKeybindings(config.keybindings);
   return value as DesktopConfig;
 }
 
@@ -100,7 +103,9 @@ export async function startDesktop(path: string, options: StartDesktopOptions = 
   const aero = createAero(transport);
   eventStream(socketPath, (json) => {
     const event = parseEvent(json);
-    if (event) aero.store.applyEvent(event);
+    if (!event) return;
+    aero.store.applyEvent(event);
+    aero.input.dispatch(event);
   });
 
   let devServer: DevServer | undefined;
@@ -158,8 +163,20 @@ export async function startDesktop(path: string, options: StartDesktopOptions = 
     return next;
   }
 
+  let currentKeybindings: KeybindingConfig[] = [];
+  async function applyKeybindings(nextConfig: DesktopConfig): Promise<void> {
+    const next = nextConfig.keybindings ?? [];
+    const diff = await syncKeybindings(currentKeybindings, next, aero);
+    currentKeybindings = next;
+    console.log(
+      `KEYBIND_SYNC bind=${diff.bind.map((item) => item.id).join(",") || "-"} unbind=${diff.unbind.join(",") || "-"}`,
+    );
+  }
+
   let revision = 0;
   let config = await loadDesktopConfig(configPath);
+  await applyKeybindings(config);
+  console.log(`CONFIG_KEYBINDS count=${currentKeybindings.length}`);
   let current = await applyDiff([], config, revision);
   const listed = await aero.surfaces.list();
   console.log(`CONFIG_SURFACES count=${listed.length}`);
@@ -192,6 +209,7 @@ export async function startDesktop(path: string, options: StartDesktopOptions = 
         try {
           const nextConfig = await loadDesktopConfig(configPath, nextRevision);
           current = await applyDiff(current, nextConfig, nextRevision);
+          await applyKeybindings(nextConfig);
           config = nextConfig;
           await applyRules(nextConfig);
           console.log(`HMR_CONFIG revision=${nextRevision} status=OK`);

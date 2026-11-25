@@ -2,6 +2,7 @@ import type { AeroEvent } from "./generated/AeroEvent";
 import type { App } from "./generated/App";
 import type { DecorationPolicy } from "./generated/DecorationPolicy";
 import type { Notification } from "./generated/Notification";
+import type { OutputInfo } from "./generated/OutputInfo";
 import type { Patch } from "./generated/Patch";
 import type { Snapshot } from "./generated/Snapshot";
 import type { SurfaceSpec } from "./generated/SurfaceSpec";
@@ -43,6 +44,8 @@ export class WindowStore {
   private readonly surfaceListeners = new Set<Listener>();
   private notificationsState: Notification[] = [];
   private readonly notificationListeners = new Set<Listener>();
+  private outputsState: OutputInfo[] = [];
+  private readonly outputListeners = new Set<Listener>();
   private readonly notificationCallbacks = new Set<(notification: Notification) => void>();
 
   constructor(initial: Snapshot = { revision: 0, windows: [] }) {
@@ -112,6 +115,26 @@ export class WindowStore {
   private setSurfaces(surfaces: SurfaceSpec[]): void {
     this.surfacesState = surfaces;
     for (const listener of this.surfaceListeners) listener();
+  }
+
+  getOutputs(): OutputInfo[] {
+    return this.outputsState;
+  }
+
+  subscribeOutputs(listener: Listener): () => void {
+    this.outputListeners.add(listener);
+    return () => {
+      this.outputListeners.delete(listener);
+    };
+  }
+
+  applyOutputs(outputs: OutputInfo[]): void {
+    this.setOutputs(outputs);
+  }
+
+  private setOutputs(outputs: OutputInfo[]): void {
+    this.outputsState = outputs;
+    for (const listener of this.outputListeners) listener();
   }
 
   getNotifications(): Notification[] {
@@ -198,6 +221,23 @@ export class WindowStore {
     }
     if ("AppListUpdated" in event) {
       this.setApps(event.AppListUpdated.apps);
+      return;
+    }
+    if ("OutputAdded" in event || "OutputChanged" in event) {
+      const output = "OutputAdded" in event ? event.OutputAdded.output : event.OutputChanged.output;
+      const index = this.outputsState.findIndex((item) => item.id === output.id);
+      if (index !== -1 && JSON.stringify(this.outputsState[index]) === JSON.stringify(output)) return;
+      const outputs = index === -1
+        ? [...this.outputsState, output]
+        : this.outputsState.map((item, at) => (at === index ? output : item));
+      outputs.sort((a, b) => a.id - b.id);
+      this.setOutputs(outputs);
+      return;
+    }
+    if ("OutputRemoved" in event) {
+      const id = event.OutputRemoved.id;
+      if (!this.outputsState.some((item) => item.id === id)) return;
+      this.setOutputs(this.outputsState.filter((item) => item.id !== id));
       return;
     }
     if ("SurfaceCreated" in event || "SurfaceUpdated" in event) {

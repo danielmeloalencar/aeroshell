@@ -1,12 +1,12 @@
-//! Input nativo via Wayland. Nenhum evento é encaminhado para TS.
+//! Input nativo via Wayland; somente KeyBind registrado é publicado ao runtime.
 
 use smithay::{
     backend::input::{
         AbsolutePositionEvent, Axis, AxisSource, ButtonState, Event, InputBackend, InputEvent,
-        KeyboardKeyEvent, PointerAxisEvent, PointerButtonEvent, PointerMotionEvent,
+        KeyState, KeyboardKeyEvent, PointerAxisEvent, PointerButtonEvent, PointerMotionEvent,
     },
     input::{
-        keyboard::FilterResult,
+        keyboard::{xkb, FilterResult, Keysym, ModifiersState},
         pointer::{AxisFrame, ButtonEvent, MotionEvent},
     },
     reexports::wayland_server::{protocol::wl_surface::WlSurface, Resource},
@@ -14,6 +14,71 @@ use smithay::{
 };
 
 use crate::state::AeroState;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KeyChord {
+    ctrl: bool,
+    alt: bool,
+    shift: bool,
+    logo: bool,
+    keysym: Keysym,
+}
+
+impl KeyChord {
+    fn matches(&self, modifiers: &ModifiersState, keysym: Keysym) -> bool {
+        self.keysym == keysym
+            && self.ctrl == modifiers.ctrl
+            && self.alt == modifiers.alt
+            && self.shift == modifiers.shift
+            && self.logo == modifiers.logo
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RegisteredKeyBind {
+    pub keys: String,
+    pub chord: KeyChord,
+}
+
+/// Converte `Super+1` no modifier set + keysym interpretado pelo XKB real.
+pub fn parse_key_binding(value: &str) -> Result<KeyChord, String> {
+    let mut chord = KeyChord {
+        ctrl: false,
+        alt: false,
+        shift: false,
+        logo: false,
+        keysym: xkb::keysyms::KEY_NoSymbol.into(),
+    };
+    let parts: Vec<_> = value.split('+').map(str::trim).collect();
+    if parts.len() < 2 || parts.iter().any(|part| part.is_empty()) {
+        return Err(format!("keybind inválido: {value}"));
+    }
+    let last = parts.len() - 1;
+    for (index, part) in parts.iter().enumerate() {
+        let modifier = match part.to_ascii_lowercase().as_str() {
+            "ctrl" | "control" => Some(&mut chord.ctrl),
+            "alt" => Some(&mut chord.alt),
+            "shift" => Some(&mut chord.shift),
+            "super" | "logo" | "meta" => Some(&mut chord.logo),
+            _ => None,
+        };
+        if let Some(slot) = modifier {
+            if index == last || *slot {
+                return Err(format!("modifier inválido ou duplicado em: {value}"));
+            }
+            *slot = true;
+            continue;
+        }
+        if index != last {
+            return Err(format!("tecla final deve ser única em: {value}"));
+        }
+        chord.keysym = xkb::keysym_from_name(part, xkb::KEYSYM_CASE_INSENSITIVE);
+        if chord.keysym == xkb::keysyms::KEY_NoSymbol.into() {
+            return Err(format!("keysym desconhecido: {part}"));
+        }
+    }
+    Ok(chord)
+}
 
 /// Espaço de coordenadas do ponteiro absoluto do winit.
 ///
@@ -106,6 +171,72 @@ impl AeroState {
             },
         );
         pointer.frame(self);
+    }
+
+    fn process_key(
+        &mut self,
+        keycode: smithay::input::keyboard::Keycode,
+        state: KeyState,
+        time: u32,
+    ) {
+        let keyboard = self.seat.get_keyboard().unwrap();
+        keyboard.input::<(), _>(
+            self,
+            keycode,
+            state,
+            SERIAL_COUNTER.next_serial(),
+            time,
+            |data, modifiers, key| {
+                let intercept = match state {
+                    KeyState::Pressed if data.intercepted_keys.contains(&keycode) => {
+                        // Auto-repeat continua interceptado, sem novo KeyBind.
+                        true
+                    }
+                    KeyState::Pressed => {
+                        let keysym = key.modified_sym();
+                        let matched = data.key_binds.iter().find_map(|(id, binding)| {
+                            binding
+                                .chord
+                                .matches(modifiers, keysym)
+                                .then(|| (id.clone(), binding.keys.clone()))
+                        });
+                        if let Some((id, keys)) = matched {
+                            data.intercepted_keys.insert(keycode);
+                            crate::window_ipc::emit_event(
+                                aeroshell_ipc::types::AeroEvent::KeyBind { id, keys },
+                            );
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                    KeyState::Released => {
+                        // O release acompanha o press mesmo após unbind/reload ou
+                        // depois de soltar o modifier antes da tecla final.
+                        data.intercepted_keys.remove(&keycode)
+                    }
+                };
+                if intercept {
+                    FilterResult::Intercept(())
+                } else {
+                    FilterResult::Forward
+                }
+            },
+        );
+    }
+
+    /// Tecla evdev sintética; entra no mesmo matcher do input físico.
+    pub fn inject_key(&mut self, evdev: u32, pressed: bool) {
+        self.dirty = true;
+        self.process_key(
+            smithay::input::keyboard::Keycode::new(evdev + 8),
+            if pressed {
+                KeyState::Pressed
+            } else {
+                KeyState::Released
+            },
+            0,
+        );
     }
 
     /// Texto sintético para o harness do launcher. Usa o mesmo KeyboardHandle
@@ -220,16 +351,7 @@ impl AeroState {
     pub fn process_input_event<I: InputBackend>(&mut self, event: InputEvent<I>) {
         match event {
             InputEvent::Keyboard { event, .. } => {
-                let serial = SERIAL_COUNTER.next_serial();
-                let time = Event::time_msec(&event);
-                self.seat.get_keyboard().unwrap().input::<(), _>(
-                    self,
-                    event.key_code(),
-                    event.state(),
-                    serial,
-                    time,
-                    |_, _, _| FilterResult::Forward,
-                );
+                self.process_key(event.key_code(), event.state(), Event::time_msec(&event));
             }
             InputEvent::PointerMotion { event, .. } => {
                 // Libinput (backend udev) emite movimento RELATIVO; os demais
@@ -371,6 +493,29 @@ impl AeroState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn keybind_super_numero_exige_modifiers_exatos() {
+        let chord = parse_key_binding("Super+1").expect("Super+1 deveria ser válido");
+        let modifiers = smithay::input::keyboard::ModifiersState {
+            logo: true,
+            ..Default::default()
+        };
+        assert!(chord.matches(
+            &modifiers,
+            smithay::input::keyboard::Keysym::new(smithay::input::keyboard::keysyms::KEY_1,)
+        ));
+        assert!(!chord.matches(
+            &Default::default(),
+            smithay::input::keyboard::Keysym::new(smithay::input::keyboard::keysyms::KEY_1,)
+        ));
+        assert!(!chord.matches(
+            &modifiers,
+            smithay::input::keyboard::Keysym::new(smithay::input::keyboard::keysyms::KEY_2,)
+        ));
+        assert!(parse_key_binding("Super+").is_err());
+        assert!(parse_key_binding("NotAKey+1").is_err());
+    }
 
     #[test]
     fn ponteiro_absoluto_cobre_todos_os_outputs() {

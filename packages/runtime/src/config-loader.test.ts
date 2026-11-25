@@ -48,10 +48,20 @@ test("reload do config e de seu helper não usa cache de módulo", async () => {
 
 test("campos F3/F5/F6 são tipados mas falham explicitamente, nunca silenciosos", () => {
   expect(() => validateDesktopConfig({ layouts: {} })).toThrow(/layouts.*F3/);
-  expect(() => validateDesktopConfig({ keybindings: [] })).toThrow(/keybindings.*F3/);
   expect(() => validateDesktopConfig({ idle: [] })).toThrow(/idle.*F5/);
   expect(() => validateDesktopConfig({ lock: {} })).toThrow(/lock.*F5/);
   expect(() => validateDesktopConfig({ greeter: {} })).toThrow(/greeter.*F6/);
+});
+
+test("defineDesktop aceita dois keybindings executáveis na F2", () => {
+  const config = validateDesktopConfig({
+    keybindings: [
+      { keys: "Super+1", command: "workspace-activate 1" },
+      { keys: "Super+2", command: "workspace-activate 2" },
+    ],
+  });
+  expect(config.keybindings).toHaveLength(2);
+  expect(() => validateDesktopConfig({ keybindings: {} })).toThrow("keybindings deve ser um array");
 });
 
 test("diff do config cria, atualiza e destrói por ID sem reiniciar o runtime", () => {

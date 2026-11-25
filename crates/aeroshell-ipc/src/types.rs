@@ -268,13 +268,55 @@ pub struct LayoutConfig {
     pub name: String,
 }
 
-/// Atalho deferido para F3.
+/// Atalho declarativo; o comando é interpretado pela política TypeScript.
 #[cfg_attr(feature = "export-bindings", derive(TS))]
 #[cfg_attr(feature = "export-bindings", ts(export))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KeybindingConfig {
     pub keys: String,
     pub command: String,
+}
+
+/// Grab global registrado pelo runtime privilegiado.
+#[cfg_attr(feature = "export-bindings", derive(TS))]
+#[cfg_attr(feature = "export-bindings", ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KeyBind {
+    pub id: String,
+    pub keys: String,
+}
+
+/// Geometria lógica de um output no Space.
+#[cfg_attr(feature = "export-bindings", derive(TS))]
+#[cfg_attr(feature = "export-bindings", ts(export))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OutputGeometry {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Modo físico atual; o refresh usa milihertz, como no Smithay.
+#[cfg_attr(feature = "export-bindings", derive(TS))]
+#[cfg_attr(feature = "export-bindings", ts(export))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OutputMode {
+    pub width: u32,
+    pub height: u32,
+    pub refresh_millihz: u32,
+}
+
+/// Output atual do compositor, identificado pelo mesmo índice de SurfaceSpec.
+#[cfg_attr(feature = "export-bindings", derive(TS))]
+#[cfg_attr(feature = "export-bindings", ts(export))]
+#[derive(Debug, Clone, PartialEq)]
+pub struct OutputInfo {
+    pub id: u32,
+    pub name: String,
+    pub geometry: OutputGeometry,
+    pub scale: f64,
+    pub mode: OutputMode,
 }
 
 /// Ação de idle prevista no contrato; a política e os timers chegam na F5.
@@ -318,8 +360,8 @@ pub struct GreeterConfig {
     pub show_users: Option<bool>,
 }
 
-/// Contrato completo de `desktop.config.tsx`; somente surfaces/frame/rules são
-/// aplicados na F2. O loader rejeita explicitamente qualquer campo deferido usado.
+/// Contrato completo de `desktop.config.tsx`; surfaces/frame/rules/keybindings
+/// são aplicados na F2. O loader rejeita explicitamente os campos deferidos.
 #[cfg_attr(feature = "export-bindings", derive(TS))]
 #[cfg_attr(feature = "export-bindings", ts(export))]
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -347,7 +389,7 @@ pub struct DesktopConfig {
 /// `{"Title":{"id":0,"title":"foot"}}`.
 #[cfg_attr(feature = "export-bindings", derive(TS))]
 #[cfg_attr(feature = "export-bindings", ts(export))]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum AeroEvent {
     Snapshot {
         snapshot: Snapshot,
@@ -397,6 +439,19 @@ pub enum AeroEvent {
     },
     AppListUpdated {
         apps: Vec<App>,
+    },
+    OutputAdded {
+        output: OutputInfo,
+    },
+    OutputChanged {
+        output: OutputInfo,
+    },
+    OutputRemoved {
+        id: u32,
+    },
+    KeyBind {
+        id: String,
+        keys: String,
     },
     /// Pedido/estado de uma superfície web; o host consome pelo stream PUSH.
     SurfaceCreated {

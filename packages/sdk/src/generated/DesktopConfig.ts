@@ -9,7 +9,7 @@ import type { LockConfig } from "./LockConfig";
 import type { SurfaceDeclaration } from "./SurfaceDeclaration";
 
 /**
- * Contrato completo de `desktop.config.tsx`; somente surfaces/frame/rules são
- * aplicados na F2. O loader rejeita explicitamente qualquer campo deferido usado.
+ * Contrato completo de `desktop.config.tsx`; surfaces/frame/rules/keybindings
+ * são aplicados na F2. O loader rejeita explicitamente os campos deferidos.
  */
 export type DesktopConfig = { surfaces?: Array<SurfaceDeclaration>, frame?: FrameConfig, layouts?: Array<LayoutConfig>, rules?: DecorationPolicyConfig, keybindings?: Array<KeybindingConfig>, idle?: Array<IdleRule>, lock?: LockConfig, greeter?: GreeterConfig, };

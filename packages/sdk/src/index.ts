@@ -8,6 +8,8 @@ import type { Snapshot } from "./generated/Snapshot";
 import type { SurfaceSpec } from "./generated/SurfaceSpec";
 import type { WindowInfo } from "./generated/WindowInfo";
 import type { Workspace } from "./generated/Workspace";
+import { createInputApi } from "./api/input";
+import { createOutputsApi } from "./api/outputs";
 import { createSurfacesApi, surfaceFromWire } from "./api/surfaces";
 import { WindowStore } from "./store";
 
@@ -51,6 +53,7 @@ const EVENT_KEYS = [
   "Snapshot", "Title", "Icon", "Focus", "Geometry", "Csd",
   "FramePainted", "WorkspaceCreated", "WorkspaceActivated", "WorkspaceRenamed",
   "WorkspaceDestroyed", "WindowMovedToWorkspace", "AppListUpdated",
+  "OutputAdded", "OutputChanged", "OutputRemoved", "KeyBind",
   "SurfaceCreated", "SurfaceUpdated", "SurfaceDestroyed",
   "NotificationShown", "NotificationDismissed", "DecorationRequest", "DecorationApplied",
 ] as const;
@@ -124,6 +127,8 @@ function fuzzyScore(query: string, text: string): number | null {
 export function createAero(transport: Transport) {
   const store = new WindowStore();
   const surfaces = createSurfacesApi(transport, store);
+  const outputs = createOutputsApi(transport, store);
+  const input = createInputApi(transport);
 
   /** Busca o estado no compositor e o publica como snapshot (1ª vez) ou patches. */
   async function refresh(): Promise<Snapshot> {
@@ -286,6 +291,8 @@ export function createAero(transport: Transport) {
     searchApps,
     launchApp,
     surfaces,
+    outputs,
+    input,
     createSurface,
     updateSurface,
     destroySurface,

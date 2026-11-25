@@ -17,6 +17,15 @@ window.aero.postMessage({
   module: document.body.dataset.module,
 });
 
+// Fixture de segurança do harness: a ponte deve recusar este comando global.
+if (new URLSearchParams(location.search).has("input-bind-test")) {
+  window.aero.postMessage({
+    type: "ipc",
+    command: 'input-bind {"id":"guest-bind","keys":"Super+9"}',
+    seq: 900001,
+  });
+}
+
 // Fixture de segurança do harness: a decisão de navegação pertence ao host.
 if (new URLSearchParams(location.search).has("external-test")) {
   location.href = "https://example.com/";

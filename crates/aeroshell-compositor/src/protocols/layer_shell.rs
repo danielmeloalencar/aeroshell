@@ -6,6 +6,7 @@
 use smithay::{
     delegate_layer_shell,
     desktop::{layer_map_for_output, LayerSurface},
+    output::Output,
     reexports::wayland_server::protocol::wl_output::WlOutput,
     wayland::{
         compositor::with_states,
@@ -18,12 +19,19 @@ use smithay::{
 use crate::state::AeroState;
 
 impl AeroState {
-    /// Painéis ancorados só na borda inferior mantêm 48 px; desktop/overlay
-    /// ancorados nas duas bordas verticais recebem a altura cheia do output.
-    pub fn configure_layer_surface(&self, layer: &LayerSurface) {
-        let Some(output) = self.outputs.first() else {
-            return;
-        };
+    fn output_for_layer(&self, layer: &LayerSurface) -> Option<Output> {
+        self.outputs
+            .iter()
+            .find(|output| {
+                layer_map_for_output(output)
+                    .layers()
+                    .any(|candidate| candidate == layer)
+            })
+            .cloned()
+            .or_else(|| self.outputs.first().cloned())
+    }
+
+    fn configure_layer_surface_on(&self, layer: &LayerSurface, output: &Output) {
         let Some(mode) = output.current_mode() else {
             return;
         };
@@ -53,11 +61,27 @@ impl AeroState {
         }
     }
 
+    /// Painéis ancorados só na borda inferior mantêm 48 px; desktop/overlay
+    /// ancorados nas duas bordas verticais recebem a altura cheia do output.
+    pub fn configure_layer_surface(&self, layer: &LayerSurface) {
+        if let Some(output) = self.output_for_layer(layer) {
+            self.configure_layer_surface_on(layer, &output);
+        }
+    }
+
     /// Reorganiza todas as camadas depois de um commit.
     pub fn arrange_layers(&self) {
         for output in &self.outputs {
             let mut map = layer_map_for_output(output);
             let _ = map.arrange();
+            for layer in map.layers() {
+                tracing::info!(
+                    namespace = layer.namespace(),
+                    output = output.name(),
+                    geometry = ?map.layer_geometry(layer),
+                    "LayerMap layer arranjada"
+                );
+            }
         }
     }
 }
@@ -70,7 +94,7 @@ impl WlrLayerShellHandler for AeroState {
     fn new_layer_surface(
         &mut self,
         surface: smithay::wayland::shell::wlr_layer::LayerSurface,
-        _output: Option<WlOutput>,
+        requested_output: Option<WlOutput>,
         _layer: Layer,
         namespace: String,
     ) {
@@ -107,22 +131,29 @@ impl WlrLayerShellHandler for AeroState {
             return;
         }
 
-        tracing::info!(%namespace, "nova layer surface (panel/desktop/overlay)");
-        self.configure_layer_surface(&layer);
+        let requested = requested_output
+            .as_ref()
+            .and_then(Output::from_resource)
+            .filter(|candidate| self.outputs.iter().any(|output| output == candidate));
+        let Some(output) = requested.or_else(|| self.outputs.first().cloned()) else {
+            tracing::warn!(%namespace, "layer sem output disponível");
+            return;
+        };
+        tracing::info!(%namespace, output = output.name(), "nova layer surface (panel/desktop/overlay)");
+        self.configure_layer_surface_on(&layer, &output);
         layer.layer_surface().send_configure();
 
-        for output in &self.outputs {
-            let mut map = layer_map_for_output(output);
-            if let Err(err) = map.map_layer(&layer) {
-                tracing::warn!(?err, "falha ao mapear layer surface");
-            }
-            let _ = map.arrange();
-            tracing::info!(
-                output = output.name(),
-                non_exclusive_zone = ?map.non_exclusive_zone(),
-                "LayerMap após mapear o painel"
-            );
+        let mut map = layer_map_for_output(&output);
+        if let Err(err) = map.map_layer(&layer) {
+            tracing::warn!(?err, "falha ao mapear layer surface");
         }
+        let _ = map.arrange();
+        tracing::info!(
+            output = output.name(),
+            non_exclusive_zone = ?map.non_exclusive_zone(),
+            "LayerMap após mapear o painel"
+        );
+        drop(map);
         self.layer_surfaces.push(layer);
     }
 }

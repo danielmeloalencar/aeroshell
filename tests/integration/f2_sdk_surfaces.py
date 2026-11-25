@@ -210,6 +210,18 @@ def main():
     comp = host = runtime = foot = None
     events = None
     checks = {}
+    fixture = OUT / "fixture"
+    fixture.mkdir()
+    config_path = fixture / "desktop.config.tsx"
+    source = (ROOT / "examples/blank-desktop/desktop.config.tsx").read_text()
+    source = source.replace(
+        '"../../packages/sdk/src/define"', json.dumps(str(ROOT / "packages/sdk/src/define.ts"))
+    )
+    source = re.sub(
+        r'\n    \{\n      kind: "Panel",\n      id: "blank-panel-output-1",[\s\S]*?\n    \},',
+        "", source,
+    )
+    config_path.write_text(source.replace("background:blue", "background:#e00000"))
     try:
         handle = LOG.open("wb")
         comp = subprocess.Popen(
@@ -235,8 +247,7 @@ def main():
         checks["host de superfícies conectou"] = wait_for(lambda: "SURFACE_HOST pronto" in clean(), 12)
         runtime_handle = RUNTIME_LOG.open("wb")
         runtime = subprocess.Popen(
-            ["bun", "packages/runtime/src/main.ts", "--config",
-             "examples/blank-desktop/desktop.config.tsx"],
+            ["bun", "packages/runtime/src/main.ts", "--config", str(config_path)],
             cwd=ROOT, env=env, stdout=runtime_handle, stderr=subprocess.STDOUT,
             start_new_session=True,
         )

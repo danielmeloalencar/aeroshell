@@ -87,6 +87,20 @@ fn field_size(spec: &serde_json::Value, field: &str, default: i32) -> i32 {
 
 fn apply_geometry(window: &gtk4::ApplicationWindow, spec: &serde_json::Value) {
     window.set_layer(layer_of(field_str(spec, "layer")));
+    let output = spec
+        .get("output")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
+    let monitor = gtk4::prelude::WidgetExt::display(window)
+        .monitors()
+        .item(output as u32)
+        .and_then(|object| object.downcast::<gtk4::gdk::Monitor>().ok());
+    window.set_monitor(monitor.as_ref());
+    tracing::info!(
+        output,
+        monitor_found = monitor.is_some(),
+        "SURFACE_HOST monitor selecionado"
+    );
     let anchors = spec.get("anchors");
     for (name, edge) in [
         ("left", Edge::Left),

@@ -52,6 +52,7 @@ use aeroshell_ipc::types::{AeroEvent, DecorationPolicy, SurfaceSpec};
 
 use crate::{
     cli::Options,
+    input::RegisteredKeyBind,
     protocols::{
         toplevel_states::{app_id_for, frame_state_for},
         xdg_shell::force_client_frame,
@@ -246,6 +247,10 @@ pub struct AeroState {
     pub workspaces: WorkspaceManager,
     /// F2-surface-host: especificações ativas declaradas pelo runtime.
     pub surfaces: HashMap<String, SurfaceSpec>,
+    /// F2-input-binds: chords globais registrados somente pelo IPC privilegiado.
+    pub key_binds: HashMap<String, RegisteredKeyBind>,
+    /// Press interceptado cujo release deve seguir o mesmo destino, mesmo após unbind.
+    pub intercepted_keys: HashSet<smithay::input::keyboard::Keycode>,
     /// F2-launcher: aplicativos descobertos nos diretórios `.desktop` no startup.
     pub installed_apps: Vec<crate::apps::InstalledApp>,
     /// F2-decoration-policy: runtime conectado? decisões e pedidos pendentes.
@@ -740,6 +745,8 @@ impl AeroState {
             event_revision: 0,
             workspaces: WorkspaceManager::default(),
             surfaces: HashMap::new(),
+            key_binds: HashMap::new(),
+            intercepted_keys: HashSet::new(),
             installed_apps: crate::apps::load_apps(),
             policy_runtime: false,
             decorations: HashMap::new(),
@@ -785,17 +792,23 @@ impl AeroState {
         // do Smithay respeita `wl_surface.set_input_region`.
         for output in &self.outputs {
             let map = smithay::desktop::layer_map_for_output(output);
-            // `layer_under` usa o tamanho bruto do cliente (que pode ser 0 quando ancorado
-            // nas duas bordas). Usamos a geometry calculada pelo LayerMap.
+            let output_origin = self
+                .space
+                .output_geometry(output)
+                .map(|geometry| geometry.loc.to_f64())
+                .unwrap_or_default();
+            let local_pos = pos - output_origin;
+            // A geometria do LayerMap é local ao output; o ponteiro é global.
             for layer_surface in map.layers().rev() {
                 let Some(geo) = map.layer_geometry(layer_surface) else {
                     continue;
                 };
-                if !geo.to_f64().contains(pos) {
+                if !geo.to_f64().contains(local_pos) {
                     continue;
                 }
-                let origin = geo.loc.to_f64();
-                let hit = layer_surface.surface_under(pos - origin, WindowSurfaceType::ALL);
+                let origin = output_origin + geo.loc.to_f64();
+                let hit = layer_surface
+                    .surface_under(local_pos - geo.loc.to_f64(), WindowSurfaceType::ALL);
                 tracing::debug!(?pos, ?origin, hit = ?hit.as_ref().map(|(s, _)| s.id()), "hit-test layer");
                 if let Some((surface, local)) = hit {
                     return Some((surface, (local.to_f64() + origin)));

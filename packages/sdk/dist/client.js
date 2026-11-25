@@ -1,3 +1,11 @@
+// packages/sdk/src/api/input.ts
+//! API privilegiada `aero.input`: grabs globais e callbacks do runtime.
+//! O guest browser não recebe este módulo nem esta capability.
+var prefix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+
+// packages/sdk/src/api/outputs.ts
+//! API privilegiada `aero.outputs`; os tipos vêm exclusivamente do ts-rs.
+
 // packages/sdk/src/api/surfaces.ts
 //! API privilegiada `aero.surfaces` do runtime Bun.
 //! Os tipos públicos vêm exclusivamente dos bindings ts-rs; a conversão da wire
@@ -50,6 +58,10 @@ var EVENT_KEYS = [
   "WorkspaceDestroyed",
   "WindowMovedToWorkspace",
   "AppListUpdated",
+  "OutputAdded",
+  "OutputChanged",
+  "OutputRemoved",
+  "KeyBind",
   "SurfaceCreated",
   "SurfaceUpdated",
   "SurfaceDestroyed",

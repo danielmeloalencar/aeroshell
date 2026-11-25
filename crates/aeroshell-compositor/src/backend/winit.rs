@@ -280,6 +280,13 @@ pub fn init_winit(
                             };
                             output.change_current_state(Some(new_mode), None, None, None);
                             output.set_preferred(new_mode);
+                            if let Some(info) = state.output_info(0) {
+                                crate::window_ipc::emit_event(
+                                    aeroshell_ipc::types::AeroEvent::OutputChanged { output: info },
+                                );
+                            }
+                            state.arrange_layers();
+                            state.dirty = true;
                         }
                     }
                     backend.window().request_redraw();

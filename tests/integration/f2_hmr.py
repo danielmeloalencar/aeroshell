@@ -196,6 +196,16 @@ def main():
     panel_fixture.write_text(panel_fixture.read_text().replace(
         '"../../packages/sdk/src/client"', json.dumps(str(ROOT / "packages/sdk/src/client.ts"))
     ))
+    # Este vizinho é headless/single-output e sua cor baseline é vermelha;
+    # normalizamos SÓ a cópia, preservando o exemplo editável do usuário.
+    single_output = re.sub(
+        r'\n    \{\n      kind: "Panel",\n      id: "blank-panel-output-1",[\s\S]*?\n    \},',
+        "", config_path.read_text(),
+    )
+    config_path.write_text(
+        single_output.replace("background:blue", "background:#e00000")
+        .replace("blank-desktop · Sem framework e sem Rust", "blank-desktop · SDK sem framework")
+    )
     env = {
         **os.environ,
         "RUST_LOG": "info",

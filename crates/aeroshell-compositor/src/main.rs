@@ -158,6 +158,17 @@ fn main() -> Result<(), Box<dyn Error>> {
                         let text = msg.strip_prefix("text ").unwrap_or("");
                         data.state.inject_text(text);
                     }
+                    Some("key") => {
+                        let pressed = match parts.next() {
+                            Some("press") => Some(true),
+                            Some("release") => Some(false),
+                            _ => None,
+                        };
+                        let evdev = parts.next().and_then(|value| value.parse::<u32>().ok());
+                        if let (Some(pressed), Some(evdev)) = (pressed, evdev) {
+                            data.state.inject_key(evdev, pressed);
+                        }
+                    }
                     _ => {}
                 }
             })?;
@@ -575,6 +586,27 @@ mod protocol_tests {
             "associate DEPOIS do role deveria ser erro de role"
         );
         assert_eq!(h.data.state.frames.len(), 1);
+    }
+
+    #[test]
+    fn keybind_rastreia_press_repeat_e_release_mesmo_apos_unbind() {
+        let mut h = Harness::new(false);
+        assert_eq!(
+            h.data
+                .state
+                .window_command(r#"input-bind {"id":"test","keys":"Super+1"}"#,),
+            "OK"
+        );
+        h.data.state.inject_key(125, true);
+        h.data.state.inject_key(2, true);
+        let number = smithay::input::keyboard::Keycode::new(10);
+        assert!(h.data.state.intercepted_keys.contains(&number));
+        h.data.state.inject_key(2, true); // auto-repeat não é um novo ciclo
+        assert!(h.data.state.intercepted_keys.contains(&number));
+        assert_eq!(h.data.state.window_command(r#"input-unbind "test""#), "OK");
+        h.data.state.inject_key(125, false); // Super pode sair antes do número.
+        h.data.state.inject_key(2, false);
+        assert!(!h.data.state.intercepted_keys.contains(&number));
     }
 
     #[test]

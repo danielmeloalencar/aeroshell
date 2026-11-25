@@ -359,6 +359,8 @@ mod tests {
             "focus 1",
             "surface-create {}",
             "surface-destroy panel-a",
+            r#"input-bind {"id":"guest","keys":"Super+1"}"#,
+            "input-unbind guest",
             r#"surface-update {"id":"panel-b","input_region":[]}"#,
             r#"surface-update {"id":"panel-a","html":"fora da capability"}"#,
             r#"surface-update {"id":"panel-a","keyboard_mode":"exclusive"}"#,

@@ -1,6 +1,6 @@
 # blank-desktop
 
-Background e painel declarados somente em `desktop.config.tsx`, sem framework e sem código Rust do desenvolvedor.
+Background e painéis nos outputs 0/1 declarados somente em `desktop.config.tsx`, sem framework e sem código Rust do desenvolvedor. `Super+1` e `Super+2` ativam os workspaces 1/2 por ações tipadas do SDK (crie o workspace 2 antes de usar o segundo atalho).
 
 ```bash
 bun build packages/sdk/src/client.ts --target=browser --outfile=packages/sdk/dist/client.js

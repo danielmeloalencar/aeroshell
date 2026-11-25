@@ -33,9 +33,9 @@ use std::{
 };
 
 use aeroshell_ipc::types::{
-    AeroEvent, App, DecorationPolicy, Notification, Snapshot, SurfaceAnchors, SurfaceInputRegion,
-    SurfaceKeyboardMode, SurfaceKind, SurfaceLayer, SurfaceMargins, SurfaceSpec, WindowInfo,
-    Workspace,
+    AeroEvent, App, DecorationPolicy, Notification, OutputGeometry, OutputInfo, OutputMode,
+    Snapshot, SurfaceAnchors, SurfaceInputRegion, SurfaceKeyboardMode, SurfaceKind, SurfaceLayer,
+    SurfaceMargins, SurfaceSpec, WindowInfo, Workspace,
 };
 use calloop::channel;
 use serde_json::{json, Value};
@@ -49,6 +49,7 @@ use smithay::{
     wayland::{compositor::with_states, shell::xdg::XdgToplevelSurfaceData},
 };
 
+use crate::input::{parse_key_binding, RegisteredKeyBind};
 use crate::protocols::toplevel_icon::IconPixels;
 use crate::protocols::toplevel_states::{app_id_for, frame_state_for};
 use crate::protocols::xdg_shell::client_draws_frame;
@@ -193,6 +194,25 @@ fn workspace_json(workspace: &Workspace) -> Value {
     })
 }
 
+fn output_json(output: &OutputInfo) -> Value {
+    json!({
+        "id": output.id,
+        "name": output.name,
+        "geometry": {
+            "x": output.geometry.x,
+            "y": output.geometry.y,
+            "width": output.geometry.width,
+            "height": output.geometry.height,
+        },
+        "scale": output.scale,
+        "mode": {
+            "width": output.mode.width,
+            "height": output.mode.height,
+            "refresh_millihz": output.mode.refresh_millihz,
+        },
+    })
+}
+
 /// Serialização manual no formato tagged-object que o ts-rs gera para `AeroEvent`.
 fn event_json(event: &AeroEvent) -> Value {
     match event {
@@ -259,6 +279,14 @@ fn event_json(event: &AeroEvent) -> Value {
             let apps: Vec<Value> = apps.iter().map(app_json).collect();
             json!({ "AppListUpdated": { "apps": apps } })
         }
+        AeroEvent::OutputAdded { output } => json!({
+            "OutputAdded": { "output": output_json(output) }
+        }),
+        AeroEvent::OutputChanged { output } => json!({
+            "OutputChanged": { "output": output_json(output) }
+        }),
+        AeroEvent::OutputRemoved { id } => json!({ "OutputRemoved": { "id": id } }),
+        AeroEvent::KeyBind { id, keys } => json!({ "KeyBind": { "id": id, "keys": keys } }),
         AeroEvent::SurfaceCreated { surface } => json!({
             "SurfaceCreated": { "surface": surface_json(surface) }
         }),
@@ -686,6 +714,10 @@ fn event_name(event: &AeroEvent) -> &'static str {
         AeroEvent::WorkspaceDestroyed { .. } => "workspace_destroyed",
         AeroEvent::WindowMovedToWorkspace { .. } => "window_moved_to_workspace",
         AeroEvent::AppListUpdated { .. } => "app_list_updated",
+        AeroEvent::OutputAdded { .. } => "output_added",
+        AeroEvent::OutputChanged { .. } => "output_changed",
+        AeroEvent::OutputRemoved { .. } => "output_removed",
+        AeroEvent::KeyBind { .. } => "key_bind",
         AeroEvent::SurfaceCreated { .. } => "surface_created",
         AeroEvent::SurfaceUpdated { .. } => "surface_updated",
         AeroEvent::SurfaceDestroyed { .. } => "surface_destroyed",
@@ -725,6 +757,29 @@ pub fn spawn(path: &str, sender: channel::Sender<Command>) -> io::Result<()> {
 }
 
 impl AeroState {
+    /// Estado tipado de um output, usando o Space e o modo físico atuais.
+    pub fn output_info(&self, id: u32) -> Option<OutputInfo> {
+        let output = self.outputs.get(id as usize)?;
+        let geometry = self.space.output_geometry(output)?;
+        let mode = output.current_mode()?;
+        Some(OutputInfo {
+            id,
+            name: output.name(),
+            geometry: OutputGeometry {
+                x: geometry.loc.x,
+                y: geometry.loc.y,
+                width: geometry.size.w.max(0) as u32,
+                height: geometry.size.h.max(0) as u32,
+            },
+            scale: output.current_scale().fractional_scale(),
+            mode: OutputMode {
+                width: mode.size.w.max(0) as u32,
+                height: mode.size.h.max(0) as u32,
+                refresh_millihz: mode.refresh.max(0) as u32,
+            },
+        })
+    }
+
     /// Snapshot tipado dos dados básicos das janelas (mesma fonte do `list`).
     pub fn snapshot(&self) -> Snapshot {
         let mut ids: Vec<u32> = self.window_surfaces.keys().copied().collect();
@@ -820,6 +875,11 @@ impl AeroState {
                         .map(|app| app.info.clone())
                         .collect(),
                 });
+                for id in 0..self.outputs.len() as u32 {
+                    if let Some(output) = self.output_info(id) {
+                        emit_event(AeroEvent::OutputAdded { output });
+                    }
+                }
                 // Quem subscribe depois (host/painel) precisa reconstruir as
                 // superfícies já declaradas, mesmo padrão do replay de decoração.
                 for surface in self.surfaces.values() {
@@ -1074,6 +1134,78 @@ impl AeroState {
                     Err(err) => format!("ERR falha ao lançar {}: {err}", app.info.id),
                 }
             }
+            "output-list" => {
+                let mut out = String::new();
+                for id in 0..self.outputs.len() as u32 {
+                    if let Some(output) = self.output_info(id) {
+                        out.push_str(&format!("O {}\n", output_json(&output)));
+                    }
+                }
+                out.push('.');
+                out
+            }
+            "output-get" => {
+                let Some(id) = id.and_then(|id| u32::try_from(id).ok()) else {
+                    return "ERR uso: output-get <id>".to_owned();
+                };
+                match self.output_info(id) {
+                    Some(output) => format!("O {}\nOK", output_json(&output)),
+                    None => format!("ERR output inexistente: {id}"),
+                }
+            }
+            "input-bind" => {
+                let raw = cmd.strip_prefix("input-bind").unwrap_or("").trim();
+                let value: Value = match serde_json::from_str(raw) {
+                    Ok(value) => value,
+                    Err(err) => return format!("ERR input-bind: {err}"),
+                };
+                let (id, keys) = match (field_string(&value, "id"), field_string(&value, "keys")) {
+                    (Ok(id), Ok(keys)) if !id.trim().is_empty() => (id, keys),
+                    _ => return "ERR input-bind exige id não vazio e keys".to_owned(),
+                };
+                let chord = match parse_key_binding(&keys) {
+                    Ok(chord) => chord,
+                    Err(err) => return format!("ERR input-bind: {err}"),
+                };
+                if self.key_binds.contains_key(&id) {
+                    return format!("ERR keybind já existe: {id}");
+                }
+                if self
+                    .key_binds
+                    .values()
+                    .any(|binding| binding.chord == chord)
+                {
+                    return format!("ERR atalho já registrado: {keys}");
+                }
+                self.key_binds.insert(id, RegisteredKeyBind { keys, chord });
+                "OK".to_owned()
+            }
+            "input-unbind" => {
+                let raw = cmd.strip_prefix("input-unbind").unwrap_or("").trim();
+                let id = notification_id_arg(raw);
+                if id.is_empty() {
+                    return "ERR uso: input-unbind <id-json>".to_owned();
+                }
+                if self.key_binds.remove(&id).is_none() {
+                    return format!("ERR keybind inexistente: {id}");
+                }
+                "OK".to_owned()
+            }
+            "input-list" => {
+                let mut ids: Vec<_> = self.key_binds.keys().cloned().collect();
+                ids.sort();
+                let mut out = String::new();
+                for id in ids {
+                    if let Some(binding) = self.key_binds.get(&id) {
+                        out.push_str(&format!(
+                            "B {}\n",
+                            json!({ "id": id, "keys": binding.keys })
+                        ));
+                    }
+                }
+                out.push('.');
+                out
+            }
             // F2-surface-host: o runtime declara superfícies por JSON numa linha;
             // o host de superfícies consome os eventos no stream PUSH existente.
             "surface-list" => {
@@ -1100,6 +1232,12 @@ impl AeroState {
                 };
                 if self.surfaces.contains_key(&spec.id) {
                     return format!("ERR superfície já existe: {}", spec.id);
+                }
+                if spec
+                    .output
+                    .is_some_and(|id| id as usize >= self.outputs.len())
+                {
+                    return format!("ERR output inexistente: {:?}", spec.output);
                 }
                 self.surfaces.insert(spec.id.clone(), spec.clone());
                 emit_event(AeroEvent::SurfaceCreated { surface: spec });
@@ -1131,6 +1269,12 @@ impl AeroState {
                     Ok(spec) => spec,
                     Err(err) => return format!("ERR surface-update: {err}"),
                 };
+                if spec
+                    .output
+                    .is_some_and(|id| id as usize >= self.outputs.len())
+                {
+                    return format!("ERR output inexistente: {:?}", spec.output);
+                }
                 self.surfaces.insert(id.to_owned(), spec.clone());
                 emit_event(AeroEvent::SurfaceUpdated { surface: spec });
                 "OK".to_owned()
