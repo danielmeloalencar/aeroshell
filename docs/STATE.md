@@ -22,6 +22,15 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **F2-surface-perf-fix PASSO 1 (2026-11-25) — compartilhamento de WebProcess validado.**
+  `crates/aeroshell-shell/src/surfaces/mod.rs` agora cria UM `WebContext`, uma âncora construct-only
+  e `related_view` em todas as WebViews do host (ADR 0001). Instrumento corrigido para NÃO contar
+  wrappers `bwrap` como WebProcesses extras. Baseline: 6 processos no host p/ 2 superfícies
+  (contados errado). Depois: **1 WebProcess real no host para 2 superfícies**, 1 para os frames,
+  total B=2; checagem adicional com 4 superfícies mantém a mesma contagem no host
+  (`/tmp/opencode/f2-surface-fix1-perf-corrected.log`). Cold-start no winit: host pronto ~3,9 s,
+  superfície criada ~4,2 s; headless ~2,7 s/~2,9 s. `check.sh` EXIT=0, clippy bench 0,
+  `--no-default-features` 0. **PASSO 2 (redraw só com damage) ainda não executado.**
 - [x] **F2-surface-perf (2026-11-25) — SÓ MEDIÇÃO; dados entregues, nenhuma correção.** Cartão
   `docs/tasks/F2-surface-perf.md`; harness `tests/integration/f2_surface_perf.py`; build bench por
   último; bruto em `/tmp/opencode/f2-surface-perf-run2.log`. Visual do F2-surface-host aprovado,

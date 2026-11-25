@@ -123,7 +123,12 @@ fn with_shell_reset(html: &str) -> String {
     }
 }
 
-fn create_surface(app: &gtk4::Application, spec: &serde_json::Value) -> Option<Surface> {
+fn create_surface(
+    app: &gtk4::Application,
+    context: &WebContext,
+    anchor: &WebView,
+    spec: &serde_json::Value,
+) -> Option<Surface> {
     let Some(id) = field_str(spec, "id") else {
         tracing::warn!("SurfaceCreated sem id");
         return None;
@@ -176,9 +181,10 @@ fn create_surface(app: &gtk4::Application, spec: &serde_json::Value) -> Option<S
     window.set_exclusive_zone(exclusive as i32);
     window.set_keyboard_mode(keyboard_of(field_str(spec, "keyboard_mode")));
 
-    let context = WebContext::new();
-    crate::scheme::install(&context);
-    let webview = WebView::builder().web_context(&context).build();
+    let webview = WebView::builder()
+        .web_context(context)
+        .related_view(anchor)
+        .build();
     webview.set_background_color(&gtk4::gdk::RGBA::new(0.0, 0.0, 0.0, 0.0));
     let content = crate::bridge::install_surface(&window, &webview);
     webview.connect_load_failed(move |_, event, uri, error| {
@@ -225,6 +231,24 @@ pub fn run(app: &gtk4::Application) {
         tracing::warn!("AERO_WINDOW_IPC_SOCK ausente; host de superfícies desligado");
         return;
     };
+    // ADR 0001: um WebContext e uma âncora construct-only para TODOS os kinds;
+    // cada WebView nasce com related_view, não com um WebProcess próprio.
+    let context = WebContext::new();
+    crate::scheme::install(&context);
+    let anchor_window = gtk4::ApplicationWindow::builder()
+        .application(app)
+        .title("aero surface anchor (hidden)")
+        .default_width(1)
+        .default_height(1)
+        .build();
+    let anchor_webview = WebView::builder().web_context(&context).build();
+    anchor_webview.load_html(
+        "<!doctype html><html></html>",
+        Some("aero://surface-anchor/"),
+    );
+    anchor_window.set_child(Some(&anchor_webview));
+    gtk4::prelude::WidgetExt::realize(&anchor_window);
+
     let app_weak = app.downgrade();
     let surfaces: Rc<RefCell<HashMap<String, Surface>>> = Rc::new(RefCell::new(HashMap::new()));
     // GTK 4.22 commita 0x0 sem âncoras ao fechar uma layer surface (erro já
@@ -260,9 +284,10 @@ pub fn run(app: &gtk4::Application) {
                 match kind.as_str() {
                     "SurfaceCreated" => {
                         if let Some(spec) = payload.get("surface") {
-                            if let (Some(id), Some(surface)) =
-                                (field_str(spec, "id"), create_surface(&app, spec))
-                            {
+                            if let (Some(id), Some(surface)) = (
+                                field_str(spec, "id"),
+                                create_surface(&app, &context, &anchor_webview, spec),
+                            ) {
                                 surfaces.borrow_mut().insert(id.to_owned(), surface);
                             }
                         }

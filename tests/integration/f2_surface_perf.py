@@ -96,7 +96,9 @@ def webprocess_owners(roots):
     tree = process_tree()
     owners = {name: [] for name in roots}
     for pid, (ppid, cmdline) in tree.items():
-        if "WebKitWebProcess" not in cmdline:
+        # bwrap/xdg-dbus-proxy repetem o caminho do WebKitWebProcess no argv;
+        # contar wrappers como processos distintos triplicava o número real.
+        if "WebKitWebProcess" not in cmdline or "bwrap" in cmdline:
             continue
         seen = set()
         cursor = pid
@@ -379,6 +381,20 @@ def run():
             before = webprocess_owners(roots)
             cpu = cpu_delta(scen, 5)
             after = webprocess_owners(roots)
+            after_more = None
+            if with_surfaces:
+                # Invariante: aumentar o nº de superfícies não cria novo WebProcess.
+                for spec_id, kind, layer in (("panel2", "panel", "top"), ("over2", "overlay", "overlay")):
+                    spec = {
+                        "id": spec_id, "kind": kind, "output": 0,
+                        "anchors": {"left": True, "right": True, "top": True, "bottom": True},
+                        "margins": [0, 0, 0, 0], "exclusive_zone": 0, "layer": layer,
+                        "keyboard_mode": "none", "input_region": None,
+                        "html": "<html><body style='background:transparent'></body></html>",
+                    }
+                    ipc_command(scen["ipc"], "surface-create " + json.dumps(spec, separators=(",", ":")))
+                time.sleep(2)
+                after_more = webprocess_owners(roots)
             bench_before = bench_counts(log_read(scen["log"]))
             time.sleep(5)
             bench_after = bench_counts(log_read(scen["log"]))
@@ -388,6 +404,7 @@ def run():
             report[label] = {
                 "webprocess_antes": before,
                 "webprocess_depois": after,
+                "webprocess_com_4_superficies": after_more,
                 "total_webprocess": sum(len(v) for v in after.values()),
                 "cpu_pct_5s": cpu,
                 "bench_delta_5s": {
