@@ -66,6 +66,8 @@ export function createClient(host: GuestWindow = window as unknown as GuestWindo
   }
 
   return {
+    /** Identidade vinculada pelo host; nunca pode ser trocada pelo guest. */
+    id: surfaceId,
     /** Assina eventos tipados do stream; o retorno cancela a inscrição. */
     subscribe(callback: (event: AeroEvent) => void): () => void {
       const listener = (raw: Event) => {
