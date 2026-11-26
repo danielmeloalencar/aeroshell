@@ -199,6 +199,28 @@ O background azul existe só no output 0; o clear escuro no output 1 é esperado
 outputs são tiles lógicos de uma única janela host e o ponteiro atravessa os lados livremente. O GNOME
 pode capturar Super físico; o juiz pode aceitar injeção documentada pelo socket, sem alterar o host.
 
+### Janelas (`F2-windows-completo`)
+`aero.windows` expõe `list/focus/close/minimize/maximize/fullscreen/move/resize/beginMove/
+beginResize/thumbnail` somente no runtime privilegiado. Maximize usa a work area do output
+sob o centro da janela; fullscreen usa o output inteiro. Minimize apenas filtra cena/input e
+`focus(id)` restaura sem perder membership. `beginMove/beginResize` exigem o botão primário
+pressionado e entregam o grab ao Rust; `thumbnail` rejeita explicitamente para screencopy/F7.
+`Minimized`, `Maximized`, `Fullscreen` e `Geometry` alimentam `aero.store` pelo stream.
+Durante move/resize por grab, o Space atualiza em todo motion, mas `Geometry` é publicado só no
+release: o fan-out síncrono por motion degradou o arrasto real (199 eventos/0,95 s e 11 frames).
+Não reintroduzir esse flood ao instrumentar. Exemplo Bun completo: `examples/blank-desktop/README.md`.
+```
+cargo build --workspace --examples
+cargo build -p aeroshell-shell
+cargo build -p aeroshell-compositor --example toplevel_states_client
+cargo build -p aeroshell-compositor --features bench
+python3 tests/integration/f2_windows_completo.py
+```
+O harness cobre dois outputs, painéis exclusivos, maximize/fullscreen no output 1, minimize,
+move/resize diretos e por grabs, stream/store, thumbnail e um segundo cenário com `foot` real.
+A dívida de otimização de move fica para cartão futuro; redraw por output e skip de hit-test
+foram testados e revertidos por piora/regressão.
+
 Tipos TS gerados do Rust (não editar à mão):
 ```
 bun run generate:types   # cargo test -p aeroshell-ipc --features export-bindings

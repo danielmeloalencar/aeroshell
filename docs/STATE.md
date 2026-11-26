@@ -22,6 +22,19 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **F2-windows-completo (2026-11-26) — FECHADO PELO JUIZ VISUAL ("aprovado com dívida de otimizacao futura").**
+  Cartão `docs/tasks/F2-windows-completo.md`. Baselines: SDK 0/3, harness FALHA por API ausente,
+  maximize Rust `left:0/right:640` e IPC `ERR comando desconhecido`. Depois
+  `f2_windows_completo.py` **VEREDITO: OK** (`/tmp/opencode/f2-windows-final-release-only-main2.log`):
+  dois outputs + painéis exclusivos, maximize output 1 `(646,30,628,388)`, fullscreen `(640,0,640,480)`,
+  minimize preserva membership, move/resize IPC+SDK, beginMove/beginResize, eventos/store e thumbnail F7;
+  cenário adicional com `foot` real. `check.sh` final EXIT=0 (46 Rust + 60 Bun), clippy bench 0,
+  no-default 0 e 15/15 vizinhos OK (`-neighbors-approved.log`). Três perfs: sempre 1 WebProcess no
+  host inclusive 4 superfícies, 0 redraws estáticos/5 s e 0 px damage; B clique p50/p99 37,3/60,4;
+  22,5/71,5; 19,0/55,0 ms. VM sem 3D: variância alta, sem concluir melhoria de latência. Na run1 C,
+  o contador marcou 1 total/frame vazio e `frame_painted=null`, apesar de `frame_webview` 124898 e
+  frames no log; amostra preservada como lacuna do instrumento. Juiz final aprovou maximize/minimize/
+  fullscreen, grabs e 60 s. Move exigiu release-only de `Geometry` (§6); outras otimizações revertidas.
 - [x] **F2-outputs+input-binds (2026-11-25) — FECHADO PELO JUIZ VISUAL ("sim, tudo funcionou corretamente… está aprovado").**
   Cartão `docs/tasks/F2-outputs-input-binds.md`. Baseline: 5 fail + 1 import, harness FALHA e parser
   Rust ausente. Depois `f2_outputs_input_binds.py` **VEREDITO: OK**
@@ -1789,6 +1802,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
+- **F2-windows-completo: FECHADO PELO JUIZ VISUAL ("aprovado com dívida de otimizacao futura").**
+  Integração principal, 15 vizinhos, gates e 3 perfs verdes (§3). Na checagem final só o runtime
+  118904 permanecia em `ps`; compositor/host/foot saíram sem ação do agente. **PARAR; próximo só com ok.**
 - **F2-outputs+input-binds: FECHADO PELO JUIZ VISUAL ("sim, tudo funcionou corretamente… está aprovado").**
   Integração estrita, 11 vizinhos, gates e 3 perfs verdes (§3). Rodada final com porta única, dois
   painéis e Super+1/2 injetados aprovada. Na checagem final só o runtime 60741 permanecia em `ps`,
@@ -1900,8 +1916,9 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-**F2-outputs+input-binds FECHADO PELO JUIZ VISUAL: PARAR. Sequência proposta, não iniciada:
-F2-windows-completo → alpha-confirm → adapters+exemplos, cada um com cartão próprio e ok.**
+**F2-windows-completo FECHADO PELO JUIZ VISUAL: PARAR. Sequência proposta, não iniciada:
+alpha-confirm → adapters+exemplos (React/Solid/Vue/Three.js) → fechamento F2, cada um com cartão e ok.
+Otimização adicional de move somente em cartão futuro.**
 **F2-surface-perf-fix: FECHADO (passos 1/2 e juiz visual 60 s aprovado). PARAR.**
 **F2-surface-perf: PARAR. Invariantes de WebProcess/related_view falharam (§3); humano decidirá se
 abre cartão de correção dirigido (compartilhamento de WebProcess / damage / pool). NENHUMA correção
@@ -1963,9 +1980,15 @@ fechados, fora da fila.
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
-- **Multi-output/maximize (relato do humano):** ao arrastar o foot para output 1 e maximizar, o
-  resultado atual vai para output 0 porque `work_area()` usa `outputs.first()` (`state.rs:390-403`),
-  consumido por `toplevel_states.rs:128-149`. Esperado: área útil do output sob a janela. F2-windows.
+- **Multi-output/maximize: RESOLVIDO no F2-windows-completo (§3).** `work_area(window_id)` escolhe
+  o output pelo centro/maior interseção; integração e juiz confirmam maximize/fullscreen no output 1.
+- **DÍVIDA ACEITA — otimização futura de move:** `Geometry` por motion causou 199 eventos/0,95 s e
+  11 frames com gaps até 371 ms. Release-only deixou 1 evento/100 motions e o humano aprovou como
+  fluido. Throttle 16 ms melhorou sem ficar bom; redraw por output piorou e skip de hit-test quebrou
+  `beginMove` no harness, ambos revertidos. Não reabrir sem cartão próprio de performance.
+- **multi_output_damage (vizinho adicional, não exigido pelo cartão):** duas amostras falharam no
+  startup/input (`stable_frames` e clique sem `move do frame`), preservadas em
+  `/tmp/opencode/f2-windows-output-redraw-multi{4,5}.log`; não declarar esse harness verde.
 - **F2-HMR — colisão de porta entre runtimes:** o runtime antigo 21604 e o visual 53667 escutavam
   simultaneamente 127.0.0.1:4173 (`ss`); 6 fetches ao novo painel alternaram 404/200. O antigo tem
   só 2 superfícies. O harness usa porta livre, portanto não mede esta colisão. Não corrigir neste cartão.
@@ -2829,6 +2852,10 @@ fechados, fora da fila.
   (`under = Some` com espaços) **também no HEAD** — pré-existente, amostra preservada em
   `/tmp/opencode/f2-surface-host-s3-input.log`. **CARTÃO FECHADO.**
 ## 7. Não medido / não validado (não trate como fato)
+- **F2-windows-completo: juiz visual APROVADO com dívida de otimização futura.** Maximize/minimize/
+  fullscreen no output 1, grabs e 60 s foram aprovados. Não medido: udev/teclado físico, hotplug,
+  GPU real, fluidez em outros layouts. Perf run1 C teve contagem de processos/frame_painted
+  inconsistente com o log (`-perf-final-run1.log`); não usar essa amostra para provar frame startup.
 - **F2-outputs+input-binds: juiz visual APROVADO com ressalvas.** Na rodada final o humano viu os
   dois painéis e aprovou Super+2→foot B e Super+1→foot A injetados pelo socket, além de 60 s. O GNOME
   captura Super físico no nested; portanto NÃO houve validação de Super por teclado físico nem udev.
@@ -3421,6 +3448,14 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
+- **F2-windows-completo (2026-11-26): FECHADO ("aprovado com dívida de otimizacao futura").**
+  Reproduzir: `cargo build --workspace --examples && cargo build -p aeroshell-shell && cargo build
+  -p aeroshell-compositor --example toplevel_states_client && cargo build -p aeroshell-compositor
+  --features bench && python3 tests/integration/f2_windows_completo.py` → OK. `check.sh` 46 Rust/60
+  Bun, clippy/no-default 0, 15 vizinhos OK e 3 perfs com 1 WebProcess no host/0 redraws. Juiz visual
+  aprovado; na checagem final só o runtime 118904 permanecia, sem ação do agente. Move mantém
+  `Geometry` só no release; demais otimizações revertidas ficam para cartão futuro.
+  **Próximo: alpha-confirm apenas com cartão próprio; sem push.**
 - **F2-outputs+input-binds (2026-11-25): FECHADO PELO JUIZ VISUAL.** Reproduzir:
   `bun build packages/sdk/src/client.ts --target=browser --outfile=packages/sdk/dist/client.js &&
   cargo build -p aeroshell-shell && cargo build -p aeroshell-compositor --features bench &&

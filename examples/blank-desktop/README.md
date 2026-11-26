@@ -22,3 +22,37 @@ AERO_DEV_ORIGIN=http://127.0.0.1:4173 \
 ```
 
 Edite `desktop.config.tsx` para mudar markup/cores ou `panel.ts` para mudar o módulo. O primeiro arquivo gera diff IPC create/update/destroy; o segundo reconstrói o bundle e recarrega pelo WebSocket. Ambos preservam compositor, runtime, WebView e WebProcess. Sem `--dev`, `dev_entry` é ignorado em favor do HTML `aero://` e qualquer URL HTTP é recusada. Não use este servidor em produção.
+
+## Janelas pelo SDK privilegiado
+
+`aero.windows` roda em Bun com acesso ao IPC, nunca dentro da WebView guest. O store é local: conecte o stream para receber `Minimized`, `Maximized`, `Fullscreen` e `Geometry` sem polling.
+
+```ts
+import { createAero, parseEvent } from "../../packages/sdk/src/index";
+import { eventStream, ipcTransport } from "../../packages/runtime/src/ipc-client";
+
+const path = process.env.AERO_WINDOW_IPC_SOCK!;
+const aero = createAero(ipcTransport(path));
+const disconnect = eventStream(path, raw => {
+  const event = parseEvent(raw);
+  if (event) aero.store.applyEvent(event);
+});
+const unsubscribe = aero.store.subscribeWindowStates(() => {
+  console.log(aero.store.getWindowState(0));
+});
+
+await aero.windows.move(0, 700, 100);       // coordenadas globais lógicas
+await aero.windows.resize(0, 500, 300);     // tamanho do cliente, sem insets
+await aero.windows.maximize(0);             // work area do output sob a janela
+await aero.windows.minimize(0);             // preserva workspace e membership
+await aero.windows.focus(0);                // restaura e foca a mesma janela
+await aero.windows.fullscreen(0);           // output inteiro; repita para restaurar
+
+// Somente com o botão primário pressionado; o release encerra o grab Rust:
+await aero.windows.beginMove(0);
+await aero.windows.beginResize(0, "BottomRight");
+
+await aero.windows.thumbnail(0);            // rejeita: screencopy/F7
+unsubscribe();
+disconnect();
+```
