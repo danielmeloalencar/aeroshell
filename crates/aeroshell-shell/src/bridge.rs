@@ -194,12 +194,31 @@ fn guest_update_command(surface_id: &str, command: &str) -> Result<String, Strin
     Ok(command.to_owned())
 }
 
+/// Launch é uma capability explícita da superfície; o ID vai para o comando
+/// privilegiado `launch` do compositor, que valida a lista de `.desktop`.
+fn guest_launch_command(allow_launch: bool, app_id: Option<&str>) -> Result<String, String> {
+    if !allow_launch {
+        return Err("superfície sem allowlist launch-app".to_owned());
+    }
+    let id = app_id.ok_or_else(|| "launch-app sem id".to_owned())?;
+    let valid = !id.is_empty()
+        && id.len() <= 128
+        && id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'));
+    if !valid {
+        return Err("app_id inválido".to_owned());
+    }
+    Ok(format!("launch {id}"))
+}
+
 /// Bridge padrão das superfícies genéricas. Eventos chegam pelo único stream do
 /// host; comandos passam pela allowlist da superfície vinculada.
 pub fn install_surface(
     window: &gtk4::ApplicationWindow,
     webview: &WebView,
     surface_id: &str,
+    allow_launch: bool,
 ) -> UserContentManager {
     let weak_window = window.downgrade();
     let weak_webview = webview.downgrade();
@@ -250,6 +269,21 @@ window.__aeroEvent=function(event) {{
                     Err(error) => vec![format!("ERR permissão negada: {error}")],
                 };
                 tracing::info!(command, ?lines, "PONTE IPC superfície restrita");
+                reply(&webview, seq, &lines);
+            }
+            Some("launch-app") => {
+                let (Some(webview), Some(app_id), Some(seq)) = (
+                    weak_webview.upgrade(),
+                    message.get("id").and_then(|v| v.as_str()),
+                    message.get("seq").and_then(|v| v.as_u64()),
+                ) else {
+                    return;
+                };
+                let lines = match guest_launch_command(allow_launch, Some(app_id)) {
+                    Ok(command) => forward(&command),
+                    Err(error) => vec![format!("ERR permissão negada: {error}")],
+                };
+                tracing::info!(?app_id, allow_launch, ?lines, "PONTE launch-app superfície");
                 reply(&webview, seq, &lines);
             }
             _ => {
@@ -346,7 +380,7 @@ pub fn install(window: &gtk4::ApplicationWindow, webview: &WebView) -> UserConte
 
 #[cfg(test)]
 mod tests {
-    use super::guest_update_command;
+    use super::{guest_launch_command, guest_update_command};
 
     #[test]
     fn guest_so_atualiza_input_e_blur_da_propria_superficie() {
@@ -375,6 +409,28 @@ mod tests {
             assert!(
                 guest_update_command("panel-a", command).is_err(),
                 "aceitou: {command}"
+            );
+        }
+    }
+
+    #[test]
+    fn launch_app_exige_allowlist_e_id_seguro() {
+        assert_eq!(
+            guest_launch_command(true, Some("org.gnome.gedit")),
+            Ok("launch org.gnome.gedit".to_owned())
+        );
+        assert!(guest_launch_command(false, Some("org.gnome.gedit")).is_err());
+        for invalid in [
+            None,
+            Some(""),
+            Some("../etc/passwd"),
+            Some("foot;rm -rf /"),
+            Some("a b"),
+            Some(&"x".repeat(129)),
+        ] {
+            assert!(
+                guest_launch_command(true, invalid).is_err(),
+                "aceitou: {invalid:?}"
             );
         }
     }

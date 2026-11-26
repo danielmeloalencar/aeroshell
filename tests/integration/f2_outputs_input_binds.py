@@ -21,6 +21,8 @@ import tempfile
 import threading
 import time
 
+from f2_example_fixture import copy_blank
+
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 OUT = pathlib.Path(tempfile.mkdtemp(prefix="aero-f2-outputs-binds-", dir="/tmp/opencode"))
 IPC = OUT / "ipc.sock"
@@ -259,16 +261,7 @@ def main():
     origin = f"http://127.0.0.1:{free_port()}"
     fixture = OUT / "fixture"
     fixture.mkdir()
-    for name in ("desktop.config.tsx", "panel.ts", "background.ts"):
-        shutil.copy(ROOT / "examples/blank-desktop" / name, fixture / name)
-    config_path = fixture / "desktop.config.tsx"
-    config_path.write_text(config_path.read_text().replace(
-        '"../../packages/sdk/src/define"', json.dumps(str(ROOT / "packages/sdk/src/define.ts"))
-    ))
-    panel_path = fixture / "panel.ts"
-    panel_path.write_text(panel_path.read_text().replace(
-        '"../../packages/sdk/src/client"', json.dumps(str(ROOT / "packages/sdk/src/client.ts"))
-    ))
+    config_path = copy_blank(ROOT, fixture, single_output=False)
     comp = host = runtime = callback = control = None
     events = None
     checks = {}

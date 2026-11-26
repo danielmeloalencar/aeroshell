@@ -4,6 +4,7 @@ import { watch } from "node:fs";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
+import type { AeroEvent } from "../../sdk/src/generated/AeroEvent";
 import type { DesktopConfig } from "../../sdk/src/generated/DesktopConfig";
 import type { SurfaceDeclaration } from "../../sdk/src/generated/SurfaceDeclaration";
 import type { DecorationPolicyConfig } from "../../sdk/src/generated/DecorationPolicyConfig";
@@ -14,6 +15,7 @@ import { validateConfig } from "./policy-config";
 import { eventStream, ipcTransport } from "./ipc-client";
 import { normalizeDevOrigin, startDevServer, type DevServer } from "./dev-server";
 import { syncKeybindings, validateKeybindings } from "./keybindings";
+import { materializeProductionSurface } from "./surface-entry";
 
 const DEFERRED: Record<string, string> = {
   layouts: "F3", idle: "F5", lock: "F5", greeter: "F6",
@@ -90,6 +92,24 @@ export function desktopRules(config: DesktopConfig): DecorationPolicyConfig {
 
 export type StartDesktopOptions = { dev?: boolean };
 
+/** Detecta o update vazio usado pelo mount para pedir replay após load/HMR. */
+export function createSurfaceHydrationTracker(): (event: AeroEvent) => boolean {
+  const fingerprints = new Map<string, string>();
+  return (event) => {
+    if ("SurfaceCreated" in event) {
+      const surface = event.SurfaceCreated.surface;
+      fingerprints.set(surface.id, JSON.stringify(surface));
+      return false;
+    }
+    if (!("SurfaceUpdated" in event)) return false;
+    const surface = event.SurfaceUpdated.surface;
+    const fingerprint = JSON.stringify(surface);
+    const unchanged = fingerprints.get(surface.id) === fingerprint;
+    fingerprints.set(surface.id, fingerprint);
+    return unchanged;
+  };
+}
+
 function ids(surfaces: SurfaceDeclaration[]): string {
   return surfaces.map((surface) => surface.id).join(",") || "-";
 }
@@ -101,11 +121,29 @@ export async function startDesktop(path: string, options: StartDesktopOptions = 
   const configPath = resolve(path);
   const transport = ipcTransport(socketPath);
   const aero = createAero(transport);
+  const hydration = createSurfaceHydrationTracker();
+  let hydrationTimer: ReturnType<typeof setTimeout> | undefined;
+  let closeHydration: (() => void) | undefined;
+  function replayForSurface(id: string): void {
+    closeHydration?.();
+    if (hydrationTimer) clearTimeout(hydrationTimer);
+    // O segundo assinante provoca o replay já existente; o host faz broadcast
+    // para a WebView que acabou de instalar seu listener no mount/HMR.
+    closeHydration = eventStream(socketPath, () => undefined);
+    console.log(`SURFACE_HYDRATE id=${id}`);
+    hydrationTimer = setTimeout(() => {
+      closeHydration?.();
+      closeHydration = undefined;
+    }, 100);
+  }
   eventStream(socketPath, (json) => {
     const event = parseEvent(json);
     if (!event) return;
     aero.store.applyEvent(event);
     aero.input.dispatch(event);
+    if (hydration(event) && "SurfaceUpdated" in event) {
+      replayForSurface(event.SurfaceUpdated.surface.id);
+    }
   });
 
   let devServer: DevServer | undefined;
@@ -130,15 +168,22 @@ export async function startDesktop(path: string, options: StartDesktopOptions = 
         : undefined,
     }));
     await devServer?.update(declarations, revision);
-    return declarations.map((declaration) => {
-      const { dev_entry: entry, ...base } = declaration;
-      if (!options.dev || !entry || !devServer) return { ...base };
-      return {
-        ...base,
-        html: undefined,
-        url: devServer.surfaceUrl(declaration.id, revision),
-      };
-    });
+    if (options.dev && devServer) {
+      return declarations.map((declaration) => {
+        const { dev_entry: entry, ...base } = declaration;
+        if (!entry) return { ...base };
+        return {
+          ...base,
+          html: undefined,
+          url: devServer.surfaceUrl(declaration.id, revision),
+        };
+      });
+    }
+    const production: SurfaceDeclaration[] = [];
+    for (const declaration of declarations) {
+      production.push(await materializeProductionSurface(declaration));
+    }
+    return production;
   }
 
   async function applyDiff(

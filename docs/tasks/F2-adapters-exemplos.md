@@ -2,6 +2,8 @@
 
 > Cartão fornecido e implementação autorizada pelo humano em 2026-11-26. Base: `e453ec8`
 > (F2-alpha-confirm fechado). Último cartão da F2. Uma tarefa por sessão; PARAR para o juiz visual.
+> FECHADO em 2026-11-26 com 18/18 checks, gates verdes e juiz visual aprovado nos 3 exemplos.
+> A capability estreita `LaunchApp` foi autorizada explicitamente em 2026-11-26 para o Start.
 
 ## Objetivo (uma frase, verificável)
 Provar que React, Solid, Vue e Three.js montam um desktop inteiro sobre adapters finos do store do SDK,

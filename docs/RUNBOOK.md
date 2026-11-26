@@ -242,6 +242,22 @@ opacas/transparentes; não é a decoração normal. No teste visual, o host gen�
 `WAYLAND_DISPLAY=<socket do AeroShell>` no **seu próprio ambiente**, senão abre uma janela separada
 no compositor host e o clique não representa pass-through dentro do AeroShell.
 
+### Adapters e exemplos (`F2-adapters+exemplos`)
+Os exemplos usam `defineDesktop` + HMR e nenhum código Rust do desenvolvedor:
+- `examples/blank-desktop` — painel React, também empacotado em produção no HTML `aero://`;
+- `examples/win11-like` — taskbar/menu Iniciar em Vue; `Super+3` abre o menu; clicar no app lança
+  somente porque `win11-start` declara `actions:["LaunchApp"]` (outras surfaces não podem);
+- `examples/threejs-desktop` — Three.js animado + widget Solid; `Super+4` para/inicia; broadcast same-origin liga o botão à cena.
+
+```bash
+cargo build --workspace --examples
+cargo build -p aeroshell-shell
+cargo build -p aeroshell-compositor --features bench
+python3 tests/integration/f2_adapters_examples.py
+```
+
+O harness `headless` mede 3 cenários: production React/HMR, Vue/taskbar/bind e Three/Solid com hashes de pixels, `ALPHA_READBACK 1x1`, `foot` versus widget opaco, parada por bind e `damage=0` em 5 s. Para o juiz visual, use um exemplo por vez em `--dev`, o mesmo `AERO_DEV_ORIGIN` no compositor/host/runtime, e deixe a instância aberta (§Validação visual).
+
 Tipos TS gerados do Rust (não editar à mão):
 ```
 bun run generate:types   # cargo test -p aeroshell-ipc --features export-bindings

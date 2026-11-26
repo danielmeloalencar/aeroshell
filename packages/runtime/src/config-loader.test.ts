@@ -2,7 +2,8 @@ import { expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { desktopRules, diffSurfaceDeclarations, loadDesktopConfig, validateDesktopConfig } from "./config-loader";
+import type { SurfaceSpec } from "../../sdk/src/generated/SurfaceSpec";
+import { createSurfaceHydrationTracker, desktopRules, diffSurfaceDeclarations, loadDesktopConfig, validateDesktopConfig } from "./config-loader";
 
 
 test("loader importa desktop.config.tsx do desenvolvedor", async () => {
@@ -81,6 +82,15 @@ test("diff do config cria, atualiza e destrói por ID sem reiniciar o runtime", 
     destroy: ["antigo"],
   });
   expect(diffSurfaceDeclarations(next, next)).toEqual({ create: [], update: [], destroy: [] });
+});
+
+test("update vazio da própria surface pede replay; mudança real não pede", () => {
+  const tracker = createSurfaceHydrationTracker();
+  const surface = { id: "panel", html: "mesmo" } as SurfaceSpec;
+  expect(tracker({ SurfaceCreated: { surface } })).toBe(false);
+  expect(tracker({ SurfaceUpdated: { surface } })).toBe(true);
+  expect(tracker({ SurfaceUpdated: { surface: { ...surface, html: "mudou" } } })).toBe(false);
+  expect(tracker({ Snapshot: { snapshot: { revision: 1, windows: [] } } })).toBe(false);
 });
 
 test("frame.enabled controla o fallback SSD e rules.default tem precedência", () => {

@@ -7,7 +7,17 @@ import type { SurfaceSession } from "../../sdk/src/surface-session";
 
 let mountDisposals = 0;
 mock.module("@solidjs/web", () => ({
-  render: () => () => { mountDisposals++; },
+  render: (code: () => unknown) => {
+    let disposeRoot = () => undefined;
+    createRoot((dispose) => {
+      disposeRoot = dispose;
+      code();
+    });
+    return () => {
+      disposeRoot();
+      mountDisposals++;
+    };
+  },
 }));
 
 const { mountSurface, useEvent, useOutputs, useSurface, useWindows, useWorkspaces } = await import("./index");
@@ -76,7 +86,22 @@ test("KeyBind dispara ação e dispose encerra a assinatura", () => {
   expect(actions).toEqual(["solid-bind"]);
 });
 
+test("mountSurface não avalia o filho antes do provider; WebKit prova a montagem", async () => {
+  const session = fakeSession();
+  let evaluations = 0;
+  const unmount = await mountSurface(() => {
+    evaluations++;
+    return null;
+  }, { session, target: {} as HTMLElement, hmr: false });
+  // O renderer server do Bun não resolve children como o browser. Aqui medimos
+  // somente que não houve avaliação ansiosa; o harness f2_adapters_examples
+  // exige guest-ready do componente Solid real no WebKitGTK.
+  expect(evaluations).toBe(0);
+  unmount();
+});
+
 test("mountSurface limpa render e sessão", async () => {
+  mountDisposals = 0;
   const session = fakeSession();
   const unmount = await mountSurface(() => null, { session, target: {} as HTMLElement, hmr: false });
   unmount();

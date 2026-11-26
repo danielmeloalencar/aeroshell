@@ -23,6 +23,8 @@ import tempfile
 import threading
 import time
 
+from f2_example_fixture import copy_blank
+
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 OUT = pathlib.Path(tempfile.mkdtemp(prefix="aero-f2-sdk-surfaces-", dir="/tmp/opencode"))
 IPC = OUT / "ipc.sock"
@@ -212,16 +214,7 @@ def main():
     checks = {}
     fixture = OUT / "fixture"
     fixture.mkdir()
-    config_path = fixture / "desktop.config.tsx"
-    source = (ROOT / "examples/blank-desktop/desktop.config.tsx").read_text()
-    source = source.replace(
-        '"../../packages/sdk/src/define"', json.dumps(str(ROOT / "packages/sdk/src/define.ts"))
-    )
-    source = re.sub(
-        r'\n    \{\n      kind: "Panel",\n      id: "blank-panel-output-1",[\s\S]*?\n    \},',
-        "", source,
-    )
-    config_path.write_text(source.replace("background:blue", "background:#e00000"))
+    config_path = copy_blank(ROOT, fixture)
     try:
         handle = LOG.open("wb")
         comp = subprocess.Popen(

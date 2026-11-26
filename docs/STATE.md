@@ -4,7 +4,7 @@
 > ATUALIZE este arquivo ao fim de TODA sessão (seção "Handoff"). Mantenha-o curto (< 150 linhas):
 > detalhes antigos vão para `docs/progress.md` (arquivo histórico).
  
-Última atualização: 2026-11-24 · **F2-launcher FECHADO PELO JUIZ VISUAL ("ok aprovado")** · **F2-workspaces FECHADO PELO JUIZ VISUAL ("aprovado")** · **F2-cursor-shape-top-edges FECHADO PELO JUIZ VISUAL ("aprovado")** · **F2-compositor-cursor-shape FECHADO PELO JUIZ VISUAL ("ok. aprovado")** · **F1 FECHADA — base de compositor completa para F2 (protocolos provados; snap é cartão NOSSO de sessão/compat `F7-compat-snap`, Nautilus/Mutter e Ozone seguem como estavam)** · **F1-presentation-time FECHADO (juiz visual N/A)** · **F1-xdg-toplevel-states FECHADO PELO JUIZ VISUAL ("aprovado")** · **F1-subsurfaces FECHADO PELO JUIZ VISUAL (2026-11-23: "Funcionou tudo")** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · **F1i+ FECHADA PELO JUIZ VISUAL (digitação normal; só aviso de toplevel-icon, fora de escopo)** · **título real na titlebar FECHADO PELO JUIZ VISUAL ("ok")** · **F1-toplevel-icon FECHADO PELO JUIZ VISUAL ("vi o icone perfeitamente")** · **F1-csd-gtk-move-resize FECHADO PELO JUIZ VISUAL ("ok": gedit, gnome-disks e Calculadora OK)** · **F1-csd-sem-flash FECHADO PELO JUIZ VISUAL ("aprovado")** · cursor invisível no udev segue em cartão separado · 02q REABERTA E FECHADA PELO JUIZ em 2026-11-22 (sem adiamento, spike 12×36 eliminado; harness de 300 ms segue como limitação de VM registrada) · **02r FECHADA PELO JUIZ (nested + tty3) e 02s FECHADA PELO JUIZ (duas instâncias no mesmo D-Bus, "ok aprovado")**
+Última atualização: 2026-11-26 · **F2-adapters+exemplos FECHADO PELO JUIZ VISUAL (Three.js, win11 com launch e blank aprovados)** · 2026-11-24 · **F2-launcher FECHADO PELO JUIZ VISUAL ("ok aprovado")** · **F2-workspaces FECHADO PELO JUIZ VISUAL ("aprovado")** · **F2-cursor-shape-top-edges FECHADO PELO JUIZ VISUAL ("aprovado")** · **F2-compositor-cursor-shape FECHADO PELO JUIZ VISUAL ("ok. aprovado")** · **F1 FECHADA — base de compositor completa para F2 (protocolos provados; snap é cartão NOSSO de sessão/compat `F7-compat-snap`, Nautilus/Mutter e Ozone seguem como estavam)** · **F1-presentation-time FECHADO (juiz visual N/A)** · **F1-xdg-toplevel-states FECHADO PELO JUIZ VISUAL ("aprovado")** · **F1-subsurfaces FECHADO PELO JUIZ VISUAL (2026-11-23: "Funcionou tudo")** · **F1a/F1b/F1c/F1d1/F1d2/F1d3 FECHADAS (F1d3 pelo juiz visual: "ok. Aprovado")** · **F1i+ FECHADA PELO JUIZ VISUAL (digitação normal; só aviso de toplevel-icon, fora de escopo)** · **título real na titlebar FECHADO PELO JUIZ VISUAL ("ok")** · **F1-toplevel-icon FECHADO PELO JUIZ VISUAL ("vi o icone perfeitamente")** · **F1-csd-gtk-move-resize FECHADO PELO JUIZ VISUAL ("ok": gedit, gnome-disks e Calculadora OK)** · **F1-csd-sem-flash FECHADO PELO JUIZ VISUAL ("aprovado")** · cursor invisível no udev segue em cartão separado · 02q REABERTA E FECHADA PELO JUIZ em 2026-11-22 (sem adiamento, spike 12×36 eliminado; harness de 300 ms segue como limitação de VM registrada) · **02r FECHADA PELO JUIZ (nested + tty3) e 02s FECHADA PELO JUIZ (duas instâncias no mesmo D-Bus, "ok aprovado")**
  
 ## 1. Em uma frase
 Framework para criar compositores Wayland (Rust + Smithay) cuja UI inteira (painéis, frames de janela,
@@ -22,6 +22,33 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **F2-adapters+exemplos (2026-11-26) — FECHADO PELO JUIZ VISUAL.**
+  Cartão `docs/tasks/F2-adapters-exemplos.md`, criado e autorizado nesta sessão. Baseline unitária
+  `EXIT=1` (6 falhas/3 erros: exports/sessão ausentes e Solid/Vue não instalados) em
+  `/tmp/opencode/f2-adapters-unit-baseline.log`; baseline do harness `VEREDITO: FALHA` com quatro
+  exemplos ausentes (`f2-adapters-examples-baseline.log`). Quatro dependências aprovadas explicitamente:
+  `solid-js@2.0.4`, `@solidjs/web@2.0.4`, `vue@3.5.46` e `three@0.187.0` (MIT, lockfile).
+  `SurfaceSession` no SDK alimenta o mesmo `WindowStore` para React `useSyncExternalStore`, Solid
+  signals e Vue refs/computed; hooks `useWindows/useWorkspaces/useOutputs/useApps/useEvent/useSurface`
+  e mount/provider nos três. `ready()` usa o update vazio já permitido; o runtime detecta a specs
+  inalterada e provoca o replay existente (`SURFACE_HYDRATE`) sem novo protocolo. Produção embute o
+  entry browser no HTML `aero://` (`surface-entry.ts`), enquanto `--dev` mantém `Bun.serve`/WebSocket.
+  Exemplos: blank React, win11 Vue (`Super+3` abre Start e clicar no app lança) e Three.js+widget Solid
+  (`Super+4` para; `BroadcastChannel`/`storage` same-origin ligam o botão). A capability de launch foi
+  autorizada explicitamente pelo humano: `defineDesktop` declara `actions:["LaunchApp"]` somente na
+  Overlay do Start; a bridge valida e encaminha `launch <app_id>` ao compositor, que valida o `.desktop`.
+  Testes de segurança recusam superfície sem allowlist, ID inválido e action desconhecida. WebGL do
+  WebKitGTK existe no nested mas não aparece; por isso a cena também tem cubos CSS 3D na mesma WebView.
+  Depois: 75 Bun/50 Rust no `check.sh` EXIT=0 (`f2-adapters-final-gate4.log`), clippy bench 0,
+  no-default 0, harness final `f2-adapters-examples-launch6.log` **18/18 `VEREDITO: OK`** com
+  55.544 px animados, hits `foot=29`/widget=`54` e clique no app do Start criando nova janela no IPC;
+  3 S3 release finais OK (p99 34,3/29,6/35,9 µs, 2 readbacks 1×1); 3 perf com A=1/B=2/C=2
+  WebProcesses (1 no host), 0 redraws e 0 damage em 5 s. Vizinhos finais: 12 OK, `f2_workspaces`
+  1 falha e OK na repetição, `f2_alpha_confirm` falha em debug e OK em release, `f2_launcher`
+  flake persistente no clique do painel (amostras preservadas §6). VM sem 3D.
+  Juiz visual: 1ª rodada negada (sem cubo, menu cortado, blank confuso); corrigido e aprovado em
+  3 sessões separadas, uma instância por vez: Three.js ("Sim, aprovado"), win11 incluindo launch
+  ("Sim, aprovado"), blank ("Sim, aprovado"). Blank permanece aberto para o humano fechar. F2 FECHADA.
 - [x] **F2-alpha-confirm (2026-11-26) — FECHADO PELO JUIZ VISUAL ("Agora sim funcionou").**
   Cartão `docs/tasks/F2-alpha-confirm.md`. Baseline `/tmp/opencode/f2-alpha-baseline7.log`:
   desktop/panel/overlay/frame/caps transparentes FALHAM e opacos/fullscreen passam. Implementado
@@ -1816,6 +1843,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
+- **F2-adapters+exemplos: FECHADO PELO JUIZ VISUAL.** Próximo passo: commit `docs(f2)` de fechamento
+  com autorização. Sem push. Instância blank deixada aberta; quem fecha é o humano.
 - **F2-alpha-confirm: FECHADO PELO JUIZ VISUAL ("Agora sim funcionou").** Implementação, gates,
   vizinhos, 3 perfs e 3 releases verdes (§3). Compositor/host correto/foot saíram sem ação do
   agente; só o host externo 160401 da primeira tentativa de setup permanecia. **PARAR; próximo
@@ -1934,6 +1963,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
+**F2 FECHADA: único passo restante é o commit `docs(f2)` de fechamento com os números acima.
+PARAR antes de F3 (layouts/tiling/overview); nenhum cartão F3 foi aberto.**
 **F2-alpha-confirm FECHADO PELO JUIZ VISUAL: PARAR. Sequência proposta, não iniciada:
 adapters+exemplos (React/Solid/Vue/blank/win11-like/Three.js) → fechamento F2, cada um com cartão e ok.
 Otimização adicional de move somente em cartão futuro.**
@@ -1998,6 +2029,24 @@ fechados, fora da fila.
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **F2-adapters+exemplos — capability `launch-app` aprovada e implementada em 2026-11-26.** Apenas a
+  Overlay `win11-start` declara `actions:["LaunchApp"]`; bridge valida ID `^[A-Za-z0-9._-]{1,128}$` e
+  encaminha `launch <id>`; compositor rejeita actions desconhecidas e `null` é ausência. Sem ADR novo,
+  sem protocolo Wayland novo. Juiz aprovou o clique que abre app. Superfícies sem allowlist continuam
+  restritas a input/blur (teste Rust `launch_app_exige_allowlist_e_id_seguro`).
+- **F2-adapters+exemplos — juiz visual NEGOU a 1ª rodada (2026-11-26).** O humano relatou que não viu cubo
+  no Three.js, menu cortado no win11 e não entendeu o que testar no blank. Dado prevaleceu sobre os
+  pixels headless: os cubos estavam no centro, sob o `foot`; agora há dois cubos deslocados para as
+  bordas. O menu saiu da layer de 72 px para uma Overlay com input/blur transparentes. O blank passou
+  a mostrar a instrução no próprio painel. Correções revalidadas com harness 17/17; nova rodada visual
+  será aberta **um exemplo por vez**.
+- **F2-adapters+exemplos — `f2_launcher` falhou 2× no clique do painel** (`f2-adapters-neighbors/f2_launcher.log`
+  e `-retry2.log`): launch/SDK/stream OK, falhas apenas nos cliques do painel; flake já registrado
+  nesta seção. Regra das duas tentativas aplicada; não houve terceira repetição.
+- **F2-adapters+exemplos — `frame_resize_glue` e `frame_buttons` falharam 1× sob carga** e passaram
+  na repetição (`-retry2.log`); `f2_alpha_confirm` em debug teve p99 1,29 ms e passou 3× em release.
+  Nenhuma amostra descartada. O harness antigo de HMR passou a ler `HMR_CONFIG_OK` do host log porque
+  o texto declarativo agora fica fora do root React; pixels e diff continuam os mesmos.
 - **F2-alpha-confirm — vizinho intercalado preservado:** `frame_resize_glue` falhou 1× com
   `malformadas=1`, `n_geoms=8` porque shell/compositor sobrescreveram o timestamp de `SLICE_GEOM`
   (`f2-alpha-neighbors1.log`). Na repetição, `malformadas=0`, 9 fatias e VEREDITO: OK
@@ -2879,6 +2928,11 @@ fechados, fora da fila.
   (`under = Some` com espaços) **também no HEAD** — pré-existente, amostra preservada em
   `/tmp/opencode/f2-surface-host-s3-input.log`. **CARTÃO FECHADO.**
 ## 7. Não medido / não validado (não trate como fato)
+- **F2-adapters+exemplos — JUIZ VISUAL APROVADO em 2026-11-26**, um exemplo por vez: Three.js
+  ("Sim, aprovado"), win11 incluindo launch de app ("Sim, aprovado"), blank React/HMR ("Sim, aprovado").
+  A 1ª rodada foi reprovada e corrigida: cubos deslocados + fallback CSS 3D porque WebGL não aparecia
+  no nested; menu movido para Overlay; instrução explícita no painel blank. GPU real/udev não medidos
+  (VM sem 3D); desempenho abaixo é pré-filtro, não benchmark de GPU.
 - **F2-alpha-confirm: juiz visual APROVADO ("Agora sim funcionou").** Clique opaco captura/muda
   a borda para azul, transparente entrega digitação aos `foot` e frames seguem utilizáveis. Não
   medido: udev/teclado físico, hotplug, GPU real, transforms de buffer fora do fixture WebKit e
@@ -3480,6 +3534,15 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
+- **F2-adapters+exemplos (2026-11-26): FECHADO PELO JUIZ VISUAL; F2 CONCLUÍDA.** Reproduzir, com
+  `bench` por último: `cargo build --workspace --examples && cargo build -p aeroshell-shell &&
+  cargo build -p aeroshell-compositor --features bench && python3 tests/integration/f2_adapters_examples.py`
+  → `VEREDITO: OK` 18/18 em `f2-adapters-examples-launch6.log` (clique no app do Start incluído).
+  `bash scripts/check.sh` EXIT=0 (75 Bun/50 Rust) em `f2-adapters-final-gate4.log`; clippy bench 0;
+  no-default 0; S3 release p99 34,3/29,6/35,9 µs; perf 1 WebProcess no host e 0 redraw/damage.
+  Instância blank nested deixada aberta para o humano (compositor 71538, host 71550, runtime 71822).
+  **Próximo passo imediato: autorizar commit `docs(f2)` de fechamento. Depois, PARAR: F3 exige cartão
+  e autorização novos. Sem push.**
 - **F2-alpha-confirm (2026-11-26): FECHADO ("Agora sim funcionou").** Reproduzir:
   `cargo build --release --workspace --examples && cargo build --release -p aeroshell-shell &&
   cargo build --release -p aeroshell-compositor --features bench && AERO_TARGET=release python3

@@ -208,6 +208,15 @@ pub struct SurfaceInputRegion {
     pub height: u32,
 }
 
+/// Capability estreita que uma superfície pode declarar explicitamente.
+/// `LaunchApp` autoriza somente o comando privilegiado `launch <app_id>`.
+#[cfg_attr(feature = "export-bindings", derive(TS))]
+#[cfg_attr(feature = "export-bindings", ts(export))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SurfaceAction {
+    LaunchApp,
+}
+
 /// Especificação completa de uma superfície web enviada pelo runtime.
 /// `html` e `url` são mutuamente exclusivos; URLs só podem usar `aero://`.
 #[cfg_attr(feature = "export-bindings", derive(TS))]
@@ -231,6 +240,7 @@ pub struct SurfaceSpec {
     pub height: Option<u32>,
     pub html: Option<String>,
     pub url: Option<String>,
+    pub actions: Option<Vec<SurfaceAction>>,
 }
 
 /// Opções de `aero.surfaces.create`; campos omitidos recebem defaults por kind no SDK.
@@ -265,6 +275,8 @@ pub struct SurfaceOptions {
     pub url: Option<String>,
     #[cfg_attr(feature = "export-bindings", ts(optional))]
     pub dev_entry: Option<String>,
+    #[cfg_attr(feature = "export-bindings", ts(optional))]
+    pub actions: Option<Vec<SurfaceAction>>,
 }
 
 /// Item declarativo de `defineDesktop({ surfaces })`, sem tipo TS paralelo.

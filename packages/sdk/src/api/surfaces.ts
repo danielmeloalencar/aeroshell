@@ -2,6 +2,7 @@
 //! Os tipos públicos vêm exclusivamente dos bindings ts-rs; a conversão da wire
 //! textual (minúsculas/margins em array) fica isolada neste módulo.
 
+import type { SurfaceAction } from "../generated/SurfaceAction";
 import type { SurfaceInputRegion } from "../generated/SurfaceInputRegion";
 import type { SurfaceKeyboardMode } from "../generated/SurfaceKeyboardMode";
 import type { SurfaceKind } from "../generated/SurfaceKind";
@@ -68,6 +69,7 @@ export function surfaceFromWire(value: unknown): SurfaceSpec {
     height: raw.height === undefined ? null : raw.height,
     html: raw.html === undefined ? null : raw.html,
     url: raw.url === undefined ? null : raw.url,
+    actions: (raw.actions ?? null) as SurfaceAction[] | null,
   } as SurfaceSpec;
 }
 
@@ -91,6 +93,7 @@ export function completeSurface(kind: SurfaceKind, options: SurfaceOptions): Sur
     height: options.height ?? (panel ? 48 : null),
     html: options.html ?? null,
     url: options.url ?? null,
+    actions: options.actions ?? null,
   };
 }
 

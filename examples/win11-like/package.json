@@ -1,0 +1,9 @@
+{
+  "name": "@aeroshell/example-win11-like",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "vue": "3.5.46"
+  }
+}

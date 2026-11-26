@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@solidjs/web": "2.0.4",
+    "solid-js": "2.0.4",
     "three": "0.187.0"
   }
 }

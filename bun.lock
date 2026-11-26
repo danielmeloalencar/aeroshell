@@ -9,11 +9,27 @@
         "typescript": "^5",
       },
     },
+    "examples/blank-desktop": {
+      "name": "@aeroshell/example-blank-desktop",
+      "version": "0.0.0",
+      "dependencies": {
+        "react": "19.2.0",
+      },
+    },
     "examples/threejs-desktop": {
       "name": "@aeroshell/example-threejs-desktop",
       "version": "0.0.0",
       "dependencies": {
+        "@solidjs/web": "2.0.4",
+        "solid-js": "2.0.4",
         "three": "0.187.0",
+      },
+    },
+    "examples/win11-like": {
+      "name": "@aeroshell/example-win11-like",
+      "version": "0.0.0",
+      "dependencies": {
+        "vue": "3.5.46",
       },
     },
     "packages/panel": {
@@ -49,7 +65,11 @@
     },
   },
   "packages": {
+    "@aeroshell/example-blank-desktop": ["@aeroshell/example-blank-desktop@workspace:examples/blank-desktop"],
+
     "@aeroshell/example-threejs-desktop": ["@aeroshell/example-threejs-desktop@workspace:examples/threejs-desktop"],
+
+    "@aeroshell/example-win11-like": ["@aeroshell/example-win11-like@workspace:examples/win11-like"],
 
     "@aeroshell/panel": ["@aeroshell/panel@workspace:packages/panel"],
 

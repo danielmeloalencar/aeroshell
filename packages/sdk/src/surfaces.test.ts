@@ -17,6 +17,7 @@ const surface = {
   height: null,
   html: "<body></body>",
   url: null,
+  actions: null,
 };
 
 test("eventos Surface* alimentam o store reativo de superfícies", () => {

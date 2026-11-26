@@ -28,7 +28,10 @@ function sessionOf(source?: SurfaceSession): SurfaceSession {
 
 /** Fornece a sessão da surface a todos os accessors Solid descendentes. */
 export function AeroProvider(props: ParentProps<{ session: SurfaceSession }>) {
-  return createComponent(AeroContext, { value: props.session, children: props.children });
+  return createComponent(AeroContext, {
+    value: props.session,
+    get children() { return props.children; },
+  });
 }
 
 /** Accessor das janelas; uma janela aberta produz um novo snapshot. */
@@ -98,7 +101,7 @@ export async function mountSurface(
   const disposeRender = render(
     () => createComponent(AeroProvider, {
       session,
-      children: createComponent(Component, {}),
+      get children() { return createComponent(Component, {}); },
     }),
     options.target ?? document.body,
   );

@@ -21,6 +21,8 @@ import tempfile
 import time
 import urllib.request
 
+from f2_example_fixture import copy_blank
+
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 OUT = pathlib.Path(tempfile.mkdtemp(prefix="aero-f2-hmr-", dir="/tmp/opencode"))
 IPC = OUT / "ipc.sock"
@@ -186,16 +188,7 @@ def main():
     origin = f"http://127.0.0.1:{port}"
     fixture = OUT / "fixture"
     fixture.mkdir()
-    for name in ("desktop.config.tsx", "panel.ts", "background.ts"):
-        shutil.copy(ROOT / "examples/blank-desktop" / name, fixture / name)
-    config_path = fixture / "desktop.config.tsx"
-    config_path.write_text(config_path.read_text().replace(
-        '"../../packages/sdk/src/define"', json.dumps(str(ROOT / "packages/sdk/src/define.ts"))
-    ))
-    panel_fixture = fixture / "panel.ts"
-    panel_fixture.write_text(panel_fixture.read_text().replace(
-        '"../../packages/sdk/src/client"', json.dumps(str(ROOT / "packages/sdk/src/client.ts"))
-    ))
+    config_path = copy_blank(ROOT, fixture)
     # Este vizinho é headless/single-output e sua cor baseline é vermelha;
     # normalizamos SÓ a cópia, preservando o exemplo editável do usuário.
     single_output = re.sub(
@@ -283,7 +276,7 @@ def main():
         config_path.write_text(changed)
         checks["edição do TSX muda DOM e pixels sem restart"] = wait_for(
             lambda: (pixel_counts() or (0, 0, 0))[2] > 150_000
-            and "HMR_CONFIG_OK" in clean()
+            and "HMR_CONFIG_OK" in clean(HOST_LOG)
         )
         checks["PIDs do compositor/runtime permanecem"] = (comp.pid, runtime.pid) == original_pids
         checks["update não recria WebViews/layers"] = (

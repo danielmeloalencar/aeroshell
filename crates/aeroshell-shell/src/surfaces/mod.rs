@@ -54,6 +54,17 @@ fn field_str<'a>(value: &'a serde_json::Value, field: &str) -> Option<&'a str> {
     value.get(field).and_then(serde_json::Value::as_str)
 }
 
+/// Só `actions: ["LaunchApp"]` na declaração libera o comando privilegiado.
+fn allows_launch(spec: &serde_json::Value) -> bool {
+    spec.get("actions")
+        .and_then(serde_json::Value::as_array)
+        .is_some_and(|actions| {
+            actions
+                .iter()
+                .any(|action| action.as_str() == Some("LaunchApp"))
+        })
+}
+
 fn field_bool(value: &serde_json::Value, field: &str) -> bool {
     value
         .get(field)
@@ -222,7 +233,7 @@ fn create_surface(
         .related_view(anchor)
         .build();
     webview.set_background_color(&gtk4::gdk::RGBA::new(0.0, 0.0, 0.0, 0.0));
-    let content = crate::bridge::install_surface(&window, &webview, id);
+    let content = crate::bridge::install_surface(&window, &webview, id, allows_launch(spec));
     install_navigation_policy(&webview, id);
     webview.connect_load_failed(move |_, event, uri, error| {
         tracing::warn!(?event, %uri, %error, "SURFACE_HOST carga falhou");

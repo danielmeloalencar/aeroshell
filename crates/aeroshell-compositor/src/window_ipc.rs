@@ -34,8 +34,8 @@ use std::{
 
 use aeroshell_ipc::types::{
     AeroEvent, App, DecorationPolicy, Notification, OutputGeometry, OutputInfo, OutputMode,
-    Snapshot, SurfaceAnchors, SurfaceInputRegion, SurfaceKeyboardMode, SurfaceKind, SurfaceLayer,
-    SurfaceMargins, SurfaceSpec, WindowInfo, Workspace,
+    Snapshot, SurfaceAction, SurfaceAnchors, SurfaceInputRegion, SurfaceKeyboardMode, SurfaceKind,
+    SurfaceLayer, SurfaceMargins, SurfaceSpec, WindowInfo, Workspace,
 };
 use calloop::channel;
 use serde_json::{json, Value};
@@ -374,6 +374,14 @@ fn surface_json(surface: &SurfaceSpec) -> Value {
         "height": surface.height,
         "html": surface.html,
         "url": surface.url,
+        "actions": surface.actions.as_ref().map(|actions| {
+            actions
+                .iter()
+                .map(|action| match action {
+                    SurfaceAction::LaunchApp => json!("LaunchApp"),
+                })
+                .collect::<Vec<Value>>()
+        }),
     })
 }
 
@@ -556,6 +564,19 @@ fn parse_surface_spec(value: &Value) -> Result<SurfaceSpec, String> {
             return Err("url externa não é permitida".to_owned());
         }
     }
+    let actions = match value.get("actions") {
+        Some(Value::Array(items)) => Some(
+            items
+                .iter()
+                .map(|item| match item.as_str() {
+                    Some("LaunchApp") => Ok(SurfaceAction::LaunchApp),
+                    _ => Err("action desconhecida".to_owned()),
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+        ),
+        Some(Value::Null) | None => None,
+        Some(_) => return Err("actions deve ser um array".to_owned()),
+    };
     Ok(SurfaceSpec {
         id,
         kind,
@@ -584,6 +605,7 @@ fn parse_surface_spec(value: &Value) -> Result<SurfaceSpec, String> {
         height: optional_u32(value, "height")?,
         html,
         url,
+        actions,
     })
 }
 
@@ -1630,7 +1652,7 @@ impl AeroState {
 
 #[cfg(test)]
 mod tests {
-    use super::{base64_encode, parse_surface_spec, surface_url_allowed};
+    use super::{base64_encode, parse_surface_spec, surface_json, surface_url_allowed};
 
     #[test]
     fn parse_surface_spec_valida_kind_e_rejeita_url_externa() {
@@ -1661,6 +1683,30 @@ mod tests {
             serde_json::from_str(r#"{"id":"x","kind":"overlay","url":"https://example.com"}"#)
                 .unwrap();
         assert!(parse_surface_spec(&external).is_err());
+    }
+
+    #[test]
+    fn parse_surface_spec_aceita_apenas_actions_conhecidas() {
+        let base = r#"{"id":"menu","kind":"overlay","margins":[0,0,0,0],"actions":["#;
+        let allowed: serde_json::Value =
+            serde_json::from_str(&format!("{base}\"LaunchApp\"]}}")).unwrap();
+        assert_eq!(
+            parse_surface_spec(&allowed).unwrap().actions.unwrap().len(),
+            1
+        );
+
+        let unknown: serde_json::Value =
+            serde_json::from_str(&format!("{base}\"FocusWindow\"]}}")).unwrap();
+        assert!(parse_surface_spec(&unknown).is_err());
+
+        let absent: serde_json::Value = serde_json::from_str(
+            r#"{"id":"panel","kind":"panel","margins":[0,0,0,0],"actions":null}"#,
+        )
+        .unwrap();
+        assert_eq!(parse_surface_spec(&absent).unwrap().actions, None);
+
+        let spec = parse_surface_spec(&allowed).unwrap();
+        assert_eq!(surface_json(&spec)["actions"][0], "LaunchApp");
     }
 
     fn surface_kind_name_local(kind: aeroshell_ipc::types::SurfaceKind) -> &'static str {

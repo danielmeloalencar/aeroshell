@@ -7,6 +7,7 @@ import { resolve } from "node:path";
 import type { ServerWebSocket } from "bun";
 
 import type { SurfaceDeclaration } from "../../sdk/src/generated/SurfaceDeclaration";
+import { bundleSurfaceEntry, surfaceDocumentHtml } from "./surface-entry";
 
 type BuiltSurface = {
   declaration: SurfaceDeclaration;
@@ -43,23 +44,6 @@ function response(body: string | Uint8Array, contentType: string): Response {
   });
 }
 
-function documentHtml(surface: SurfaceDeclaration, bundle: BuiltSurface): string {
-  let html = surface.html ?? "<!doctype html><html><head></head><body></body></html>";
-  // Em dev, o entry empacotado substitui os scripts inline de produção; assim
-  // o mesmo documento não executa duas inicializações nem abre dois WebSockets.
-  html = html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "");
-  const id = encodeURIComponent(surface.id);
-  const reset = '<link rel="stylesheet" href="/shell-reset.css">';
-  const script = `<script type="module" src="/assets/${id}.js?v=${bundle.revision}"></script>`;
-  if (html.includes("</head>")) {
-    // Reset antes do CSS do dev, como with_shell_reset faz em produção.
-    return html
-      .replace(/<head>/i, `<head>${reset}`)
-      .replace("</head>", `${script}</head>`);
-  }
-  return `${reset}${script}${html}`;
-}
-
 export type DevServer = {
   readonly origin: string;
   /** Reconstrói os entries e troca os documentos atomicamente após sucesso. */
@@ -86,24 +70,6 @@ export async function startDevServer(options: DevServerOptions): Promise<DevServ
   let rebuilding: Promise<void> | null = null;
   let rebuildAgain = false;
   let reloadTimer: ReturnType<typeof setTimeout> | undefined;
-
-  async function bundle(entry: string): Promise<{ javascript: string; inputs: string[] }> {
-    const result = await Bun.build({
-      entrypoints: [resolve(entry)],
-      target: "browser",
-      format: "esm",
-      metafile: true,
-    });
-    if (!result.success) {
-      throw new Error(`Bun.build falhou para ${entry}: ${result.logs.join("\n")}`);
-    }
-    const output = result.outputs.find((artifact) => artifact.path.endsWith(".js"));
-    if (!output) throw new Error(`Bun.build não gerou JavaScript para ${entry}`);
-    return {
-      javascript: await output.text(),
-      inputs: Object.keys(result.metafile?.inputs ?? {}).map((path) => resolve(path)),
-    };
-  }
 
   function publishReload(surfaceIds: string[]): void {
     const message = JSON.stringify({ type: "reload", surfaceIds });
@@ -166,7 +132,7 @@ export async function startDevServer(options: DevServerOptions): Promise<DevServ
     const inputs = new Set<string>();
     for (const declaration of declarations) {
       if (!declaration.dev_entry) continue;
-      const { javascript, inputs: dependencies } = await bundle(declaration.dev_entry);
+      const { javascript, inputs: dependencies } = await bundleSurfaceEntry(declaration.dev_entry);
       for (const dependency of dependencies) inputs.add(dependency);
       const built: BuiltSurface = {
         declaration: { ...declaration },
@@ -174,7 +140,13 @@ export async function startDevServer(options: DevServerOptions): Promise<DevServ
         javascript,
         revision,
       };
-      built.html = documentHtml(declaration, built);
+      const id = encodeURIComponent(declaration.id);
+      const script = `<script type="module" src="/assets/${id}.js?v=${revision}"></script>`;
+      built.html = surfaceDocumentHtml(
+        declaration,
+        script,
+        '<link rel="stylesheet" href="/shell-reset.css">',
+      );
       next.set(declaration.id, built);
     }
     surfaces.clear();
@@ -199,7 +171,7 @@ export async function startDevServer(options: DevServerOptions): Promise<DevServ
         return response(await Bun.file(options.shellResetPath).text(), "text/css; charset=utf-8");
       }
       if (url.pathname.endsWith("/client.js")) {
-        if (!sdkClient) sdkClient = (await bundle(options.sdkClientPath)).javascript;
+        if (!sdkClient) sdkClient = (await bundleSurfaceEntry(options.sdkClientPath)).javascript;
         return response(sdkClient, "text/javascript; charset=utf-8");
       }
       const asset = url.pathname.match(/^\/assets\/([^/]+)\.js$/);
