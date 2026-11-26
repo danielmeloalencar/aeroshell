@@ -262,14 +262,25 @@ pub fn init_winit(
     let fixed_host_size = opts.size.is_some() || multi;
 
     let backend = Rc::new(RefCell::new(backend));
+    let alpha_backend = Rc::clone(&backend);
+    data.state.alpha_sampler = Some(crate::render::alpha::AlphaSampler::new(
+        move |surface, local, cached| {
+            crate::render::alpha::sample_gles(
+                alpha_backend.borrow_mut().renderer(),
+                surface,
+                local,
+                cached,
+            )
+        },
+    ));
     let redraw_backend = Rc::clone(&backend);
     event_loop
         .handle()
         .insert_source(winit_source, move |event, _, data| {
             let state = &mut data.state;
-            let backend = &mut *backend.borrow_mut();
             match event {
                 WinitEvent::Resized { size, .. } => {
+                    let backend = &mut *backend.borrow_mut();
                     // Sem `--size`, a janela host é a fonte da verdade. Com `--size`,
                     // mantemos o modo pedido: winit 0.30 não permite redimensionar a janela.
                     if !fixed_host_size {
@@ -296,6 +307,7 @@ pub fn init_winit(
                     state.process_input_event(event);
                 }
                 WinitEvent::Redraw => {
+                    let backend = &mut *backend.borrow_mut();
                     if state.outputs.len() > 1 {
                         let outputs = state.outputs.clone();
                         #[cfg(feature = "bench")]

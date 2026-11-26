@@ -3,7 +3,7 @@
 //! Aceita comandos de ponteiro sintético por Unix socket (`AERO_TEST_INPUT_SOCK`):
 //!   motion <x> <y>\n   button press|release\n
 
-use std::{error::Error, time::Duration};
+use std::{cell::RefCell, error::Error, rc::Rc, time::Duration};
 
 use calloop::{
     timer::{TimeoutAction, Timer},
@@ -89,14 +89,28 @@ pub fn init_headless(
     // o conteúdo disponível é sempre o da tentativa anterior, equivalente a age=1.
     let mut age = 0;
 
+    let renderer = Rc::new(RefCell::new(renderer));
+    let alpha_renderer = Rc::clone(&renderer);
+    data.state.alpha_sampler = Some(crate::render::alpha::AlphaSampler::new(
+        move |surface, local, cached| {
+            crate::render::alpha::sample_gles(
+                &mut alpha_renderer.borrow_mut(),
+                surface,
+                local,
+                cached,
+            )
+        },
+    ));
+
     let timer = Timer::from_duration(Duration::from_millis(16));
     event_loop
         .handle()
         .insert_source(timer, move |_, _, data| {
+            let renderer = &mut *renderer.borrow_mut();
             render_headless(
                 data,
                 &output,
-                &mut renderer,
+                renderer,
                 &mut renderbuffer,
                 &mut tracker,
                 &mut age,

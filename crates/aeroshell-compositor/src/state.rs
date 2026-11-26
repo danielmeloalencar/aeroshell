@@ -24,7 +24,7 @@ use smithay::{
     },
     utils::{Logical, Point, Rectangle, Size, SERIAL_COUNTER},
     wayland::{
-        compositor::{with_states, CompositorClientState, CompositorState},
+        compositor::{with_states, CompositorClientState, CompositorState, SurfaceAttributes},
         cursor_shape::CursorShapeManagerState,
         dmabuf::{DmabufGlobal, DmabufState},
         fractional_scale::{with_fractional_scale, FractionalScaleManagerState},
@@ -261,6 +261,8 @@ pub struct AeroState {
     pub minimized_windows: HashSet<u32>,
     /// F2-surface-host: especificações ativas declaradas pelo runtime.
     pub surfaces: HashMap<String, SurfaceSpec>,
+    /// F2-alpha-confirm: readback lazy 1×1 + cache por commit/pixel; None nos testes puros.
+    pub alpha_sampler: Option<crate::render::alpha::AlphaSampler>,
     /// F2-input-binds: chords globais registrados somente pelo IPC privilegiado.
     pub key_binds: HashMap<String, RegisteredKeyBind>,
     /// Press interceptado cujo release deve seguir o mesmo destino, mesmo após unbind.
@@ -837,6 +839,7 @@ impl AeroState {
             workspaces: WorkspaceManager::default(),
             minimized_windows: HashSet::new(),
             surfaces: HashMap::new(),
+            alpha_sampler: None,
             key_binds: HashMap::new(),
             intercepted_keys: HashSet::new(),
             installed_apps: crate::apps::load_apps(),
@@ -877,7 +880,19 @@ impl AeroState {
     }
 
     pub fn surface_under(
-        &self,
+        &mut self,
+        pos: Point<f64, Logical>,
+    ) -> Option<(WlSurface, Point<f64, Logical>)> {
+        #[cfg(feature = "bench")]
+        let started = Instant::now();
+        let result = self.surface_under_inner(pos);
+        #[cfg(feature = "bench")]
+        eprintln!("HIT_TEST duration_ns={}", started.elapsed().as_nanos());
+        result
+    }
+
+    fn surface_under_inner(
+        &mut self,
         pos: Point<f64, Logical>,
     ) -> Option<(WlSurface, Point<f64, Logical>)> {
         // Layer surfaces (painéis/overlay) vêm antes das janelas normais; `surface_under`
@@ -903,7 +918,18 @@ impl AeroState {
                     .surface_under(local_pos - geo.loc.to_f64(), WindowSurfaceType::ALL);
                 tracing::debug!(?pos, ?origin, hit = ?hit.as_ref().map(|(s, _)| s.id()), "hit-test layer");
                 if let Some((surface, local)) = hit {
-                    return Some((surface, (local.to_f64() + origin)));
+                    // A input region já foi aplicada pelo Smithay. Só dentro desse
+                    // hit o alfa decide; erro/ausência de sampler preserva o hit antigo.
+                    let pointer_origin = local.to_f64() + origin;
+                    let alpha_local = pos - pointer_origin;
+                    let opaque = self
+                        .alpha_sampler
+                        .as_mut()
+                        .map(|sampler| sampler.is_opaque(&surface, alpha_local))
+                        .unwrap_or(true);
+                    if opaque {
+                        return Some((surface, pointer_origin));
+                    }
                 }
             }
         }
@@ -970,10 +996,37 @@ impl AeroState {
             if local.y >= (target.h - fgeo.insets.3) as f64 {
                 pointer_origin.y -= (canvas.1 - target.h) as f64;
             }
+            let canvas_local = pos - pointer_origin;
+            let region_allows = with_states(frame_surface, |states| {
+                states
+                    .cached_state
+                    .get::<SurfaceAttributes>()
+                    .current()
+                    .input_region
+                    .as_ref()
+                    .map(|region| {
+                        region.contains((
+                            canvas_local.x.floor() as i32,
+                            canvas_local.y.floor() as i32,
+                        ))
+                    })
+                    .unwrap_or(true)
+            });
+            if !region_allows {
+                continue;
+            }
+            let opaque = self
+                .alpha_sampler
+                .as_mut()
+                .map(|sampler| sampler.is_opaque(frame_surface, canvas_local))
+                .unwrap_or(true);
+            if !opaque {
+                continue;
+            }
             // Smithay (input/pointer/mod.rs:795) calcula o local do cliente como
             // `event.location - loc`: o ponto devolvido aqui é a ORIGEM GLOBAL da
             // superfície (não o hit local), para que enter/motion cheguem certos.
-            tracing::debug!(?pos, ?frame_rect, ?content_rect, ?pointer_origin, hit_frame = ?frame_surface.id(), "hit-test frame (região de decoração)");
+            tracing::debug!(?pos, ?frame_rect, ?content_rect, ?pointer_origin, hit_frame = ?frame_surface.id(), "hit-test frame (região de decoração + alfa)");
             return Some((frame_surface.clone(), pointer_origin));
         }
         // `Space::element_under` não aceita excluir elementos. Repetimos o

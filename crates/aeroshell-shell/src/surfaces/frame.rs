@@ -523,6 +523,8 @@ thread_local! {
     static PENDING_CONFIGURES: RefCell<Vec<(AeroFrameV1, u32, i32, i32)>> = const { RefCell::new(Vec::new()) };
     static NEXT_POOL_ID: Cell<usize> = const { Cell::new(0) };
     static POOL_FILL_SCHEDULED: Cell<bool> = const { Cell::new(false) };
+    /// HTML do frame real; o exemplo de integração substitui só o conteúdo visual.
+    static FRAME_HTML: RefCell<&'static str> = const { RefCell::new(TITLEBAR_HTML) };
 }
 
 thread_local! {
@@ -1530,7 +1532,10 @@ fn prewarm_frame() {
         });
     });
     eprintln!("FRAMEWEB: pool_push pool_id={pool_id} t={}", bench_t());
-    webview.load_html(TITLEBAR_HTML, Some("aero://frame/"));
+    webview.load_html(
+        FRAME_HTML.with(|cell| *cell.borrow()),
+        Some("aero://frame/"),
+    );
 }
 
 /// Consome uma view já carregada. O associate ocorre no realize e o present
@@ -1608,6 +1613,13 @@ fn bootstrap_runtime(wl_surface: &aero::wl_surface::WlSurface) {
     if state.manager.is_some() {
         RUNTIME.with(|cell| *cell.borrow_mut() = Some(Runtime { queue, state }));
     }
+}
+
+/// Entry point de integração: mesmo frame/protocolo/pool, com HTML de fixture.
+#[doc(hidden)]
+pub fn main_with_html(html: &'static str) {
+    FRAME_HTML.with(|cell| *cell.borrow_mut() = html);
+    main();
 }
 
 /// Entry point usado pelo shim `examples/frame_webview.rs`.

@@ -406,11 +406,24 @@ pub fn init_udev(
         })?;
 
     // 9. Loop de render por timer (mesma cena de headless/winit via render::scene).
+    let renderer = Rc::new(RefCell::new(renderer));
+    let alpha_renderer = Rc::clone(&renderer);
+    data.state.alpha_sampler = Some(crate::render::alpha::AlphaSampler::new(
+        move |surface, local, cached| {
+            crate::render::alpha::sample_gles(
+                &mut alpha_renderer.borrow_mut(),
+                surface,
+                local,
+                cached,
+            )
+        },
+    ));
     let mut tick: u64 = 0;
     let mut frame_seq: u64 = 0;
     event_loop.handle().insert_source(
         Timer::from_duration(Duration::from_millis(16)),
         move |_, _, data| {
+            let renderer = &mut *renderer.borrow_mut();
             tick += 1;
             // Heartbeat: se o log parar aqui, o travamento está no ciclo de render.
             if tick.is_multiple_of(250) {
@@ -445,13 +458,13 @@ pub fn init_udev(
             for slot in borrowed.iter_mut() {
                 frame_seq += 1;
                 let (mut elements, _) =
-                    collect_output_elements(&mut data.state, &slot.wl_output, &mut renderer, false);
+                    collect_output_elements(&mut data.state, &slot.wl_output, renderer, false);
                 // F1-cursor-shape: o cursor plane já está habilitado pelo DrmOutputManager.
                 // INSERIR NA FRENTE (índice 0): a cena é frente->trás, e se o DRM não
                 // tiver cursor plane livre o Smithay compõe este elemento no primary
                 // plane — onde ficaria ATRÁS das janelas e do painel se fosse push().
                 if let Some(cursor) = crate::render::cursor::cursor_element(
-                    &mut renderer,
+                    renderer,
                     &mut data.state,
                     &slot.wl_output,
                 ) {
@@ -463,7 +476,7 @@ pub fn init_udev(
                 // daí a margem preta só no tty3. Forçar composição no framebuffer
                 // primário mantém o 9-slice e o cliente no MESMO caminho do nested.
                 match slot.drm_output.render_frame(
-                    &mut renderer,
+                    renderer,
                     &elements,
                     [0.08, 0.08, 0.10, 1.0],
                     FrameFlags::empty(),
