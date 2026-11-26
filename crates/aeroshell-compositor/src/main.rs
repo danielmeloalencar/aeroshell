@@ -747,6 +747,115 @@ mod protocol_tests {
         );
     }
 
+    fn install_two_outputs(h: &mut Harness) {
+        let mut outputs = Vec::new();
+        for index in 0..2 {
+            let output = smithay::output::Output::new(
+                format!("test-{index}"),
+                smithay::output::PhysicalProperties {
+                    size: (0, 0).into(),
+                    subpixel: smithay::output::Subpixel::Unknown,
+                    make: "AeroShell".to_owned(),
+                    model: "test".to_owned(),
+                },
+            );
+            output.change_current_state(
+                Some(smithay::output::Mode {
+                    size: (640, 480).into(),
+                    refresh: 60_000,
+                }),
+                None,
+                None,
+                None,
+            );
+            h.data.state.space.map_output(&output, (index * 640, 0));
+            outputs.push(output);
+        }
+        h.data.state.outputs = outputs;
+    }
+
+    fn create_toplevel(h: &mut Harness) {
+        h.create_surface();
+        let shell = h.client.shell.clone().unwrap();
+        let surface = h.client.surface.clone().unwrap();
+        let xdg_surface = shell.get_xdg_surface(&surface, &h.queue.handle(), ());
+        let _toplevel = xdg_surface.get_toplevel(&h.queue.handle(), ());
+        h.pump();
+    }
+
+    #[test]
+    fn maximize_e_fullscreen_usam_o_output_sob_a_janela() {
+        let mut h = Harness::new(true);
+        install_two_outputs(&mut h);
+        create_toplevel(&mut h);
+        let window = h.data.state.space.elements().next().unwrap().clone();
+        h.data
+            .state
+            .space
+            .map_element(window.clone(), (700, 100), false);
+
+        assert!(crate::protocols::toplevel_states::apply_maximize(
+            &mut h.data.state,
+            0,
+            true,
+        ));
+        assert_eq!(h.data.state.space.element_location(&window).unwrap().x, 640);
+        assert!(crate::protocols::toplevel_states::apply_maximize(
+            &mut h.data.state,
+            0,
+            false,
+        ));
+        h.data
+            .state
+            .space
+            .map_element(window.clone(), (700, 100), false);
+        assert!(crate::protocols::toplevel_states::apply_fullscreen(
+            &mut h.data.state,
+            0,
+            true,
+        ));
+        assert_eq!(h.data.state.space.element_location(&window).unwrap().x, 640);
+    }
+
+    #[test]
+    fn ipc_de_janelas_minimiza_move_e_inicia_grab_com_serial_real() {
+        let mut h = Harness::new(true);
+        install_two_outputs(&mut h);
+        create_toplevel(&mut h);
+        assert_eq!(h.data.state.window_command("move 0 700 100"), "OK");
+        assert_eq!(h.data.state.window_command("minimize 0"), "OK");
+        assert!(!h.data.state.window_visible(0));
+        assert!(h.data.state.workspaces.window_visible(0));
+        assert_eq!(h.data.state.window_command("focus 0"), "OK");
+        assert!(h.data.state.window_visible(0));
+
+        h.data.state.inject_motion(750.0, 150.0);
+        h.data.state.inject_button(true);
+        assert_eq!(h.data.state.window_command("begin-move 0"), "OK");
+        assert!(h.data.state.seat.get_pointer().unwrap().is_grabbed());
+        h.data.state.inject_motion(900.0, 250.0);
+        h.data.state.inject_button(false);
+        assert!(h
+            .data
+            .state
+            .window_command("begin-move 0")
+            .starts_with("ERR"));
+        h.data.state.inject_button(true);
+        assert_eq!(
+            h.data.state.window_command("begin-resize 0 bottom-right"),
+            "OK"
+        );
+        assert!(h
+            .data
+            .state
+            .window_command("begin-resize 0 bottom-right")
+            .starts_with("ERR"));
+        assert!(h.data.state.seat.get_pointer().unwrap().is_grabbed());
+        h.data.state.inject_motion(960.0, 300.0);
+        h.data.state.inject_button(false);
+        assert!(h.data.state.window_command("thumbnail 0").contains("F7"));
+    }
+
     #[test]
     fn move_with_fake_serial_is_ignored() {
         let mut h = Harness::new(true);

@@ -357,6 +357,13 @@ mod tests {
         assert!(own.is_ok());
         for command in [
             "focus 1",
+            "minimize 1",
+            "fullscreen 1",
+            "move 1 640 80",
+            "resize 1 800 600",
+            "begin-move 1",
+            "begin-resize 1 bottom-right",
+            "thumbnail 1",
             "surface-create {}",
             "surface-destroy panel-a",
             r#"input-bind {"id":"guest","keys":"Super+1"}"#,

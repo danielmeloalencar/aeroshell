@@ -265,6 +265,7 @@ impl AeroState {
                 .map(|(id, _)| *id)
             {
                 state.workspaces.remove_window(window_id);
+                state.minimized_windows.remove(&window_id);
             }
             state.window_surfaces.retain(|_, cs| *cs != *dead);
             if let Some(pos) = state
@@ -459,6 +460,7 @@ impl Dispatch<AeroFrameManagerV1, ()> for AeroState {
                             .map(|(id, _)| *id)
                         {
                             state.workspaces.remove_window(window_id);
+                            state.minimized_windows.remove(&window_id);
                         }
                         state.window_surfaces.retain(|_, cs| *cs != *dead);
                         if let Some(pos) = state

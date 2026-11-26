@@ -22,6 +22,31 @@ pub struct WindowInfo {
     pub height: u32,
 }
 
+/// Estado observável de uma janela, mantido fora da geometria do snapshot.
+#[cfg_attr(feature = "export-bindings", derive(TS))]
+#[cfg_attr(feature = "export-bindings", ts(export))]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct WindowState {
+    pub minimized: bool,
+    pub maximized: bool,
+    pub fullscreen: bool,
+}
+
+/// Bordas/cantos aceitos por `aero.windows.beginResize`.
+#[cfg_attr(feature = "export-bindings", derive(TS))]
+#[cfg_attr(feature = "export-bindings", ts(export))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WindowResizeEdge {
+    Top,
+    Bottom,
+    Left,
+    Right,
+    TopLeft,
+    BottomLeft,
+    TopRight,
+    BottomRight,
+}
+
 /// Um workspace e as janelas que pertencem a ele. A janela continua existindo
 /// quando seu workspace está inativo; apenas sua participação na cena muda.
 #[cfg_attr(feature = "export-bindings", derive(TS))]
@@ -412,6 +437,18 @@ pub enum AeroEvent {
         y: i32,
         width: u32,
         height: u32,
+    },
+    Minimized {
+        id: u32,
+        minimized: bool,
+    },
+    Maximized {
+        id: u32,
+        maximized: bool,
+    },
+    Fullscreen {
+        id: u32,
+        fullscreen: bool,
     },
     Csd {
         id: u32,

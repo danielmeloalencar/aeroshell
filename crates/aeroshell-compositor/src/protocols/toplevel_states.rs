@@ -18,7 +18,11 @@ use smithay::{
 #[cfg(feature = "bench")]
 use smithay::reexports::wayland_server::Resource;
 
-use crate::{aero_frame_protocol::aero_frame_v1::State as FrameState, state::AeroState};
+use crate::{
+    aero_frame_protocol::aero_frame_v1::State as FrameState, state::AeroState,
+    window_ipc::emit_event,
+};
+use aeroshell_ipc::types::AeroEvent;
 
 ///Limites pedidos pelo cliente. `0` num eixo = sem limite (XDG spec).
 fn limits(surface: &WlSurface, pending: bool) -> (Size<i32, Logical>, Size<i32, Logical>) {
@@ -126,7 +130,7 @@ pub fn apply_maximize(state: &mut AeroState, window_id: u32, target: bool) -> bo
     };
     let surface = toplevel.wl_surface().clone();
     if target {
-        let Some(area) = state.work_area() else {
+        let Some(area) = state.work_area(window_id) else {
             return false;
         };
         if let Some(geo) = state.space.element_geometry(&window) {
@@ -164,6 +168,11 @@ pub fn apply_maximize(state: &mut AeroState, window_id: u32, target: bool) -> bo
             });
         }
     }
+    state.emit_window_geometry(window_id);
+    emit_event(AeroEvent::Maximized {
+        id: window_id,
+        maximized: target,
+    });
     let _ = toplevel.send_configure();
     log_state(state, window_id, false, target);
     refresh_frame_state(state, window_id);
@@ -178,7 +187,7 @@ pub fn apply_fullscreen(state: &mut AeroState, window_id: u32, target: bool) -> 
         return false;
     };
     if target {
-        let Some(output) = state.outputs.first().cloned() else {
+        let Some(output) = state.output_for_window(window_id) else {
             return false;
         };
         let geo = state.space.output_geometry(&output).unwrap_or_default();
@@ -206,6 +215,11 @@ pub fn apply_fullscreen(state: &mut AeroState, window_id: u32, target: bool) -> 
             s.states.unset(xdg_toplevel::State::Fullscreen);
         });
     }
+    state.emit_window_geometry(window_id);
+    emit_event(AeroEvent::Fullscreen {
+        id: window_id,
+        fullscreen: target,
+    });
     let _ = toplevel.send_configure();
     log_state(state, window_id, target, false);
     refresh_frame_state(state, window_id);

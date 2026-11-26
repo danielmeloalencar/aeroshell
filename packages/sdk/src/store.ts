@@ -7,9 +7,14 @@ import type { Patch } from "./generated/Patch";
 import type { Snapshot } from "./generated/Snapshot";
 import type { SurfaceSpec } from "./generated/SurfaceSpec";
 import type { WindowInfo } from "./generated/WindowInfo";
+import type { WindowState } from "./generated/WindowState";
 import type { Workspace } from "./generated/Workspace";
 
 export type Listener = () => void;
+
+const DEFAULT_WINDOW_STATE: WindowState = {
+  minimized: false, maximized: false, fullscreen: false,
+};
 
 /**
  * Indicadores do painel: estado por janela que NÃO altera `WindowInfo` e por
@@ -46,6 +51,8 @@ export class WindowStore {
   private readonly notificationListeners = new Set<Listener>();
   private outputsState: OutputInfo[] = [];
   private readonly outputListeners = new Set<Listener>();
+  private windowStates: Record<number, WindowState> = {};
+  private readonly windowStateListeners = new Set<Listener>();
   private readonly notificationCallbacks = new Set<(notification: Notification) => void>();
 
   constructor(initial: Snapshot = { revision: 0, windows: [] }) {
@@ -135,6 +142,27 @@ export class WindowStore {
   private setOutputs(outputs: OutputInfo[]): void {
     this.outputsState = outputs;
     for (const listener of this.outputListeners) listener();
+  }
+
+  /** Estado reativo de minimize/maximize/fullscreen, com defaults normais. */
+  getWindowState(id: number): WindowState {
+    return this.windowStates[id] ?? DEFAULT_WINDOW_STATE;
+  }
+
+  subscribeWindowStates(listener: Listener): () => void {
+    this.windowStateListeners.add(listener);
+    return () => {
+      this.windowStateListeners.delete(listener);
+    };
+  }
+
+  private setWindowState(id: number, next: WindowState): void {
+    const current = this.getWindowState(id);
+    if (current.minimized === next.minimized
+      && current.maximized === next.maximized
+      && current.fullscreen === next.fullscreen) return;
+    this.windowStates = { ...this.windowStates, [id]: next };
+    for (const listener of this.windowStateListeners) listener();
   }
 
   getNotifications(): Notification[] {
@@ -238,6 +266,26 @@ export class WindowStore {
       const id = event.OutputRemoved.id;
       if (!this.outputsState.some((item) => item.id === id)) return;
       this.setOutputs(this.outputsState.filter((item) => item.id !== id));
+      return;
+    }
+    if ("Minimized" in event || "Maximized" in event || "Fullscreen" in event) {
+      const current = this.getWindowState(
+        "Minimized" in event ? event.Minimized.id
+          : "Maximized" in event ? event.Maximized.id : event.Fullscreen.id,
+      );
+      if ("Minimized" in event) {
+        this.setWindowState(event.Minimized.id, {
+          ...current, minimized: event.Minimized.minimized,
+        });
+      } else if ("Maximized" in event) {
+        this.setWindowState(event.Maximized.id, {
+          ...current, maximized: event.Maximized.maximized,
+        });
+      } else {
+        this.setWindowState(event.Fullscreen.id, {
+          ...current, fullscreen: event.Fullscreen.fullscreen,
+        });
+      }
       return;
     }
     if ("SurfaceCreated" in event || "SurfaceUpdated" in event) {

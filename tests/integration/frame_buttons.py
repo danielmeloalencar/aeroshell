@@ -93,6 +93,16 @@ def content():
     m = hits(r"frame configure \(conteúdo do cliente\).*?content_w=(\d+).*?content_h=(\d+)")
     return None if not m else (int(m[-1].group(1)), int(m[-1].group(2)))
 
+def content_changed(previous, timeout=12):
+    """Espera o commit/configure efetivo, ignorando o refresh de estado com o mesmo tamanho."""
+    for _ in range(int(timeout * 10)):
+        current = content()
+        if current is not None and current != previous:
+            return current
+        time.sleep(0.1)
+    return content()
+
+
 def frame_origin():
     """Origem global do frame = origem do cliente no IPC - insets esq/sup.
     02r: maximizar reposiciona a janela; a origem Não é mais a constante (54,50)."""
@@ -165,13 +175,13 @@ on_frame = on_frame_hit(hit, total0, origin0)
 print(f"hit-test no botão max: {hit} hit_no_frame={on_frame} (surface do cliente={client[0]})")
 print(f"frame_host viu o press={own}")
 print(f"comando que chegou ao IPC via JS={cmd}")
-maxed = content()
+maxed = content_changed(start)
 print(f"conteudo depois de maximizar={maxed} (esperado ≈ {OUTPUT_SIZE} arredondado pela grade do foot)")
 
 print("\n=== restaurar (2º clique no mesmo botão) ===")
 origin1 = frame_origin()  # 02r: o maximize reposicionou o frame
 hit2, cmd2, own2 = click(*button_center("max", origin1))
-restored = content()
+restored = content_changed(maxed)
 total_max = (maxed[0] + INSETS[0] + INSETS[2], maxed[1] + INSETS[1] + INSETS[3])
 on_frame2 = on_frame_hit(hit2, total_max, origin1)
 print(f"hit-test no botão max: {hit2} hit_no_frame={on_frame2}")

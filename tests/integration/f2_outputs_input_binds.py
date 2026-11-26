@@ -127,6 +127,13 @@ def layer_outputs(namespace):
     return []
 
 
+def guest_ready(surface_id):
+    return any(
+        "guest-ready" in line and f'\"id\":\"{surface_id}\"' in line
+        for line in clean(HOST_LOG).splitlines()
+    )
+
+
 def layer_ready(namespace, output, width, height):
     for line in clean(LOG).splitlines():
         if (
@@ -342,6 +349,9 @@ def main():
         )
         checks["geometria do segundo painel está pronta antes do clique"] = wait_for(
             lambda: layer_ready("blank-panel-output-1", "aero-1", 640, 56)
+        )
+        checks["região de input do segundo painel está pronta antes do clique"] = wait_for(
+            lambda: guest_ready("blank-panel-output-1")
         )
         focus_before = clean(LOG).count("TESTE foco de teclado alterado")
         click(960, 450)

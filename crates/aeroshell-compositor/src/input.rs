@@ -137,6 +137,7 @@ impl AeroState {
 
     pub fn inject_button(&mut self, pressed: bool) {
         self.dirty = true;
+        self.primary_button_pressed = pressed;
         if !pressed {
             self.redraw_until =
                 Some(std::time::Instant::now() + std::time::Duration::from_millis(500));
@@ -423,6 +424,9 @@ impl AeroState {
                 let serial = SERIAL_COUNTER.next_serial();
                 let button_state = event.state();
 
+                if event.button_code() == 0x110 {
+                    self.primary_button_pressed = ButtonState::Pressed == button_state;
+                }
                 if ButtonState::Pressed == button_state {
                     self.last_button_serial = Some(u32::from(serial));
                     self.focus_on_press(serial);

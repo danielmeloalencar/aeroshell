@@ -67,6 +67,16 @@ use crate::{
 /// tamanho do cliente.
 pub type SavedGeometry = (Point<i32, Logical>, Size<i32, Logical>);
 
+fn overlap_area(a: Rectangle<i32, Logical>, b: Rectangle<i32, Logical>) -> i64 {
+    let width = (a.loc.x + a.size.w)
+        .min(b.loc.x + b.size.w)
+        .saturating_sub(a.loc.x.max(b.loc.x));
+    let height = (a.loc.y + a.size.h)
+        .min(b.loc.y + b.size.h)
+        .saturating_sub(a.loc.y.max(b.loc.y));
+    i64::from(width.max(0)) * i64::from(height.max(0))
+}
+
 /// Crescimento excepcional do canvas, confirmado pelo paint do shell.
 #[derive(Debug, Clone, Copy)]
 pub struct CanvasGrowth {
@@ -189,6 +199,8 @@ pub struct AeroState {
     pub frame_diag: crate::frame_diagnostics::FrameDiagnostics,
     /// Último serial de botão recebido (validação de move/resize).
     pub last_button_serial: Option<u32>,
+    /// Botão primário atualmente pressionado; serial antigo não basta para IPC.
+    pub primary_button_pressed: bool,
     /// window_id sob resize ativo. O commit-hook não reconfigura a decoração
     /// enquanto o grab decide o tamanho: reenviar o tamanho atrasado do cliente
     /// "puxa" a moldura para trás e gera um storm de configures (02f).
@@ -245,6 +257,8 @@ pub struct AeroState {
     pub event_revision: u32,
     /// F2-workspaces: membership canônica; janelas inativas seguem no Space.
     pub workspaces: WorkspaceManager,
+    /// F2-windows: minimizar só filtra cena/input; membership e lifetime permanecem.
+    pub minimized_windows: HashSet<u32>,
     /// F2-surface-host: especificações ativas declaradas pelo runtime.
     pub surfaces: HashMap<String, SurfaceSpec>,
     /// F2-input-binds: chords globais registrados somente pelo IPC privilegiado.
@@ -327,7 +341,28 @@ impl AeroState {
 
     /// Visibilidade não altera map/lifetime: é apenas filtro de cena e input.
     pub fn window_visible(&self, window_id: u32) -> bool {
-        self.workspaces.window_visible(window_id)
+        self.workspaces.window_visible(window_id) && !self.minimized_windows.contains(&window_id)
+    }
+
+    /// Minimizar/restaurar não muda map, Space ou membership do workspace.
+    pub fn set_window_minimized(&mut self, window_id: u32, minimized: bool) -> bool {
+        if self.window_for_id(window_id).is_none() {
+            return false;
+        }
+        let changed = if minimized {
+            self.minimized_windows.insert(window_id)
+        } else {
+            self.minimized_windows.remove(&window_id)
+        };
+        if changed {
+            emit_event(AeroEvent::Minimized {
+                id: window_id,
+                minimized,
+            });
+            self.dirty = true;
+            self.refresh_workspace_focus();
+        }
+        true
     }
 
     /// Frames ainda não associados preservam o comportamento de startup. Um
@@ -387,15 +422,60 @@ impl AeroState {
         }
     }
 
-    /// 02r: área não exclusiva do primeiro output em coordenadas do Space.
-    /// `non_exclusive_zone()` devolve um retângulo em coordenadas lógicas do
-    /// output (origem no canto do output); somamos a origem do output no Space
-    /// para obter a origem global. Fonte: Smithay 0.7.0
-    /// `desktop/wayland/layer.rs:135-138` e `:254-267`.
-    pub fn work_area(&self) -> Option<Rectangle<i32, Logical>> {
-        let output = self.outputs.first()?;
-        let origin = self.space.output_geometry(output)?.loc;
-        let zone = smithay::desktop::layer_map_for_output(output).non_exclusive_zone();
+    /// Output sob o centro da janela; fora de todos, vence a maior interseção.
+    /// O clone evita manter um borrow da janela enquanto o Space é alterado.
+    pub fn output_for_window(&self, window_id: u32) -> Option<Output> {
+        let window = self.window_for_id(window_id)?;
+        let geometry = self.space.element_geometry(window)?;
+        let center = Point::new(
+            geometry.loc.x + geometry.size.w / 2,
+            geometry.loc.y + geometry.size.h / 2,
+        );
+        let selected = self
+            .outputs
+            .iter()
+            .find(|output| {
+                self.space
+                    .output_geometry(output)
+                    .is_some_and(|area| area.contains(center))
+            })
+            .cloned()
+            .or_else(|| {
+                self.outputs
+                    .iter()
+                    .filter_map(|output| {
+                        self.space
+                            .output_geometry(output)
+                            .map(|area| (overlap_area(geometry, area), output.clone()))
+                    })
+                    .max_by_key(|(area, _)| *area)
+                    .map(|(_, output)| output)
+            })
+            .or_else(|| self.outputs.first().cloned());
+        #[cfg(feature = "bench")]
+        eprintln!(
+            "WINDOW_OUTPUT window_id={window_id} loc=({},{}) size=({},{}) center=({},{}) output={}",
+            geometry.loc.x,
+            geometry.loc.y,
+            geometry.size.w,
+            geometry.size.h,
+            center.x,
+            center.y,
+            selected
+                .as_ref()
+                .map(|output| output.name())
+                .unwrap_or_default(),
+        );
+        selected
+    }
+
+    /// Área não exclusiva do output sob a janela, em coordenadas do Space.
+    /// `non_exclusive_zone()` é local ao output; somamos sua origem global.
+    /// Fonte: Smithay 0.7.0 `desktop/wayland/layer.rs:135-138` e `:254-267`.
+    pub fn work_area(&self, window_id: u32) -> Option<Rectangle<i32, Logical>> {
+        let output = self.output_for_window(window_id)?;
+        let origin = self.space.output_geometry(&output)?.loc;
+        let zone = smithay::desktop::layer_map_for_output(&output).non_exclusive_zone();
         Some(Rectangle::new(
             Point::new(origin.x + zone.loc.x, origin.y + zone.loc.y),
             zone.size,
@@ -557,18 +637,28 @@ impl AeroState {
         if title_changed || !self.policy_requested.contains(&id) {
             self.request_decoration_policy(id);
         }
-        if let Some(geo) = self.space.element_geometry(&window) {
-            if self.last_geometries.get(&id) != Some(&geo) {
-                self.last_geometries.insert(id, geo);
-                emit_event(AeroEvent::Geometry {
-                    id,
-                    x: geo.loc.x,
-                    y: geo.loc.y,
-                    width: geo.size.w.max(0) as u32,
-                    height: geo.size.h.max(0) as u32,
-                });
-            }
+        self.emit_window_geometry(id);
+    }
+
+    /// Publica a geometria atual se ela mudou, inclusive quando só o Space andou.
+    pub fn emit_window_geometry(&mut self, id: u32) {
+        let Some(window) = self.window_for_id(id).cloned() else {
+            return;
+        };
+        let Some(geo) = self.space.element_geometry(&window) else {
+            return;
+        };
+        if self.last_geometries.get(&id) == Some(&geo) {
+            return;
         }
+        self.last_geometries.insert(id, geo);
+        emit_event(AeroEvent::Geometry {
+            id,
+            x: geo.loc.x,
+            y: geo.loc.y,
+            width: geo.size.w.max(0) as u32,
+            height: geo.size.h.max(0) as u32,
+        });
     }
 
     /// F1-xdg-toplevel-states: em fullscreen a janela ocupa o output inteiro e
@@ -713,6 +803,7 @@ impl AeroState {
                 std::env::var("AERO_DIAG_SUPPRESS_DRAW_ONCE").is_ok(),
             ),
             last_button_serial: None,
+            primary_button_pressed: false,
             resize_grab_active: None,
             frame_canvases: HashMap::new(),
             shell_manager: None,
@@ -744,6 +835,7 @@ impl AeroState {
             redraw_until: None,
             event_revision: 0,
             workspaces: WorkspaceManager::default(),
+            minimized_windows: HashSet::new(),
             surfaces: HashMap::new(),
             key_binds: HashMap::new(),
             intercepted_keys: HashSet::new(),

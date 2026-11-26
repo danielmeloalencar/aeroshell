@@ -41,10 +41,7 @@ use calloop::channel;
 use serde_json::{json, Value};
 use smithay::{
     desktop::Window,
-    reexports::{
-        wayland_protocols::xdg::shell::server::xdg_toplevel,
-        wayland_server::protocol::wl_surface::WlSurface,
-    },
+    reexports::wayland_server::protocol::wl_surface::WlSurface,
     utils::SERIAL_COUNTER,
     wayland::{compositor::with_states, shell::xdg::XdgToplevelSurfaceData},
 };
@@ -251,6 +248,15 @@ fn event_json(event: &AeroEvent) -> Value {
         } => json!({
             "Geometry": { "id": id, "x": x, "y": y, "width": width, "height": height }
         }),
+        AeroEvent::Minimized { id, minimized } => {
+            json!({ "Minimized": { "id": id, "minimized": minimized } })
+        }
+        AeroEvent::Maximized { id, maximized } => {
+            json!({ "Maximized": { "id": id, "maximized": maximized } })
+        }
+        AeroEvent::Fullscreen { id, fullscreen } => {
+            json!({ "Fullscreen": { "id": id, "fullscreen": fullscreen } })
+        }
         AeroEvent::Csd { id, client_frame } => {
             json!({ "Csd": { "id": id, "client_frame": client_frame } })
         }
@@ -706,6 +712,9 @@ fn event_name(event: &AeroEvent) -> &'static str {
         AeroEvent::Icon { .. } => "icon",
         AeroEvent::Focus { .. } => "focus",
         AeroEvent::Geometry { .. } => "geometry",
+        AeroEvent::Minimized { .. } => "minimized",
+        AeroEvent::Maximized { .. } => "maximized",
+        AeroEvent::Fullscreen { .. } => "fullscreen",
         AeroEvent::Csd { .. } => "csd",
         AeroEvent::FramePainted { .. } => "frame_painted",
         AeroEvent::WorkspaceCreated { .. } => "workspace_created",
@@ -860,6 +869,25 @@ impl AeroState {
             // antes dele e se perdiam (indicador ficava "default" até editar).
             "__subscribe__" => {
                 self.emit_snapshot();
+                let mut window_ids: Vec<_> = self.window_surfaces.keys().copied().collect();
+                window_ids.sort_unstable();
+                for id in window_ids {
+                    let state = frame_state_for(self, id);
+                    emit_event(AeroEvent::Minimized {
+                        id,
+                        minimized: self.minimized_windows.contains(&id),
+                    });
+                    emit_event(AeroEvent::Maximized {
+                        id,
+                        maximized: state
+                            .contains(crate::aero_frame_protocol::aero_frame_v1::State::Maximized),
+                    });
+                    emit_event(AeroEvent::Fullscreen {
+                        id,
+                        fullscreen: state
+                            .contains(crate::aero_frame_protocol::aero_frame_v1::State::Fullscreen),
+                    });
+                }
                 for workspace in self.workspaces.list() {
                     emit_event(AeroEvent::WorkspaceCreated {
                         workspace: workspace.clone(),
@@ -1382,9 +1410,10 @@ impl AeroState {
                 if self.window_for_id(window_id).is_none() {
                     return "ERR janela inexistente".to_owned();
                 }
-                if !self.window_visible(window_id) {
+                if !self.workspaces.window_visible(window_id) {
                     return "ERR janela fora do workspace ativo".to_owned();
                 }
+                self.set_window_minimized(window_id, false);
                 match focus_window(self, window_id) {
                     Ok(()) => "OK".to_owned(),
                     Err(err) => err,
@@ -1399,23 +1428,130 @@ impl AeroState {
                 }
                 "OK".to_owned()
             }
+            "minimize" => {
+                let Some(window_id) = id.map(|value| value as u32) else {
+                    return "ERR janela inexistente".to_owned();
+                };
+                if self.set_window_minimized(window_id, true) {
+                    "OK".to_owned()
+                } else {
+                    "ERR janela inexistente".to_owned()
+                }
+            }
+            "fullscreen" => {
+                let Some(window_id) = id.map(|value| value as u32) else {
+                    return "ERR janela inexistente".to_owned();
+                };
+                if self.window_for_id(window_id).is_none() {
+                    return "ERR janela inexistente".to_owned();
+                }
+                let target = !frame_state_for(self, window_id)
+                    .contains(crate::aero_frame_protocol::aero_frame_v1::State::Fullscreen);
+                if crate::protocols::toplevel_states::apply_fullscreen(self, window_id, target) {
+                    "OK".to_owned()
+                } else {
+                    "ERR sem output para fullscreen".to_owned()
+                }
+            }
+            "move" => {
+                let (Some(window_id), Some(x), Some(y)) = (
+                    id.map(|value| value as u32),
+                    parts.next().and_then(|value| value.parse::<i32>().ok()),
+                    parts.next().and_then(|value| value.parse::<i32>().ok()),
+                ) else {
+                    return "ERR uso: move <id> <x> <y>".to_owned();
+                };
+                let Some(window) = self.window_for_id(window_id).cloned() else {
+                    return "ERR janela inexistente".to_owned();
+                };
+                self.space.map_element(window, (x, y), false);
+                self.dirty = true;
+                self.emit_window_geometry(window_id);
+                "OK".to_owned()
+            }
+            "resize" => {
+                let (Some(window_id), Some(width), Some(height)) = (
+                    id.map(|value| value as u32),
+                    parts.next().and_then(|value| value.parse::<i32>().ok()),
+                    parts.next().and_then(|value| value.parse::<i32>().ok()),
+                ) else {
+                    return "ERR uso: resize <id> <width> <height>".to_owned();
+                };
+                if width <= 0 || height <= 0 {
+                    return "ERR resize exige dimensões positivas".to_owned();
+                }
+                let Some(window) = self.window_for_id(window_id).cloned() else {
+                    return "ERR janela inexistente".to_owned();
+                };
+                let Some(toplevel) = window.toplevel() else {
+                    return "ERR sem toplevel".to_owned();
+                };
+                let size = crate::protocols::toplevel_states::clamp_size(
+                    toplevel.wl_surface(),
+                    (width, height).into(),
+                    false,
+                );
+                toplevel.with_pending_state(|state| state.size = Some(size));
+                let _ = toplevel.send_configure();
+                self.dirty = true;
+                "OK".to_owned()
+            }
+            "begin-move" | "begin-resize" => {
+                let Some(window_id) = id.map(|value| value as u32) else {
+                    return "ERR janela inexistente".to_owned();
+                };
+                if self.window_for_id(window_id).is_none() || !self.window_visible(window_id) {
+                    return "ERR janela inexistente ou invisível".to_owned();
+                }
+                if !self.primary_button_pressed {
+                    return "ERR begin-move/begin-resize exige botão primário pressionado"
+                        .to_owned();
+                }
+                let Some(serial) = self.last_button_serial else {
+                    return "ERR serial de botão ausente".to_owned();
+                };
+                if self
+                    .seat
+                    .get_pointer()
+                    .is_some_and(|pointer| pointer.is_grabbed() && !pointer.has_grab(serial.into()))
+                {
+                    return "ERR já existe um grab de ponteiro ativo".to_owned();
+                }
+                let resize = if op == "begin-move" {
+                    None
+                } else {
+                    use crate::aero_frame_protocol::aero_frame_v1::ResizeEdge;
+                    match parts.next() {
+                        Some("top") => Some(ResizeEdge::Top),
+                        Some("bottom") => Some(ResizeEdge::Bottom),
+                        Some("left") => Some(ResizeEdge::Left),
+                        Some("right") => Some(ResizeEdge::Right),
+                        Some("top-left") => Some(ResizeEdge::TopLeft),
+                        Some("bottom-left") => Some(ResizeEdge::BottomLeft),
+                        Some("top-right") => Some(ResizeEdge::TopRight),
+                        Some("bottom-right") => Some(ResizeEdge::BottomRight),
+                        _ => return "ERR edge inválido para begin-resize".to_owned(),
+                    }
+                };
+                if crate::grab::start_geometry_grab(self, window_id, serial, resize) {
+                    self.dirty = true;
+                    "OK".to_owned()
+                } else {
+                    "ERR não foi possível iniciar grab".to_owned()
+                }
+            }
+            "thumbnail" => "ERR thumbnail deferido para screencopy/F7".to_owned(),
             "maximize" => {
                 // Mesma mecânica da 02r, agora compartilhada com o pedido
                 // xdg_toplevel.set_maximized (F1-xdg-toplevel-states).
                 let Some(id) = id else {
                     return "ERR janela inexistente".to_owned();
                 };
-                let Some(window) = self.window_for_id(id as u32) else {
+                if self.window_for_id(id as u32).is_none() {
                     return "ERR janela inexistente".to_owned();
-                };
-                let target = !window
-                    .toplevel()
-                    .map(|t| {
-                        t.current_state()
-                            .states
-                            .contains(xdg_toplevel::State::Maximized)
-                    })
-                    .unwrap_or(false);
+                }
+                let target = !frame_state_for(self, id as u32)
+                    .contains(crate::aero_frame_protocol::aero_frame_v1::State::Maximized);
                 if crate::protocols::toplevel_states::apply_maximize(self, id as u32, target) {
                     "OK".to_owned()
                 } else {

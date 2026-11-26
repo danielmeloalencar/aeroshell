@@ -118,7 +118,7 @@ def main():
             for line in fs_ipc.splitlines()
         )
         fs_dom_ok = wait_for(lambda: "csd_applied" in log_text()
-                             and "bar=hidden border=hidden" in log_text(), timeout=8)
+                             and re.search(r"bar=hidden(?:_opacity)? border=hidden(?:_opacity)?", log_text()), timeout=8)
         fs_client_ok = wait_for(lambda: bool(re.search(
             r"XDG_CLIENT CONFIGURE win=0.*states=.*fullscreen", client_text())))
         client_mark = len(client_text())

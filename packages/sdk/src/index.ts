@@ -11,6 +11,7 @@ import type { Workspace } from "./generated/Workspace";
 import { createInputApi } from "./api/input";
 import { createOutputsApi } from "./api/outputs";
 import { createSurfacesApi, surfaceFromWire } from "./api/surfaces";
+import { createWindowsApi } from "./api/windows";
 import { WindowStore } from "./store";
 
 /** Transporte textual: recebe um comando e devolve as linhas da resposta. */
@@ -50,7 +51,8 @@ export function parseWorkspaces(lines: string[]): Workspace[] {
 }
 
 const EVENT_KEYS = [
-  "Snapshot", "Title", "Icon", "Focus", "Geometry", "Csd",
+  "Snapshot", "Title", "Icon", "Focus", "Geometry",
+  "Minimized", "Maximized", "Fullscreen", "Csd",
   "FramePainted", "WorkspaceCreated", "WorkspaceActivated", "WorkspaceRenamed",
   "WorkspaceDestroyed", "WindowMovedToWorkspace", "AppListUpdated",
   "OutputAdded", "OutputChanged", "OutputRemoved", "KeyBind",
@@ -129,6 +131,7 @@ export function createAero(transport: Transport) {
   const surfaces = createSurfacesApi(transport, store);
   const outputs = createOutputsApi(transport, store);
   const input = createInputApi(transport);
+  const windowOperations = createWindowsApi(transport);
 
   /** Busca o estado no compositor e o publica como snapshot (1ª vez) ou patches. */
   async function refresh(): Promise<Snapshot> {
@@ -306,11 +309,15 @@ export function createAero(transport: Transport) {
     moveWindowToWorkspace,
     destroyWorkspace,
     windows: {
+      ...windowOperations,
+      /** Lista ID, título e geometria lógica; estados chegam pelo stream/store. */
       list: async (): Promise<WindowInfo[]> => (await refresh()).windows,
+      /** Eleva/foca uma janela do workspace ativo e restaura minimize. */
       focus: async (id: number): Promise<void> => {
         await transport(`focus ${id}`);
         await refresh();
       },
+      /** Pede ao cliente que feche somente a janela com o ID informado. */
       close: async (id: number): Promise<void> => {
         await transport(`close ${id}`);
         await refresh();
