@@ -221,6 +221,27 @@ move/resize diretos e por grabs, stream/store, thumbnail e um segundo cenário c
 A dívida de otimização de move fica para cartão futuro; redraw por output e skip de hit-test
 foram testados e revertidos por piora/regressão.
 
+### Hit-test por alfa (`F2-alpha-confirm`)
+A input region restringe primeiro; somente dentro do hit a amostragem do buffer decide. O
+compositor usa `ExportMem::copy_texture` lazy de **1×1**, com cache por commit/buffer/view/pixel;
+cache hit não importa textura. Transparente (`alpha=0`) continua a busca para o cliente abaixo;
+erro de import/readback falha fechado e preserva o hit antigo. Desktop/panel/overlay/frame,
+caps do 9-slice, overlay fullscreen e fullscreen xdg são cobertos pelo harness. Não há readback
+de frame inteiro nesse caminho. Backend udev compila o mesmo sampler, mas não foi executado.
+```
+cargo build --release --workspace --examples
+cargo build --release -p aeroshell-shell
+cargo build --release -p aeroshell-compositor --features bench
+AERO_TARGET=release python3 tests/integration/f2_alpha_confirm.py
+```
+A baseline antes da implementação está em `/tmp/opencode/f2-alpha-baseline7.log` e falha nos
+pixels transparentes. O gate S3 é medido em **release** (VM sem 3D; não é benchmark de GPU real):
+três execuções devem terminar `VEREDITO: OK`, ~1000 motions/s, p99 <1 ms, `size=1x1` e
+`full_frame=0`. O fixture `alpha_frame_webview` só troca o HTML do frame real para ter áreas
+opacas/transparentes; não é a decoração normal. No teste visual, o host genérico precisa receber
+`WAYLAND_DISPLAY=<socket do AeroShell>` no **seu próprio ambiente**, senão abre uma janela separada
+no compositor host e o clique não representa pass-through dentro do AeroShell.
+
 Tipos TS gerados do Rust (não editar à mão):
 ```
 bun run generate:types   # cargo test -p aeroshell-ipc --features export-bindings

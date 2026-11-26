@@ -22,6 +22,20 @@ corrigida em 3 pontos e **aprovada visualmente pelo humano em 2026-11-22 ("ok. A
 invisível no udev é dívida registrada em cartão separado (§6). F1 anterior revertida em `4307cc4`.
  
 ## 3. Feito (com onde está a prova)
+- [x] **F2-alpha-confirm (2026-11-26) — FECHADO PELO JUIZ VISUAL ("Agora sim funcionou").**
+  Cartão `docs/tasks/F2-alpha-confirm.md`. Baseline `/tmp/opencode/f2-alpha-baseline7.log`:
+  desktop/panel/overlay/frame/caps transparentes FALHAM e opacos/fullscreen passam. Implementado
+  readback lazy 1×1 + cache por commit/buffer/view/pixel; região primeiro, alfa depois, erro
+  falha fechado. Três releases (`f2-alpha-release{1,2,3}.log`) **VEREDITO: OK**: 2000 motions,
+  taxa 1000,0/998,7/949,3/s, p99 16.060/13.220/17.000 ns, 2 readbacks 1×1/full_frame=0; cache
+  motion→press=1. `check.sh` 46 Rust+60 Bun, clippy bench/no-default 0. 15 vizinhos: 14 OK e
+  `frame_resize_glue` teve 1 linha intercalada/8 fatias, depois OK (§6). Três perfs: host sempre
+  1 WebProcess inclusive 4 superfícies, 0 redraws estáticos/5 s e 0 px damage; B clique p50/p99
+  19,6/27,3; 16,4/37,0; 18,3/44,2 ms; texto p99 220,8 ms na run1 preservado. VM sem 3D.
+  Juiz aprovou clique opaco→azul, transparente→digitação nos `foot` e uso dos frames. Primeira
+  instância tinha host fora do socket por erro de setup; corrigida sem mudança de produto. Na
+  checagem final compositor/host correto/foot saíram sem ação do agente; só o host externo
+  160401 aberto por engano permanecia. Udev/GPU real não executados. **CARTÃO FECHADO.**
 - [x] **F2-windows-completo (2026-11-26) — FECHADO PELO JUIZ VISUAL ("aprovado com dívida de otimizacao futura").**
   Cartão `docs/tasks/F2-windows-completo.md`. Baselines: SDK 0/3, harness FALHA por API ausente,
   maximize Rust `left:0/right:640` e IPC `ERR comando desconhecido`. Depois
@@ -1802,6 +1816,10 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   nenhum PID do agente ficou órfão. **F1c FECHADA.** Gate final de fechamento `check-f1c-fechada.log`
   EXIT=0 (29 Rust + 9 Bun), clippy bench/fmt EXIT=0.
 ## 4. Em andamento
+- **F2-alpha-confirm: FECHADO PELO JUIZ VISUAL ("Agora sim funcionou").** Implementação, gates,
+  vizinhos, 3 perfs e 3 releases verdes (§3). Compositor/host correto/foot saíram sem ação do
+  agente; só o host externo 160401 da primeira tentativa de setup permanecia. **PARAR; próximo
+  cartão somente com ok.**
 - **F2-windows-completo: FECHADO PELO JUIZ VISUAL ("aprovado com dívida de otimizacao futura").**
   Integração principal, 15 vizinhos, gates e 3 perfs verdes (§3). Na checagem final só o runtime
   118904 permanecia em `ps`; compositor/host/foot saíram sem ação do agente. **PARAR; próximo só com ok.**
@@ -1916,8 +1934,8 @@ invisível no udev é dívida registrada em cartão separado (§6). F1 anterior 
   (2) timer de despacho do shell de 20→1 ms (revertido: p95 piorou 127→158 ms). Terceira abordagem exige decisão
   do humano (`AGENTS.md §3.12`, regra das duas tentativas). 02e é família nova e autorizada; 02c segue FALHA.
 ## 5. Próximas tarefas (abrir cartão antes de executar)
-**F2-windows-completo FECHADO PELO JUIZ VISUAL: PARAR. Sequência proposta, não iniciada:
-alpha-confirm → adapters+exemplos (React/Solid/Vue/Three.js) → fechamento F2, cada um com cartão e ok.
+**F2-alpha-confirm FECHADO PELO JUIZ VISUAL: PARAR. Sequência proposta, não iniciada:
+adapters+exemplos (React/Solid/Vue/blank/win11-like/Three.js) → fechamento F2, cada um com cartão e ok.
 Otimização adicional de move somente em cartão futuro.**
 **F2-surface-perf-fix: FECHADO (passos 1/2 e juiz visual 60 s aprovado). PARAR.**
 **F2-surface-perf: PARAR. Invariantes de WebProcess/related_view falharam (§3); humano decidirá se
@@ -1980,6 +1998,15 @@ fechados, fora da fila.
    urgência) viram cartões separados se o objetivo for "zero avisos do foot".
 - `02d` NÃO executar (autorização explícita). Decisão sobre modo produto é do humano.
 ## 6. Dívidas e bugs conhecidos (NÃO corrigir fora de uma tarefa; só registrar)
+- **F2-alpha-confirm — vizinho intercalado preservado:** `frame_resize_glue` falhou 1× com
+  `malformadas=1`, `n_geoms=8` porque shell/compositor sobrescreveram o timestamp de `SLICE_GEOM`
+  (`f2-alpha-neighbors1.log`). Na repetição, `malformadas=0`, 9 fatias e VEREDITO: OK
+  (`f2-alpha-frame-resize-glue-retry.log`). Não editar o parser neste cartão.
+- **F2-alpha-confirm — destroy genérico retém layers:** `surfaces/mod.rs` move a surface para
+  `retired` sem desaparecimento imediato do hit-test; o harness isola cenários com input region
+  vazia. Não corrigir lifecycle aqui; já havia ressalva visual equivalente em §7.
+- **F2-alpha-confirm — debug não é gate de tempo:** debug chegou a p99 1.225.537 ns; release
+  passou 3× com 13–17 µs. Toda conclusão S3 usa release e ressalva de VM sem 3D.
 - **Multi-output/maximize: RESOLVIDO no F2-windows-completo (§3).** `work_area(window_id)` escolhe
   o output pelo centro/maior interseção; integração e juiz confirmam maximize/fullscreen no output 1.
 - **DÍVIDA ACEITA — otimização futura de move:** `Geometry` por motion causou 199 eventos/0,95 s e
@@ -2852,6 +2879,11 @@ fechados, fora da fila.
   (`under = Some` com espaços) **também no HEAD** — pré-existente, amostra preservada em
   `/tmp/opencode/f2-surface-host-s3-input.log`. **CARTÃO FECHADO.**
 ## 7. Não medido / não validado (não trate como fato)
+- **F2-alpha-confirm: juiz visual APROVADO ("Agora sim funcionou").** Clique opaco captura/muda
+  a borda para azul, transparente entrega digitação aos `foot` e frames seguem utilizáveis. Não
+  medido: udev/teclado físico, hotplug, GPU real, transforms de buffer fora do fixture WebKit e
+  árvores com múltiplas subsurfaces interativas. S3 medido em release nesta VM sem 3D; não é
+  benchmark de GPU real. A primeira janela externa era setup inválido, não evidência de produto.
 - **F2-windows-completo: juiz visual APROVADO com dívida de otimização futura.** Maximize/minimize/
   fullscreen no output 1, grabs e 60 s foram aprovados. Não medido: udev/teclado físico, hotplug,
   GPU real, fluidez em outros layouts. Perf run1 C teve contagem de processos/frame_painted
@@ -3448,6 +3480,14 @@ Ubuntu 26.04 em VirtualBox (sem 3D), host pode ser X11. WebKitGTK 6.0 (2.52.x), 
 WPE ausente no Ubuntu 26.04. Alvo de pacote: Debian 13 (trixie) + Ubuntu 26.04.
  
 ## 9. Handoff (reescreva a cada sessão, 10 linhas no máximo)
+- **F2-alpha-confirm (2026-11-26): FECHADO ("Agora sim funcionou").** Reproduzir:
+  `cargo build --release --workspace --examples && cargo build --release -p aeroshell-shell &&
+  cargo build --release -p aeroshell-compositor --features bench && AERO_TARGET=release python3
+  tests/integration/f2_alpha_confirm.py` → OK. Baseline `f2-alpha-baseline7.log` FALHA; releases
+  p99 16.060/13.220/17.000 ns, 2 readbacks 1×1/full_frame=0. Gate 46 Rust/60 Bun, clippy/no-default
+  0, vizinhos OK após 1 intercalação registrada e 3 perfs com invariants. Juiz aprovou; só o host
+  externo 160401 da setup inválida permanecia, sem ação do agente. Udev/GPU real não medidos.
+  **Próximo: adapters+exemplos somente com cartão próprio e ok; sem push.**
 - **F2-windows-completo (2026-11-26): FECHADO ("aprovado com dívida de otimizacao futura").**
   Reproduzir: `cargo build --workspace --examples && cargo build -p aeroshell-shell && cargo build
   -p aeroshell-compositor --example toplevel_states_client && cargo build -p aeroshell-compositor
